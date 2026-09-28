@@ -758,6 +758,7 @@ function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('sh
 function norm(s){ return (s==null?'':String(s)).normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toUpperCase().replace(/\s+/g,' '); }
 function toMin(hhmm){ if(hhmm==null) return null; const m=String(hhmm).match(/(\d{1,2}):(\d{2})/); if(!m) return null; return (+m[1])*60+(+m[2]); }
 function hm(min){ if(min==null||isNaN(min)) return '—'; min=Math.round(min); const h=Math.floor(min/60), m=min%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+function clock(min){ if(min==null||isNaN(min)) return '—'; min=((Math.round(min)%1440)+1440)%1440; return hm(min); }
 function hDec(min){ if(min==null||isNaN(min)) return '—'; min=Math.round(min); if(min<=0) return '0h'; const h=Math.floor(min/60), m=min%60; return h>0 ? (m>0 ? h+'h'+String(m).padStart(2,'0') : h+'h') : m+'min'; }
 function isoDate(s){ if(!s) return ''; s=String(s).trim();
   let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return `${m[1]}-${m[2]}-${m[3]}`;
@@ -962,7 +963,11 @@ function namesOfInterest(){ const s=new Set(); (RECORDS||[]).forEach(r=>{ if(r.m
 // alertas com horário de um registro motorista-dia (demo usa r.alertasTimed; real usa AL_TL)
 function alertsForRec(r){
   if(r.alertasTimed && r.alertasTimed.length) return r.alertasTimed.map(a=>({t:toMin(a.hora),niv:(a.niv||'').toUpperCase()[0]||'',tipo:a.tipo||'ALERTA'})).filter(a=>a.t!=null);
-  if(AL_TL){ const arr=AL_TL[norm(r.motoristaEscala)]; if(arr) return arr.filter(e=>e[0]===r.data).map(e=>({t:e[1],niv:e[2],tipo:e[3]})); }
+  if(AL_TL){ const arr=AL_TL[norm(r.motoristaEscala)]; if(arr){
+    const base=Date.parse(r.data), lo=(r.scopeIni!=null?r.scopeIni:(r.entradaU!=null?r.entradaU:0)), hi=(r.scopeFim!=null?r.scopeFim:(r.saidaU!=null?r.saidaU:1439));
+    return arr.map(e=>({rel:Math.round((Date.parse(e[0])-base)/60000)+e[1],niv:e[2],tipo:e[3]}))
+      .filter(e=>e.rel>=lo && e.rel<=hi).map(e=>({t:e.rel,niv:e.niv,tipo:e.tipo}));
+  } }
   return [];
 }
 function nivName(c){ return c==='A'?'Alto':c==='M'?'Médio':c==='B'?'Baixo':'—'; }
@@ -1002,7 +1007,7 @@ function opDaViagem(placas, data){ if(typeof PED_OP==='undefined'||!PED_OP) retu
 
 function loadCfg(){ const d={tol:20,sem:80,fora:15,movMin:5,farolAmareloMax:60,meta:2.40,almocoMin:30,jornadaMaxH:6,precoLitro:6.00,jornadaMin:440,interjornadaMin:660}; try{ return Object.assign(d, JSON.parse(localStorage.getItem(LS.cfg)||'{}')); }catch(e){ return d; } }
 function saveCfg(){ try{ localStorage.setItem(LS.cfg, JSON.stringify(CFG)); }catch(e){} }
-function loadData(){ try{ const d=JSON.parse(localStorage.getItem(LS.data)||'null'); return (d&&d.records)?d:null; }catch(e){ return null; } }
+function loadData(){ try{ const d=JSON.parse(localStorage.getItem(LS.data)||'null'); return (d&&d.records&&d.schema===3)?d:null; }catch(e){ return null; } }
 function saveData(){ try{ if(RAW) RAW._savedAt=Date.now(); localStorage.setItem(LS.data, JSON.stringify(RAW)); }catch(e){} if(typeof agendarCache==='function') agendarCache(); }
 
 /* ============================================================
@@ -1018,7 +1023,7 @@ function analyze(rec){
   // --- ponto: preserva a ORDEM das batidas; ao virar 23:xx → 00:xx, continua no dia seguinte ---
   // Não ordenar aqui: ordenar quebrava jornadas noturnas e fazia aparecer marcações em horários errados.
   const rawP=(rec.ponto||[]).map(toMin).filter(v=>v!=null);
-  const seqP=[]; { let add=0; for(let i=0;i<rawP.length;i++){ let v=rawP[i]+add; if(i>0 && v<seqP[i-1]){ add+=1440; v=rawP[i]+add; } seqP.push(v); } }
+  const seqP=(rec.pontoSeq&&rec.pontoSeq.length===rawP.length)?rec.pontoSeq.slice():(()=>{ const a=[]; let add=0; for(let i=0;i<rawP.length;i++){ let v=rawP[i]+add; if(i>0 && v<a[i-1]){ add+=1440; v=rawP[i]+add; } a.push(v); } return a; })();
   const punches=rawP;
   let entrada=rawP.length?rawP[0]:null, saida=rawP.length?rawP[rawP.length-1]:null;
   const entradaU=seqP.length?seqP[0]:null, saidaU=seqP.length?seqP[seqP.length-1]:null;
@@ -1360,11 +1365,10 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
     const id=prefix+i; ids.push(id); const ponto=[],mov=[],almoco=[],alertas=[],ident=[],interj=[]; let dd=0,km=0,hpon=0,hcond=0,hex=0,nAlto=0,restMin=null,restViol=0; const placas=new Set(), dias=new Set(), ops=new Set();
     g.recs.forEach(r=>{ const dIdx=Math.round((Date.parse(r.data)-Date.parse(g.start))/86400000); const off=dIdx*1440; dias.add(r.data); if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
       const P = (r.seqP && r.seqP.length===r.punches.length) ? r.seqP : r.punches;
-      for(let j=0;j+1<P.length;j+=2){ let a=off+P[j]; const b=off+P[j+1];
-        while(a<b){ const dayEnd=(Math.floor(a/1440)+1)*1440; const e=Math.min(b,dayEnd); ponto.push([a,e]); a=e; } }
+      for(let j=0;j+1<P.length;j+=2) ponto.push([off+P[j],off+P[j+1]]);
       if(P.length===1) ponto.push([off+P[0],off+P[0]+8]);
       const idDiv=r.idDivergente||r.condutorDivergente; const idWho=r.idDivergente?(r.trimbleMot||''):(r.condutorDivergente?r.condutorPlan:'');
-      r.mov.forEach(s=>{ const fora=(r.entrada!=null&&(s.ini<r.entrada-CFG.tol||s.fim>r.saida+CFG.tol)); mov.push({a:off+s.ini,b:off+s.fim,km:s.km,placa:s.placa,fora}); if(s.placa)placas.add(s.placa); km+=s.km||0; ident.push({a:off+s.ini,b:off+s.fim,ok:true,div:idDiv,who:idWho}); });
+      r.mov.forEach(s=>{ const _lo=(r.entradaU!=null?r.entradaU:r.entrada), _hi=(r.saidaU!=null?r.saidaU:r.saida); const fora=(_lo!=null&&(s.ini<_lo-CFG.tol||s.fim>_hi+CFG.tol)); mov.push({a:off+s.ini,b:off+s.fim,km:s.km,placa:s.placa,fora}); if(s.placa)placas.add(s.placa); km+=s.km||0; ident.push({a:off+s.ini,b:off+s.fim,ok:true,div:idDiv,who:idWho}); });
       (r.movUnid||[]).forEach(s=> ident.push({a:off+s.ini,b:off+s.fim,ok:false}));
       (r.almocoDrivenSegs||[]).forEach(s=>almoco.push({a:off+s.ini,b:off+s.fim}));
       alertsForRec(r).forEach(al=>{ alertas.push({t:off+al.t,niv:al.niv,tipo:al.tipo}); if(al.niv==='A')nAlto++; });
@@ -1536,8 +1540,9 @@ function timelinesHTML(rows){
   return rows.map(r=>{
     // ponto: pares trabalhados
     let pontoSegs='';
-    for(let i=0;i+1<r.punches.length;i+=2){ pontoSegs+=seg('ponto',r.punches[i],r.punches[i+1],w, hm(r.punches[i])+'–'+hm(r.punches[i+1])); }
-    if(r.punches.length===1){ pontoSegs+=`<div class="seg ponto" style="left:${pos(r.punches[0],w)}%;width:1.2%" title="batida única">•</div>`; }
+    const _P=(r.seqP&&r.seqP.length===r.punches.length)?r.seqP:r.punches;
+    for(let i=0;i+1<_P.length;i+=2){ pontoSegs+=seg('ponto',_P[i],_P[i+1],w, clock(_P[i])+'–'+clock(_P[i+1])); }
+    if(_P.length===1){ pontoSegs+=`<div class="seg ponto" style="left:${pos(_P[0],w)}%;width:1.2%" title="batida única">•</div>`; }
     // almoço conduzido (marcou pausa mas dirigiu) — sobre a janela do almoço
     const almocoSegs=(r.almocoDrivenSegs||[]).map(s=>seg('almoco',s.ini,s.fim,w,'dirigiu no almoço')).join('');
     // movimento (rótulo: placa + km)
@@ -1566,8 +1571,8 @@ function timelinesHTML(rows){
         <div class="who"><b>${r.motoristaEscala||'—'}</b><small>${(r.placas&&r.placas.join(', '))||r.placa||'—'} · ${r.operacao} · ${brDate(r.data)}</small></div>
         <span class="status ${r.sev}"><span class="d"></span>${stLabel}</span>
         <div class="meta">
-          <div class="m"><span>Ponto</span><b>${r.entrada!=null?hm(r.entrada)+'–'+hm(r.saida):'—'}</b></div>
-          <div class="m"><span>Direção</span><b>${r.primMov!=null?hm(r.primMov)+'–'+hm(r.ultMov):'—'}</b></div>
+          <div class="m"><span>Ponto</span><b>${r.entrada!=null?clock(r.entradaU!=null?r.entradaU:r.entrada)+'–'+clock(r.saidaU!=null?r.saidaU:r.saida):'—'}</b></div>
+          <div class="m"><span>Direção</span><b>${r.primMov!=null?clock(r.primMov)+'–'+clock(r.ultMov):'—'}</b></div>
           <div class="m"><span>Condutor</span><b style="color:${r.idDivergente?'var(--crit-ink)':'inherit'}">${firstName(r.trimbleMot||r.motoristaEscala)}</b></div>
           <div class="m"><span>Fora da jornada</span><b style="color:${r.horasDedoDuro>0?'var(--serious)':'inherit'}">${r.horasDedoDuro>0?hDec(r.horasDedoDuro):'—'}</b></div>
           <div class="m"><span>Veículo</span><b>${veicMeta}</b></div>
@@ -2001,7 +2006,7 @@ function renderDiverg(rows){
         <div style="font-size:12px;color:var(--muted)">${r.motoristaEscala} · ${(r.placas&&r.placas.join(', '))||r.placa||'—'} · ${r.operacao} · ${brDate(r.data)}</div>
       </div>
       <div style="font-size:12px;text-align:right;color:var(--muted);flex:none">
-        Ponto ${r.entrada!=null?hm(r.entrada)+'–'+hm(r.saida):'—'}<br>Direção ${r.primMov!=null?hm(r.primMov)+'–'+hm(r.ultMov):'—'}
+        Ponto ${r.entrada!=null?clock(r.entradaU!=null?r.entradaU:r.entrada)+'–'+clock(r.saidaU!=null?r.saidaU:r.saida):'—'}<br>Direção ${r.primMov!=null?clock(r.primMov)+'–'+clock(r.ultMov):'—'}
       </div>
       <span style="flex:none;color:var(--gold-2);font-size:14px">↗</span>
     </div>`).join('') + (items.length>CAP?`<div class="empty">Mostrando ${CAP} de ${items.length.toLocaleString('pt-BR')} — filtre por <b>tipo</b>, operação, motorista ou situação.</div>`:'');
@@ -2029,9 +2034,9 @@ function renderTable(rows){
       <td>${r.operacao}</td><td class="tnum">${brDate(r.data)}</td>
       <td>${r.motoristaEscala||'—'}</td>
       <td title="${(r.placas&&r.placas.join(', '))||''}">${veic}</td>
-      <td class="tnum">${r.entrada!=null?hm(r.entrada)+'–'+hm(r.saida):(r.punches.length?'—':'<span class="pendcell">sem ponto</span>')}</td>
+      <td class="tnum">${r.entrada!=null?clock(r.entradaU!=null?r.entradaU:r.entrada)+'–'+clock(r.saidaU!=null?r.saidaU:r.saida):(r.punches.length?'—':'<span class="pendcell">sem ponto</span>')}</td>
       <td class="tnum">${r.horasPonto?hDec(r.horasPonto):'—'}</td>
-      <td class="tnum">${r.primMov!=null?hm(r.primMov)+'–'+hm(r.ultMov):(r.movimento.length?'—':'<span class="pendcell">sem direção</span>')}</td>
+      <td class="tnum">${r.primMov!=null?clock(r.primMov)+'–'+clock(r.ultMov):(r.movimento.length?'—':'<span class="pendcell">sem direção</span>')}</td>
       <td class="tnum">${r.horasMov?hDec(r.horasMov):'—'}</td>
       <td class="tnum">${hexCell}</td>
       <td class="tnum">${ddCell}</td>
@@ -2445,8 +2450,8 @@ function aderJornada(recs){ let cond=0,fora=0; (recs||[]).forEach(r=>{ if(r.punc
 function ajColor(v){ return v==null?'var(--muted)':(v>=90?'var(--good)':(v>=70?'var(--warning)':'var(--critical)')); }
 // JORNADA (ponto): batidas em colunas Entrada N / Saída N, por (motoristaNorm|dia)
 function parseJornada(P){
-  const ponto={}, roster=new Set(), opBy={};
-  (P||[]).forEach(row=>{
+  const ponto={}, roster=new Set(), opBy={}, shifts=[], seen=new Set();
+  (P||[]).forEach((row,rowIdx)=>{
     const cN=col(row,['nome do funcionario','funcionario','colaborador','motorista','nome']);
     const cDep=col(row,['departamento','operacao','setor','filial']);
     const cD=col(row,['dia','data']);
@@ -2460,9 +2465,24 @@ function parseJornada(P){
     }
     if(!hs.length){ const cH=col(row,['hora','horario','batida']); if(cH){ const t=String(row[cH]).match(/(\d{1,2}:\d{2})/); if(t) hs.push(t[1]); } }
     if(!hs.length) return;
-    const k=nn+'|'+data; const g=(ponto[k]=ponto[k]||{nome,data,punches:[]}); hs.forEach(h=>g.punches.push(h));
+
+    // Desdobra a sequência SEM criar batidas artificiais em 00:00.
+    // Ex.: 23:53 -> 01:49 vira 23:53 -> 25:49 internamente, mas continua exibido como 23:53 -> 01:49.
+    const seq=[]; let add=0, prev=null;
+    hs.forEach(h=>{ const m=toMin(h); if(m==null) return; let v=m+add; if(prev!=null && v<prev){ add+=1440; v=m+add; } seq.push(v); prev=v; });
+    if(!seq.length) return;
+    const sig=nn+'|'+data+'|'+seq.join(',');
+    if(seen.has(sig)) return; seen.add(sig); // evita duplicar o mesmo espelho quando arquivos sobrepostos forem importados
+
+    const shiftId='J'+shifts.length+'|'+sig;
+    const sh={shiftId,nn,nome,data,punches:hs.slice(),seq:seq.slice(),startAbs:seq[0],endAbs:seq[seq.length-1],rowIdx};
+    shifts.push(sh);
+    const k=nn+'|'+data;
+    // Compatibilidade: mantém a linha original do ponto, sem reordenar nem repartir na meia-noite.
+    if(!ponto[k]) ponto[k]={nome,data,punches:hs.slice(),seq:seq.slice(),shiftId};
+    else { ponto[k].punches.push(...hs); ponto[k].seq.push(...seq); }
   });
-  return {ponto, roster, opBy};
+  return {ponto, roster, opBy, shifts};
 }
 // MOVIMENTAÇÃO: acumula eventos "Movimento" (dos motoristas da jornada) em movRaw — reutilizável (single ou zip)
 function accMov(rows, movRaw, roster){
@@ -2477,51 +2497,93 @@ function accMov(rows, movRaw, roster){
     const cCons=col(row,['consumo','combustivel','litros']); const cD=col(row,['data_arquivo','data','dia']);
     const di=cIni?splitDT(row[cIni]):{date:'',time:''}, df=cFim?splitDT(row[cFim]):{date:'',time:''};
     const data=di.date||(cD?isoDate(splitDT(row[cD]).date||row[cD]):''); const ini=toMin(di.time), fim=toMin(df.time);
-    if(!data||ini==null||fim==null||fim<ini) return;
+    if(!data||ini==null||fim==null) return;
+    const dataFim=df.date||data;
+    let tsIni=Date.parse(data)+ini*60000, tsFim=Date.parse(dataFim)+fim*60000;
+    if(!isFinite(tsIni)||!isFinite(tsFim)) return;
+    if(tsFim<tsIni) tsFim+=86400000; // evento que atravessa 00:00
     const placa=cP?String(row[cP]).toUpperCase().replace(/\s|-/g,''):'';
-    // ADERÊNCIA: todo movimento do veículo conta (identificado + não identificado)
-    if(placa){ const pk=placa+'|'+data, dur=fim-ini; MOV_TOT[pk]=(MOV_TOT[pk]||0)+dur; if(nome) MOV_IDN[pk]=(MOV_IDN[pk]||0)+dur; else { const arr=(MOV_UNSEG[pk]=MOV_UNSEG[pk]||[]); if(arr.length<300) arr.push([ini,fim]); } }
-    if(!nome) return;                                                          // sem condutor identificado → não vira registro
-    const nn=norm(nome); if(!roster.has(nn)) return;                          // escopo dos registros: motoristas da jornada
-    const k=nn+'|'+data; const g=(movRaw[k]=movRaw[k]||{nome,data,segs:[]});
-    g.segs.push({ini,fim,km:cKm?numBR(row[cKm]):0,litros:cCons?numBR(row[cCons]):0,placa}); n++;
+
+    // ADERÊNCIA: reparte o movimento por dia civil só para os indicadores por placa.
+    if(placa){ let cur=tsIni; while(cur<tsFim){
+      const d=new Date(cur), day=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()), dayEnd=day+86400000, e=Math.min(tsFim,dayEnd);
+      const iso=new Date(day).toISOString().slice(0,10), a=Math.round((cur-day)/60000), b=Math.round((e-day)/60000), dur=Math.max(0,b-a), pk=placa+'|'+iso;
+      MOV_TOT[pk]=(MOV_TOT[pk]||0)+dur;
+      if(nome) MOV_IDN[pk]=(MOV_IDN[pk]||0)+dur; else { const arr=(MOV_UNSEG[pk]=MOV_UNSEG[pk]||[]); if(arr.length<300) arr.push([a,b]); }
+      cur=e;
+    } }
+    if(!nome) return;
+    const nn=norm(nome); if(!roster.has(nn)) return;
+    const g=(movRaw[nn]=movRaw[nn]||{nn,nome,segs:[]});
+    g.segs.push({tsIni,tsFim,km:cKm?numBR(row[cKm]):0,litros:cCons?numBR(row[cCons]):0,placa}); n++;
   });
   return n;
 }
-// merge + join + publica os registros
+
+// merge + join por JORNADA REAL (linha do ponto), e não apenas por dia civil.
+// Isso é essencial para turno noturno: a jornada de 07/09 pode terminar em 08/09 às 12:28.
 function finalizeRecords(jor, movRaw, movRows, pontoRows){
-  const {ponto, roster, opBy}=jor;
-  const GAP=Math.max(CFG.movMin,10);
-  Object.values(movRaw).forEach(g=>{
-    g.segs.sort((a,b)=>a.ini-b.ini); const merged=[];
-    g.segs.forEach(s=>{ const last=merged[merged.length-1];
-      if(last && s.ini-last.fim<=GAP){ last.fim=Math.max(last.fim,s.fim); last.km+=s.km; last.litros+=s.litros; if(s.placa&&last.placas.indexOf(s.placa)<0)last.placas.push(s.placa); }
-      else merged.push({ini:s.ini,fim:s.fim,km:s.km,litros:s.litros,placas:s.placa?[s.placa]:[]}); });
-    g.merged=merged;
+  const {roster,opBy}=jor; const shifts=(jor.shifts||[]).slice();
+  const GAP=Math.max(CFG.movMin,10), H=3600000;
+  const byDrv={};
+  shifts.forEach(sh=>{ sh.baseTs=Date.parse(sh.data); sh.startTs=sh.baseTs+sh.startAbs*60000; sh.endTs=sh.baseTs+sh.endAbs*60000; (byDrv[sh.nn]=byDrv[sh.nn]||[]).push(sh); });
+  for(const nn in byDrv){ const L=byDrv[nn].sort((a,b)=>a.startTs-b.startTs);
+    for(let i=0;i<L.length;i++){ const sh=L[i], prev=L[i-1], next=L[i+1];
+      sh.scopeLo = prev ? Math.round((prev.endTs+sh.startTs)/2) : sh.startTs-12*H;
+      sh.scopeHi = next ? Math.round((sh.endTs+next.startTs)/2) : sh.endTs+12*H;
+      // Em caso de jornadas sobrepostas, mantém uma fronteira ordenada pelo início.
+      if(sh.scopeLo>sh.startTs) sh.scopeLo=sh.startTs;
+      if(sh.scopeHi<sh.endTs) sh.scopeHi=sh.endTs;
+      sh.assigned=[];
+    }
+  }
+
+  const unassigned=[];
+  for(const nn in movRaw){ const L=byDrv[nn]||[]; for(const s of (movRaw[nn].segs||[])){
+    let best=null,bestOv=0;
+    for(const sh of L){ const ov=Math.max(0,Math.min(s.tsFim,sh.endTs)-Math.max(s.tsIni,sh.startTs)); if(ov>bestOv){bestOv=ov;best=sh;} }
+    if(!best){ const mid=(s.tsIni+s.tsFim)/2; best=L.find(sh=>mid>=sh.scopeLo&&mid<sh.scopeHi)||null; }
+    if(best) best.assigned.push(s); else unassigned.push({nn,nome:movRaw[nn].nome,seg:s});
+  } }
+
+  function mergeAssigned(sh){
+    const arr=(sh.assigned||[]).map(s=>({ini:Math.round((s.tsIni-sh.baseTs)/60000),fim:Math.round((s.tsFim-sh.baseTs)/60000),km:s.km,litros:s.litros,placa:s.placa,tsIni:s.tsIni,tsFim:s.tsFim})).sort((a,b)=>a.ini-b.ini);
+    const merged=[]; arr.forEach(s=>{ const last=merged[merged.length-1];
+      if(last && s.ini-last.fim<=GAP){ last.fim=Math.max(last.fim,s.fim); last.tsFim=Math.max(last.tsFim,s.tsFim); last.km+=s.km; last.litros+=s.litros; if(s.placa&&last.placas.indexOf(s.placa)<0)last.placas.push(s.placa); }
+      else merged.push({ini:s.ini,fim:s.fim,tsIni:s.tsIni,tsFim:s.tsFim,km:s.km,litros:s.litros,placas:s.placa?[s.placa]:[]}); });
+    return merged;
+  }
+
+  const records=[];
+  shifts.forEach(sh=>{
+    const merged=mergeAssigned(sh), placas=[...new Set(merged.flatMap(s=>s.placas))];
+    const movimento=merged.map(s=>({ini:hm(s.ini),fim:hm(s.fim),km:s.km,litros:s.litros||0,placa:s.placas[0]||''}));
+
+    // Trechos sem identificação das placas usadas nesta jornada, inclusive após a meia-noite.
+    const un=[]; const d0=Date.UTC(new Date(sh.scopeLo).getUTCFullYear(),new Date(sh.scopeLo).getUTCMonth(),new Date(sh.scopeLo).getUTCDate());
+    const d1=Date.UTC(new Date(sh.scopeHi).getUTCFullYear(),new Date(sh.scopeHi).getUTCMonth(),new Date(sh.scopeHi).getUTCDate());
+    placas.forEach(p=>{ for(let day=d0;day<=d1;day+=86400000){ const iso=new Date(day).toISOString().slice(0,10), arr=MOV_UNSEG[placaKey(p)+'|'+iso]; if(!arr) continue;
+      arr.forEach(x=>{ const a=day+x[0]*60000,b=day+x[1]*60000,mid=(a+b)/2; if(mid>=sh.scopeLo&&mid<sh.scopeHi) un.push([Math.round((a-sh.baseTs)/60000),Math.round((b-sh.baseTs)/60000)]); }); } });
+    un.sort((a,b)=>a[0]-b[0]); const mu=[]; un.forEach(x=>{ const last=mu[mu.length-1]; if(last&&x[0]-last[1]<=GAP) last[1]=Math.max(last[1],x[1]); else mu.push(x.slice()); });
+    const movUnid=mu.map(x=>({ini:hm(x[0]),fim:hm(x[1])}));
+
+    records.push({ operacao:(opBy[sh.nn]||''), data:sh.data, placa:placas[0]||'', placas, motoristaEscala:sh.nome,
+      ponto:sh.punches.slice(), pontoSeq:sh.seq.slice(), shiftId:sh.shiftId,
+      scopeIni:Math.round((sh.scopeLo-sh.baseTs)/60000), scopeFim:Math.round((sh.scopeHi-sh.baseTs)/60000),
+      movimento, movUnid, trimble:{segs:[]}, aderencia: aderDe(placas, sh.data) });
   });
-  const keys=new Set([...Object.keys(ponto),...Object.keys(movRaw)]); const records=[];
-  keys.forEach(k=>{
-    const sep=k.indexOf('|'), nn=k.slice(0,sep), data=k.slice(sep+1);
-    const pp=ponto[k], mm=movRaw[k];
-    const nome=(pp&&pp.nome)||(mm&&mm.nome)||nn;
-    const movimento=(mm?mm.merged:[]).map(s=>({ini:hm(s.ini),fim:hm(s.fim),km:s.km,litros:s.litros||0,placa:s.placas[0]||''}));
-    const placas=[...new Set((mm?mm.merged:[]).flatMap(s=>s.placas))];
-    // trechos de movimento SEM condutor identificado (das placas do dia) — p/ a faixa "Identificação"
-    const un=[]; placas.forEach(p=>{ const arr=MOV_UNSEG[placaKey(p)+'|'+data]; if(arr) arr.forEach(s=>un.push(s)); });
-    un.sort((a,b)=>a[0]-b[0]); const GAP2=Math.max(CFG.movMin,10); const mu=[];
-    un.forEach(s=>{ const last=mu[mu.length-1]; if(last && s[0]-last[1]<=GAP2) last[1]=Math.max(last[1],s[1]); else mu.push([s[0],s[1]]); });
-    const movUnid=mu.map(s=>({ini:hm(s[0]),fim:hm(s[1])}));
-    records.push({ operacao:(opBy[nn]||''), data, placa:placas[0]||'', placas, motoristaEscala:nome,
-      ponto: pp?pp.punches.slice():[], movimento, movUnid, trimble:{segs:[]}, aderencia: aderDe(placas, data) });
-  });
+
+  // Movimento de motorista conhecido que ficou longe de qualquer jornada continua aparecendo como "movimento sem ponto".
+  const ua={}; unassigned.forEach(x=>{ const day=new Date(x.seg.tsIni).toISOString().slice(0,10), k=x.nn+'|'+day, base=Date.parse(day), g=(ua[k]=ua[k]||{nn:x.nn,nome:x.nome,data:day,segs:[]});
+    g.segs.push({ini:Math.round((x.seg.tsIni-base)/60000),fim:Math.round((x.seg.tsFim-base)/60000),km:x.seg.km,litros:x.seg.litros,placa:x.seg.placa}); });
+  Object.values(ua).forEach(g=>{ const placas=[...new Set(g.segs.map(s=>s.placa).filter(Boolean))]; records.push({operacao:(opBy[g.nn]||''),data:g.data,placa:placas[0]||'',placas,motoristaEscala:g.nome,ponto:[],pontoSeq:[],movimento:g.segs.map(s=>({ini:hm(s.ini),fim:hm(s.fim),km:s.km,litros:s.litros||0,placa:s.placa||''})),movUnid:[],trimble:{segs:[]},aderencia:aderDe(placas,g.data)}); });
+
   if(!records.length){ toast('Não consegui cruzar — confira as colunas na aba Dados'); return; }
   MOV_N=movRows;
-  // resumo por placa (inclui placas que moveram SEM condutor identificado)
   PLACA_MOV={}; for(const k in MOV_TOT){ const s=k.indexOf('|'), pk=k.slice(0,s), d=k.slice(s+1); const g=(PLACA_MOV[pk]=PLACA_MOV[pk]||{tot:0,idn:0,dias:0,diasId:0,ult:''}); g.tot+=MOV_TOT[k]; const idn=MOV_IDN[k]||0; g.idn+=idn; g.dias++; if(idn>0)g.diasId++; if(d>g.ult)g.ult=d; }
-  // trechos SEM identificação por placa|dia (mesclados, cap p/ não estourar) — p/ desenhar no modo placa
   MOV_UNSEG_STORE={}; let unTot=0; const GAPU=Math.max(CFG.movMin,10);
   for(const k in MOV_UNSEG){ if(unTot>25000) break; const arr=MOV_UNSEG[k].slice().sort((a,b)=>a[0]-b[0]); const m=[]; arr.forEach(s=>{ const last=m[m.length-1]; if(last && s[0]-last[1]<=GAPU) last[1]=Math.max(last[1],s[1]); else { m.push([s[0],s[1]]); unTot++; } }); if(m.length) MOV_UNSEG_STORE[k]=m; }
-  RAW={ records, bases:{ponto:!!pontoRows,mov:!!movRows,trim:false}, counts:{ponto:pontoRows,mov:movRows,alertas:ALERTS_N} };
+  RAW={ schema:3, records, bases:{ponto:!!pontoRows,mov:!!movRows,trim:false}, counts:{ponto:pontoRows,mov:movRows,alertas:ALERTS_N} };
   if(ALERTS) RAW.alertas=ALERTS; if(PLACA_UO) RAW.placaUO=PLACA_UO; if(PLACA_MOV) RAW.placaId=PLACA_MOV; if(MOV_UNSEG_STORE) RAW.movUnseg=MOV_UNSEG_STORE;
   REAL=true; saveData();
   build(); fillFilters(); renderAll(); updateDropStatus();
@@ -2987,8 +3049,8 @@ function exportCsv(){
   const lines=[head.join(';')];
   rows.forEach(r=>lines.push([
     r.operacao,brDate(r.data),r.motoristaEscala,'"'+((r.placas&&r.placas.join(', '))||r.placa||'')+'"',
-    r.entrada!=null?hm(r.entrada):'',r.saida!=null?hm(r.saida):'',(r.horasPonto/60).toFixed(2),
-    r.primMov!=null?hm(r.primMov):'',r.ultMov!=null?hm(r.ultMov):'',(r.horasMov/60).toFixed(2),
+    r.entrada!=null?clock(r.entradaU!=null?r.entradaU:r.entrada):'',r.saida!=null?clock(r.saidaU!=null?r.saidaU:r.saida):'',(r.horasPonto/60).toFixed(2),
+    r.primMov!=null?clock(r.primMov):'',r.ultMov!=null?clock(r.ultMov):'',(r.horasMov/60).toFixed(2),
     Math.round(r.horaExtra||0),
     Math.round(r.km),Math.round(r.horasDedoDuro),
     r.sev,'"'+r.flags.map(f=>f.t).join(' | ')+'"'
@@ -3189,15 +3251,15 @@ async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const da
    ============================================================ */
 async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz:false,b:bytes}; const cs=new CompressionStream('gzip'); const w=cs.writable.getWriter(); w.write(bytes); w.close(); return {gz:true,b:new Uint8Array(await new Response(cs.readable).arrayBuffer())}; }
 async function _gunz(bytes){ const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
-function snapshotState(){ return {v:2,ts:Date.now(),CFG:Object.assign({},CFG),REAL:!!REAL,RAW,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N}; }
+function snapshotState(){ return {v:3,ts:Date.now(),CFG:Object.assign({},CFG),REAL:!!REAL,RAW,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgAlmoco:'almocoMin',cfgJornada:'jornadaMaxH',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
-function restoreState(S){ if(!S)return; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); }
+function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
 async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();}catch(e){}}
 async function idbGet(k){try{const db=await idbOpen();const v=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly'),rq=tx.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});db.close();return v;}catch(e){return null;}}
-let _cacheTimer=null;function agendarCache(){clearTimeout(_cacheTimer);_cacheTimer=setTimeout(cacheSalvar,2500);} async function cacheSalvar(){try{if(!REAL||!RAW)return;const raw=new TextEncoder().encode(JSON.stringify(snapshotState())),g=await _gz(raw);await idbSet('estado',{gz:g.gz,b:g.b,ts:Date.now()});}catch(e){}} async function cacheRestaurar(){try{const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);restoreState(JSON.parse(new TextDecoder().decode(bytes)));return c.ts||1;}catch(e){return 0;}}
+let _cacheTimer=null;function agendarCache(){clearTimeout(_cacheTimer);_cacheTimer=setTimeout(cacheSalvar,2500);} async function cacheSalvar(){try{if(!REAL||!RAW)return;const raw=new TextEncoder().encode(JSON.stringify(snapshotState())),g=await _gz(raw);await idbSet('estado',{gz:g.gz,b:g.b,ts:Date.now()});}catch(e){}} async function cacheRestaurar(){try{const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);const S=JSON.parse(new TextDecoder().decode(bytes));if(!restoreState(S))return 0;return c.ts||1;}catch(e){return 0;}}
 async function gerarDadosPublicacao(){ if(!REAL||!RAW){toast('Importe os relatórios antes de gerar os dados');return;} try{const S=snapshotState();S.publishedAt=Date.now();const txt=JSON.stringify(S),blob=new Blob([txt],{type:'application/json;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='dados-pulso360.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);mostrarPublicacao((txt.length/1048576).toFixed(1),S.publishedAt);}catch(e){toast('Erro ao gerar dados: '+(e.message||e));} }
-async function carregarDadosPublicados(){ try{const r=await fetch('dados-pulso360.json?_='+Date.now(),{cache:'no-store'});if(!r.ok)return false;const S=await r.json();if(!S||!S.REAL||!S.RAW)return false;const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}restoreState(S);const p=$('#dataModeTxt');if(p)p.textContent='dados publicados · '+(pub?new Date(pub).toLocaleString('pt-BR'):'GitHub');const pill=$('#dataModePill');if(pill)pill.classList.add('real');return true;}catch(e){return false;} }
+async function carregarDadosPublicados(){ try{const r=await fetch('dados-pulso360.json?_='+Date.now(),{cache:'no-store'});if(!r.ok)return false;const S=await r.json();if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3)return false;const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}restoreState(S);const p=$('#dataModeTxt');if(p)p.textContent='dados publicados · '+(pub?new Date(pub).toLocaleString('pt-BR'):'GitHub');const pill=$('#dataModePill');if(pill)pill.classList.add('real');return true;}catch(e){return false;} }
 function mostrarPublicacao(mb,ts){let bg=document.getElementById('snapModal');if(bg)bg.remove();const link=SP_CFG.redirectUri,cmd='git add dados-pulso360.json && git commit -m "Atualiza dados Pulso 360" && git push origin main';bg=document.createElement('div');bg.id='snapModal';bg.className='modal-bg';bg.style.display='flex';bg.innerHTML='<div class="modal" style="max-width:660px"><h3>📦 Dados prontos para publicação</h3><p class="modal-sub">O arquivo <b>dados-pulso360.json</b> ('+mb+' MB) foi baixado. Coloque/substitua esse arquivo na mesma pasta do <b>index.html</b> e publique no Git. Depois, qualquer pessoa que abrir o endereço principal verá esta fotografia dos dados.</p><label>Comando CMD<input type="text" id="pubCmd" readonly value="'+cmd.replace(/"/g,'&quot;')+'"></label><label>Link do painel<input type="text" id="pubLink" readonly value="'+link+'"></label><div class="modal-actions"><button class="btn" id="pubClose" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Fechar</button><button class="btn solid" id="pubCopy">Copiar comando</button></div></div>';document.body.appendChild(bg);bg.addEventListener('click',e=>{if(e.target===bg)bg.remove();});$('#pubClose').onclick=()=>bg.remove();$('#pubCopy').onclick=()=>{const v=$('#pubCmd').value;try{navigator.clipboard.writeText(v);}catch(e){$('#pubCmd').select();document.execCommand('copy');}toast('Comando copiado ✓');};}
 
 /* ============================================================
