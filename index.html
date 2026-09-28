@@ -2976,7 +2976,7 @@ async function spToken(interactive){
   const r=await pca.acquireTokenPopup(req); return r.accessToken;
 }
 async function gget(path, token, tries){
-  tries=(tries==null)?5:tries;
+  tries=(tries==null)?8:tries;
   const r=await fetch('https://graph.microsoft.com/v1.0'+path,{ headers:{ Authorization:'Bearer '+token } });
   if((r.status===429||r.status===503) && tries>0){ const ra=parseInt(r.headers.get('Retry-After')||'',10); const wait=(isFinite(ra)&&ra>0?ra:15); const p=$('#dataModeTxt'); if(p)p.textContent='SharePoint ocupado — aguardando '+wait+'s…'; await new Promise(s=>setTimeout(s,(wait+1)*1000)); return gget(path, token, tries-1); }
   if(!r.ok){ const t=await r.text().catch(()=>''); throw new Error('Graph '+r.status+(t?': '+t.slice(0,180):'')); }
@@ -3021,23 +3021,14 @@ async function ingestMovFiles(items){ MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={};
 // cada arquivo guarda em _top o nome da pasta de 1º nível (o "tipo") p/ identificar sem baixar
 async function spWalk(siteId, folderId, token, acc, depth, top){
   acc=acc||[]; if(depth>8) return acc;
-  // $expand=children: traz os arquivos das subpastas (1 nível abaixo) já nesta listagem,
-  // eliminando a listagem separada de cada pasta de DIA (evita o limite 429 do Graph).
-  let url='/sites/'+siteId+'/drive/items/'+folderId+'/children?$top=200&$expand=children';
+  // SharePoint NÃO suporta $expand=children — listagem recursiva simples,
+  // protegida pelo retry do gget (429/503 respeitando Retry-After).
+  let url='/sites/'+siteId+'/drive/items/'+folderId+'/children?$top=200';
   while(url){
     const j=await gget(url.replace('https://graph.microsoft.com/v1.0',''), token);
     for(const it of (j.value||[])){
-      const t2 = depth===0 ? it.name : (top||'');
-      if(it.file){ if(it['@microsoft.graph.downloadUrl']){ it._top=top||''; acc.push(it); } continue; }
-      if(!it.folder) continue;
-      const kids=it.children||null;
-      const cc=(it.folder.childCount!=null)? it.folder.childCount : (kids?kids.length:0);
-      if(cc===0) continue;                       // pasta vazia
-      let temSub=false, semUrl=false; const arqs=[];
-      if(kids){ for(const k of kids){ if(k.folder) temSub=true; else if(k.file){ if(k['@microsoft.graph.downloadUrl']){ k._top=t2; arqs.push(k); } else semUrl=true; } } }
-      // só arquivos, todos com downloadUrl, e o expand trouxe TUDO → coleta sem descer nesta pasta
-      if(kids && kids.length && !temSub && !semUrl && kids.length>=cc){ for(const a of arqs) acc.push(a); }
-      else await spWalk(siteId, it.id, token, acc, depth+1, t2);   // desce (tem subpasta, faltou URL, ou expand parcial)
+      if(it.folder) await spWalk(siteId, it.id, token, acc, depth+1, depth===0?it.name:top);
+      else if(it.file && it['@microsoft.graph.downloadUrl']){ it._top=top||''; acc.push(it); }
     }
     url=j['@odata.nextLink']||'';
   }
@@ -3068,6 +3059,54 @@ async function spCriarEstrutura(){
   }catch(e){ toast('Erro ao criar estrutura: '+(e.message||e)); }
   if(btn){ btn.disabled=false; btn.textContent='📁 Organizar pastas'; }
 }
+// ===== DELTA: só o que MUDOU desde a última leitura (poucas chamadas → sem 429) =====
+// descobre a pasta de 1º nível (o "tipo") a partir do caminho do arquivo (parentReference.path)
+function spTopFromPath(path){
+  if(!path) return '';
+  let p=path; try{ p=decodeURIComponent(path); }catch(e){}
+  for(const name of SP_ESTRUTURA){ if(p.indexOf('/'+name+'/')>=0 || p.endsWith('/'+name)) return name; }
+  return '';
+}
+// percorre as páginas do delta; se deltaLink for dado, traz só as mudanças desde aquele ponto
+async function spDelta(siteId, folderId, token, deltaLink){
+  let url=deltaLink || ('/sites/'+siteId+'/drive/items/'+folderId+'/delta?$top=200');
+  const files=[]; let next='';
+  while(url){
+    const path=(url.indexOf('http')===0)? url.replace('https://graph.microsoft.com/v1.0','') : url;
+    const j=await gget(path, token);
+    for(const it of (j.value||[])){
+      if(it.deleted) continue;                    // ignora exclusões (não removemos do cache)
+      if(it.folder || !it.file) continue;         // só arquivos
+      it._top=spTopFromPath(it.parentReference && it.parentReference.path);
+      files.push(it);                             // download url validado em spDiscover
+    }
+    if(j['@odata.nextLink']) url=j['@odata.nextLink'];
+    else { next=j['@odata.deltaLink']||''; url=''; }
+  }
+  return { files, deltaLink: next };
+}
+// descoberta da carga COMPLETA: tenta delta (barato); se falhar, cai na varredura recursiva
+async function spDiscover(site, rootItem, token){
+  try{
+    const d=await spDelta(site.id, rootItem.id, token, null);
+    // só usa o delta se trouxe arquivos E todos com link de download; senão varre (garante o link)
+    if(d.files.length && d.files.every(f=>f['@microsoft.graph.downloadUrl'])){
+      try{ localStorage.setItem('sp_delta', d.deltaLink||''); }catch(e){} return d.files;
+    }
+  }catch(e){ /* delta indisponível → varredura */ }
+  try{ localStorage.removeItem('sp_delta'); }catch(e){}
+  return await spWalk(site.id, rootItem.id, token, [], 0, '');
+}
+// checagem barata no boot: há arquivos novos desde a última carga? (não avança o marcador)
+async function spTemNovidade(){
+  try{
+    const dl=localStorage.getItem('sp_delta'); if(!dl) return true;    // sem marcador → precisa carga completa
+    const token=await spToken(false); if(!token) return false;
+    const site=await gget('/sites/'+SP_CFG.siteHost+':'+SP_CFG.sitePath, token);
+    const d=await spDelta(site.id, null, token, dl);                   // reusa o deltaLink guardado (read-only)
+    return d.files.length>0;
+  }catch(e){ return true; }                                           // na dúvida, recarrega
+}
 async function spLoadAll(interactive){
   const setPill=t=>{ const p=$('#dataModeTxt'); if(p)p.textContent=t; };
   let token; try{ token=await spToken(interactive); }catch(e){ toast('Login: '+(e.message||'cancelado')); return false; }
@@ -3077,7 +3116,7 @@ async function spLoadAll(interactive){
   try{
     site=await gget('/sites/'+SP_CFG.siteHost+':'+SP_CFG.sitePath, token);
     const rootItem=await gget('/sites/'+site.id+'/drive/root:/'+encodeURIComponent(SP_CFG.folder), token);
-    files=await spWalk(site.id, rootItem.id, token, [], 0, '');   // varre a pasta + subpastas (tipo/ano/mês/dia)
+    files=await spDiscover(site, rootItem, token);   // DELTA (poucas chamadas) c/ fallback p/ varredura recursiva
   }catch(e){ toast('Erro no SharePoint — '+e.message); setPill('erro no SharePoint'); return false; }
   if(!files.length){ toast('Nenhum arquivo encontrado na pasta/subpastas'); return false; }
   // agrupa TODOS os arquivos por tipo (SOMA todos os dias)
@@ -3325,11 +3364,18 @@ applyDadosGate();
   const setPill=t=>{ const p=$('#dataModeTxt'); if(p)p.textContent=t; };
   let temCache=0; try{ temCache=await cacheRestaurar(); }catch(e){}
   if(temCache){ setPill('dados locais · '+new Date(temCache).toLocaleString('pt-BR')); }
-  // AUTO-CONECTAR ao abrir: se há sessão M365, atualiza do SharePoint em 2º plano (sem apertar botão)
+  // AUTO-CONECTAR ao abrir: se há sessão M365, checa o SharePoint em 2º plano (sem apertar botão)
   try{ if(typeof msal!=='undefined'){ const pca=spMsal(); if(pca.initialize) await pca.initialize();
       if(pca.getAllAccounts && pca.getAllAccounts()[0]){
-        setPill(temCache?'dados locais · atualizando do SharePoint…':'conectando ao SharePoint…');
-        spLoadAll(false).then(ok=>{ if(ok) agendarCache(); });
+        if(temCache){
+          setPill('dados locais · verificando SharePoint…');
+          const novidade=await spTemNovidade();   // barato (delta): só olha se mudou
+          if(novidade){ setPill('dados locais · atualizando (arquivos novos)…'); spLoadAll(false).then(ok=>{ if(ok) agendarCache(); }); }
+          else setPill('dados locais · SharePoint sem novidades ✓');
+        } else {
+          setPill('conectando ao SharePoint…');
+          spLoadAll(false).then(ok=>{ if(ok) agendarCache(); });
+        }
       } }
   }catch(e){}
 })();
