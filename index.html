@@ -3348,17 +3348,28 @@ async function gerarSnapshot(){
   }catch(e){ toast('Erro ao gerar snapshot: '+(e.message||e)); }
 }
 async function carregarSnapshotDoLink(kb64, fname){
-  try{ toast('Abrindo dados compartilhados…');
-    const keyRaw=_unb64url(kb64); const arq=fname||'dados.enc';
-    const f=await fetch(arq,{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error(arq+' não encontrado'); return r.json(); });
+  const keyRaw=_unb64url(kb64); const arq=fname||'dados.enc'; const pill=$('#dataModeTxt');
+  toast('Abrindo dados compartilhados…');
+  // GitHub Pages leva ~1 min p/ publicar após o push → tenta de novo enquanto o arquivo não aparece
+  let f=null, lastErr='';
+  for(let i=0;i<12;i++){
+    try{ const r=await fetch(arq+(arq.indexOf('?')<0?'?t=':'&t=')+Date.now(),{cache:'no-store'});
+      if(r.ok){ f=await r.json(); break; } lastErr=arq+' ('+r.status+')';
+    }catch(e){ lastErr=e.message||'rede'; }
+    if(i===0) toast('Aguardando a publicação do snapshot (pode levar ~1 min)…');
+    if(pill) pill.textContent='publicando os dados… aguarde ('+(i+1)+'/12)';
+    await new Promise(s=>setTimeout(s,5000));
+  }
+  if(!f){ toast('Não consegui abrir o snapshot: '+lastErr+' — verifique se publicou (publicar.bat) e aguarde ~1 min'); if(pill) pill.textContent='snapshot indisponível'; return; }
+  try{
     const iv=_unb64(f.iv), ct=_unb64(f.data);
     const key=await crypto.subtle.importKey('raw',keyRaw,{name:'AES-GCM'},false,['decrypt']);
     let pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct));
     if(f.gz) pt=await _gunz(pt);
     restoreState(JSON.parse(new TextDecoder().decode(pt)));
-    const pill=$('#dataModeTxt'); if(pill) pill.textContent='dados compartilhados (snapshot)';
+    if(pill) pill.textContent='dados compartilhados (snapshot)';
     toast('Dados compartilhados carregados ✓');
-  }catch(e){ toast('Não consegui abrir o snapshot: '+(e.message||e)); }
+  }catch(e){ toast('Não consegui abrir o snapshot: '+(e.message||e)); if(pill) pill.textContent='snapshot inválido'; }
 }
 function mostrarLinkSnapshot(link, mb, fname){
   fname=fname||'dados.enc';
