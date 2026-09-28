@@ -561,12 +561,14 @@
       <button class="btn" id="dadosLogout" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">Sair</button>
     </div>
     <div class="sec-title"><h2>Carregar os relatórios</h2><span>cruza por motorista + dia · CSV/Excel · fica neste navegador</span></div>
+    <input type="file" id="fileDir" webkitdirectory hidden>
     <div class="drops drops-4">
       <div class="drop" id="drop-ponto">
         <h3><span class="num">1</span> Jornada (ponto)</h3>
         <p>Espelho de ponto. Colunas: <code>Nome do funcionário</code>, <code>Nome do departamento</code> (operação), <code>Dia</code>, <code>Entrada 1…6</code> / <code>Saída 1…6</code>.</p>
         <input type="file" id="filePonto" accept=".csv,.xlsx,.xls,.txt" multiple hidden>
         <button class="btn solid" onclick="document.getElementById('filePonto').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn" style="margin-top:6px" onclick="pickDir('ponto')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stPonto">nenhum arquivo — usando demonstração</div>
       </div>
       <div class="drop" id="drop-mov">
@@ -574,6 +576,7 @@
         <p>Histórico do veículo com o condutor identificado. Colunas: <code>Veículo</code>, <code>Ocorrência</code>, <code>Data/Hora inicial</code> / <code>final</code>, <code>Motorista</code>, <code>Distância</code>, <code>Consumo</code>. Aceita <code>.zip</code> com vários CSVs diários (grande) — carregue a jornada antes.</p>
         <input type="file" id="fileMov" accept=".zip,.csv,.xlsx,.xls,.txt" multiple hidden>
         <button class="btn solid" onclick="document.getElementById('fileMov').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn" style="margin-top:6px" onclick="pickDir('mov')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stMov">nenhum arquivo — usando demonstração</div>
       </div>
       <div class="drop" id="drop-alertas">
@@ -581,6 +584,7 @@
         <p>Histórico de alertas. Colunas: <code>Motorista</code>, <code>Tipo</code>, <code>Nível</code>, <code>UO</code>, <code>Data</code>. Aceita <code>.zip</code> ou <code>.csv</code> — só conta (não guarda as linhas).</p>
         <input type="file" id="fileAlertas" accept=".zip,.csv,.txt" multiple hidden>
         <button class="btn solid" onclick="document.getElementById('fileAlertas').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn" style="margin-top:6px" onclick="pickDir('alertas')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stAlertas">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-tms">
@@ -609,6 +613,7 @@
         <p>Boletim do Motorista (Trimble), 1 linha por <b>motorista + dia</b>. Traz os alertas por tipo em colunas: <code>Uso de Celular</code>, <code>Fadiga</code>, <code>Distração</code>, <code>Sem Cinto</code>, <code>Freada</code>, <code>Excesso Velocidade</code>, <code>Parado Ligado</code>… Alimenta os <b>blocos por tipo</b> da ficha. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
         <input type="file" id="fileBoletim" accept=".zip,.csv,.txt" multiple hidden>
         <button class="btn solid" onclick="document.getElementById('fileBoletim').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn" style="margin-top:6px" onclick="pickDir('boletim')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stBoletim">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-pedidos">
@@ -616,6 +621,7 @@
         <p>Pedidos/viagens do TMS. Colunas: <code>CPF Motoristas</code>, <code>Veículos</code>, <code>Centro Resultado</code>, <code>Data Carregamento</code>. <b>Opcional</b> (a operação já vem da UO da Trimble) — serve p/ a divergência <b>condutor não vinculado à placa</b> e operação por viagem. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
         <input type="file" id="filePedidos" accept=".zip,.csv,.txt" multiple hidden>
         <button class="btn solid" onclick="document.getElementById('filePedidos').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn" style="margin-top:6px" onclick="pickDir('pedidos')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stPedidos">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-saude">
@@ -630,6 +636,7 @@
         <p>Boletim do Veículo (Trimble), 1 linha por <b>placa + dia</b>. Colunas: <code>PLACA</code>, <code>UO</code> (operação), <code>MOTORISTAS</code> (vazio = não identificado), <code>DISTÂNCIA PERCORRIDA</code>, <code>SEM MOTORISTA</code>, <code>CÂMERA OBSTRUÍDA</code>, <code>DESCONEXÃO DA CÂMERA</code>. É a fonte da <b>aderência de identificação</b> (dias identificados ÷ dias que moveu), da <b>operação pela UO</b> e da <b>saúde da câmera</b> p/ o plano de ação. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
         <input type="file" id="fileBdv" accept=".zip,.csv,.txt" multiple hidden>
         <button class="btn solid" onclick="document.getElementById('fileBdv').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn" style="margin-top:6px" onclick="pickDir('bdv')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stBdv">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-motoristas">
@@ -3315,6 +3322,24 @@ $('#expSemId').onclick=exportSemId;
 function bindCfg(id,key){ const el=$(id); el.value=CFG[key]; el.addEventListener('input',()=>{ CFG[key]=parseFloat(el.value)||0; saveCfg(); build(); fillFilters(); renderAll(); }); }
 bindCfg('#cfgTol','tol'); bindCfg('#cfgSem','sem'); bindCfg('#cfgFora','fora'); bindCfg('#cfgMovMin','movMin'); bindCfg('#cfgFarol','farolAmareloMax'); bindCfg('#cfgMeta','meta'); bindCfg('#cfgPreco','precoLitro'); bindCfg('#cfgAlmoco','almocoMin'); bindCfg('#cfgJornada','jornadaMaxH'); bindCfg('#cfgJornadaMin','jornadaMin'); bindCfg('#cfgInterjornada','interjornadaMin');
 // import
+// SELECIONAR PASTA INTEIRA (varre as subpastas de dias) — resolve o "não dá p/ pegar vários dias em subpastas"
+let _dirTarget='';
+function pickDir(target){ _dirTarget=target; const el=$('#fileDir'); el.value=''; el.click(); }
+$('#fileDir').addEventListener('change', async e=>{
+  const all=[...e.target.files]; if(!all.length) return;
+  const t=_dirTarget;
+  const rel=f=>String(f.webkitRelativePath||f.name);
+  const pick=re=>all.filter(f=>re.test(rel(f))).sort((a,b)=>rel(a).localeCompare(rel(b)));
+  const CSVZIP=/\.(csv|txt|zip)$/i, CSVTXT=/\.(csv|txt)$/i;
+  try{
+    if(t==='ponto'){ const fs=pick(CSVTXT); if(!fs.length){toast('Nenhum CSV na pasta');return;} toast('Lendo jornada ('+fs.length+' arq)…'); pending.ponto=parseCSV(await combinarFilesTexto(fs)); updateDropStatus(); if(pending.mov) ingest(); toast('Jornada ✓ '+pending.ponto.length.toLocaleString('pt-BR')+' linhas · '+fs.length+' arquivo(s)'); }
+    else if(t==='mov'){ if(!pending.ponto){toast('Carregue primeiro a jornada (ponto)');return;} const fs=pick(CSVZIP); if(!fs.length){toast('Nenhum arquivo na pasta');return;} toast('Movimentação ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadMovLocais(fs),30); }
+    else if(t==='alertas'){ const fs=pick(CSVZIP); if(!fs.length){toast('Nenhum arquivo na pasta');return;} toast('Alertas ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadAlertasLocais(fs),30); }
+    else if(t==='boletim'){ const fs=pick(CSVZIP); if(!fs.length){toast('Nenhum arquivo na pasta');return;} toast('Boletim ('+fs.length+' arq, aguarde)…'); const txt=await combinarFilesTexto(fs); setTimeout(()=>loadBoletim(new File([txt],'boletim.csv')),30); }
+    else if(t==='pedidos'){ const fs=pick(CSVZIP); if(!fs.length){toast('Nenhum arquivo na pasta');return;} toast('Pedidos ('+fs.length+' arq, aguarde)…'); const txt=await combinarFilesTexto(fs); setTimeout(()=>loadPedidos(new File([txt],'pedidos.csv')),30); }
+    else if(t==='bdv'){ const fs=pick(CSVZIP); if(!fs.length){toast('Nenhum arquivo na pasta');return;} toast('Boletim do Veículo ('+fs.length+' arq, aguarde)…'); const txt=await combinarFilesTexto(fs); setTimeout(()=>loadBoletimVeiculo(new File([txt],'bdv.csv')),30); }
+  }catch(err){ toast('Erro ao ler a pasta'); }
+});
 // import — os relatórios diários aceitam VÁRIOS arquivos (período completo); somam os dias
 $('#filePonto').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length) return;
   if(fs.length===1 && !/\.(csv|txt)$/i.test(fs[0].name)){ toast('Lendo jornada…'); readFile(fs[0],rows=>{ pending.ponto=rows; updateDropStatus(); if(pending.mov) ingest(); }); return; }
