@@ -6,6 +6,7 @@ echo.
 copy /Y "..\PROJETOS\Dedo Duro\Painel-Ponto-x-Movimentacao-x-Trimble.html" "index.html" >nul
 git add index.html
 if exist dados.enc git add dados.enc
+if exist dados_*.enc git add dados_*.enc
 git commit -m "Atualizacao do painel Pulso 360"
 git push origin main
 echo.

@@ -3211,21 +3211,22 @@ async function gerarSnapshot(){
   try{
     const json=JSON.stringify(snapshotState()); const raw=new TextEncoder().encode(json);
     const g=await _gz(raw);
-    // chave FIXA por navegador (link estável entre atualizações); some no localStorage do admin
-    let kb64; try{ kb64=localStorage.getItem('integ360_snapkey'); }catch(e){}
-    let keyRaw; if(kb64){ keyRaw=_unb64url(kb64); } else { keyRaw=crypto.getRandomValues(new Uint8Array(32)); try{ localStorage.setItem('integ360_snapkey',_b64url(keyRaw)); }catch(e){} }
+    // CHAVE NOVA + ARQUIVO NOVO a cada geração → o link fica CONGELADO (não muda quando você reimporta outra base)
+    const keyRaw=crypto.getRandomValues(new Uint8Array(32));
+    const stamp=new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');   // AAAAMMDDHHMM
+    const fname='dados_'+stamp+'.enc';
     const key=await crypto.subtle.importKey('raw',keyRaw,{name:'AES-GCM'},false,['encrypt']); const iv=crypto.getRandomValues(new Uint8Array(12));
     const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,g.b));
-    const file=JSON.stringify({v:1, gz:g.gz, iv:_b64(iv), data:_b64(ct)});
-    const blob=new Blob([file],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='dados.enc'; a.click();
-    const link=SP_CFG.redirectUri+'#k='+_b64url(keyRaw);
-    mostrarLinkSnapshot(link, (file.length/1048576).toFixed(1));
+    const file=JSON.stringify({v:1, gz:g.gz, iv:_b64(iv), data:_b64(ct), ts:Date.now()});
+    const blob=new Blob([file],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fname; a.click();
+    const link=SP_CFG.redirectUri+'#k='+_b64url(keyRaw)+'&f='+fname;
+    mostrarLinkSnapshot(link, (file.length/1048576).toFixed(1), fname);
   }catch(e){ toast('Erro ao gerar snapshot: '+(e.message||e)); }
 }
-async function carregarSnapshotDoLink(kb64){
+async function carregarSnapshotDoLink(kb64, fname){
   try{ toast('Abrindo dados compartilhados…');
-    const keyRaw=_unb64url(kb64);
-    const f=await fetch('dados.enc',{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('dados.enc não encontrado'); return r.json(); });
+    const keyRaw=_unb64url(kb64); const arq=fname||'dados.enc';
+    const f=await fetch(arq,{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error(arq+' não encontrado'); return r.json(); });
     const iv=_unb64(f.iv), ct=_unb64(f.data);
     const key=await crypto.subtle.importKey('raw',keyRaw,{name:'AES-GCM'},false,['decrypt']);
     let pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct));
@@ -3235,11 +3236,12 @@ async function carregarSnapshotDoLink(kb64){
     toast('Dados compartilhados carregados ✓');
   }catch(e){ toast('Não consegui abrir o snapshot: '+(e.message||e)); }
 }
-function mostrarLinkSnapshot(link, mb){
+function mostrarLinkSnapshot(link, mb, fname){
+  fname=fname||'dados.enc';
   let bg=document.getElementById('snapModal'); if(bg) bg.remove();
   bg=document.createElement('div'); bg.id='snapModal'; bg.className='modal-bg'; bg.style.display='flex';
-  bg.innerHTML='<div class="modal" style="max-width:620px"><h3>🔗 Link compartilhável gerado</h3>'+
-    '<p class="modal-sub"><b>1)</b> O arquivo <b>dados.enc</b> ('+mb+' MB) foi baixado — coloque-o na pasta <b>integracao-360</b> e rode o <b>publicar.bat</b>.<br><b>2)</b> Compartilhe este link (ele contém a chave; só quem tiver o link vê os dados):</p>'+
+  bg.innerHTML='<div class="modal" style="max-width:620px"><h3>🔗 Link compartilhável gerado (congelado)</h3>'+
+    '<p class="modal-sub"><b>1)</b> O arquivo <b>'+fname+'</b> ('+mb+' MB) foi baixado — coloque-o na pasta <b>integracao-360</b> e rode o <b>publicar.bat</b>.<br><b>2)</b> Compartilhe este link — ele fica <b>congelado</b> nesses dados (não muda quando você importar outra base):</p>'+
     '<input type="text" id="snapLink" readonly value="'+link+'">'+
     '<div class="modal-actions"><button class="btn" id="snapClose" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Fechar</button><button class="btn solid" id="snapCopy">Copiar link</button></div></div>';
   document.body.appendChild(bg);
@@ -3364,7 +3366,7 @@ if(RAW&&RAW.bdv){ BDV=RAW.bdv; BDV_N=Object.keys(BDV).length; }
 if(RAW&&RAW.admissao){ ADMISSAO=RAW.admissao.n||null; ADMISSAO_CPF=RAW.admissao.c||null; ADMISSAO_N=ADMISSAO?Object.keys(ADMISSAO).length:0; }
 build(); fillFilters(); renderAll(); updateDropStatus();
 // se o link traz um snapshot compartilhado (#k=...), carrega os dados cifrados por cima
-(function(){ const m=(location.hash||'').match(/[#&]k=([A-Za-z0-9\-_]+)/); if(m) setTimeout(()=>carregarSnapshotDoLink(m[1]),50); })();
+(function(){ const h=location.hash||''; const mk=h.match(/[#&]k=([A-Za-z0-9\-_]+)/); const mf=h.match(/[#&]f=([A-Za-z0-9._-]+)/); if(mk) setTimeout(()=>carregarSnapshotDoLink(mk[1], mf?mf[1]:''),50); })();
 </script>
 </body>
 </html>
