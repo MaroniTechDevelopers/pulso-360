@@ -912,15 +912,22 @@ function mediaDe(nome){ if(MEDIA_OFF) return null; if(ABAST){ const a=ABAST[norm
 const NIVEL_DEF=[{k:'ALTO',lab:'Alto',ic:'🔴'},{k:'MEDIO',lab:'Médio',ic:'🟠'},{k:'BAIXO',lab:'Baixo',ic:'🟡'}];
 function tipoLabel(t){ return String(t||'').replace(/_/g,' ').toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase()); }
 // alertas reais de um motorista — Boletim (todos os tipos) tem prioridade; herda a severidade do relatório de Alertas se houver
-function alertasReais(nome){ const nn=norm(nome); const b=BOL&&BOL[nn], a=ALERTS&&ALERTS[nn];
-  if(b) return {nome, total:b.total, tipos:b.tipos||{}, niveis:(a&&a.niveis)||{}, semanas:(a&&a.semanas)||{}};
-  return a||null; }
+function alertasReais(nome){ const nn=norm(nome);
+  if(ALERTS){ const a=ALERTS[nn]; return a? {nome, total:a.total, tipos:a.tipos||{}, niveis:a.niveis||{}, semanas:a.semanas||{}} : {nome, total:0, tipos:{}, niveis:{}, semanas:{}}; }  // relatório de Alertas = fonte da verdade
+  const b=BOL&&BOL[nn]; if(b) return {nome, total:b.total, tipos:b.tipos||{}, niveis:{}, semanas:{}};   // fallback: Boletim do Motorista
+  return null; }
 // resumo de alertas de um motorista — usa o relatório real se carregado; senão o cadastro demo
 function alertasResumo(nome, range){
   const nn=norm(nome);
   // com filtro de data: conta por dia (Boletim) ou por evento (Alertas/AL_TL)
   if(range){
+    // 1º) relatório de Alertas por-dia (fonte da verdade, sem teto)
+    if(ALERTS){ const ar=ALERTS[nn]; let total=0; const tipos={}, niveis={};
+      if(ar && ar.dias){ for(const d in ar.dias){ if(d>=range.de && d<=range.ate){ const dd=ar.dias[d]; total+=dd.t; for(const k in (dd.tp||{}))tipos[k]=(tipos[k]||0)+dd.tp[k]; for(const k in (dd.nv||{}))niveis[k]=(niveis[k]||0)+dd.nv[k]; } } }
+      const badges=NIVEL_DEF.filter(x=>niveis[x.k]).map(x=>({lab:x.lab,ic:x.ic,n:niveis[x.k],hot:x.k==='ALTO'})); return {total, badges, real:true, niveis, tipos}; }
+    // 2º) fallback: Boletim do Motorista (por dia)
     if(BOL_DAY){ let total=0; const tipos={}; const dm=BOL_DAY[nn]||{}; for(const d in dm){ if(d>=range.de && d<=range.ate){ total+=dm[d].t; const tp=dm[d].tipos; for(const k in tp) tipos[k]=(tipos[k]||0)+tp[k]; } } return {total, badges:[], real:true, niveis:{}, tipos}; }
+    // 3º) fallback: linha do tempo (limitada)
     if(AL_TL){ let total=0; const tipos={}, niveis={}; (AL_TL[nn]||[]).forEach(e=>{ if(e[0]>=range.de && e[0]<=range.ate){ total++; const tp=e[3]||'ALERTA'; tipos[tp]=(tipos[tp]||0)+1; const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':''; if(nv)niveis[nv]=(niveis[nv]||0)+1; } }); const badges=NIVEL_DEF.filter(d=>niveis[d.k]).map(d=>({lab:d.lab,ic:d.ic,n:niveis[d.k],hot:d.k==='ALTO'})); return {total, badges, real:true, niveis, tipos}; }
   }
   const real=alertasReais(nome);
@@ -2395,10 +2402,11 @@ function aggAlertas(text, keep){
     if(iPlaca>=0 && iUO>=0){ const pl=placaKey(c[iPlaca]); const uo=(c[iUO]||'').trim(); if(pl&&uo){ (puo[pl]=puo[pl]||{})[uo]=(puo[pl][uo]||0)+1; } }
     const nome=(c[iMot]||'').trim(); if(!nome) continue; const nn=norm(nome);
     const tipo=((c[iTipo]||'').trim()||'ALERTA'), nivel=norm(c[iNivel]||'');
-    const a=(A[nn]=A[nn]||{nome, total:0, niveis:{}, tipos:{}, semanas:{}});
+    const a=(A[nn]=A[nn]||{nome, total:0, niveis:{}, tipos:{}, semanas:{}, dias:{}});
     a.total++; a.tipos[tipo]=(a.tipos[tipo]||0)+1; if(nivel)a.niveis[nivel]=(a.niveis[nivel]||0)+1;
     let d=null;
-    if(iData>=0){ d=isoDate(splitDT(c[iData]).date||c[iData]); if(d){ const wk=weekInfo(d).key; if(wk)a.semanas[wk]=(a.semanas[wk]||0)+1; } }
+    if(iData>=0){ d=isoDate(splitDT(c[iData]).date||c[iData]); if(d){ const wk=weekInfo(d).key; if(wk)a.semanas[wk]=(a.semanas[wk]||0)+1;
+        const dd=(a.dias[d]=a.dias[d]||{t:0,tp:{},nv:{}}); dd.t++; dd.tp[tipo]=(dd.tp[tipo]||0)+1; if(nivel)dd.nv[nivel]=(dd.nv[nivel]||0)+1; } }   // por-dia (sem teto) → filtro de data preciso
     // horário exato do alerta → linha do tempo (só p/ motoristas de interesse; controla memória)
     if(d && (!keep || keep.has(nn))){
       let tmin = iHora>=0 ? toMin(c[iHora]) : null;
@@ -3008,8 +3016,9 @@ function readFileP(file){ return new Promise(res=>readFile(file,res)); }
 async function spCombinar(items){ let out='',first=true; for(const it of items){ const ab=await fetchRetry(it['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()); let txt=decodeText(ab).replace(/^﻿/,''); if(first){ out=txt; first=false; } else { const nl=txt.indexOf('\n'); out+='\n'+(nl>=0?txt.slice(nl+1):txt); } } return out; }
 // soma alertas de VÁRIOS dias (streaming + merge) — não guarda o texto todo
 function mergeAlertas(dst, src){ dst.n=(dst.n||0)+(src.n||0);
-  for(const nn in src.A){ const s=src.A[nn]; const d=(dst.A[nn]=dst.A[nn]||{nome:s.nome,total:0,niveis:{},tipos:{},semanas:{}});
-    d.total+=s.total; for(const k in s.niveis)d.niveis[k]=(d.niveis[k]||0)+s.niveis[k]; for(const k in s.tipos)d.tipos[k]=(d.tipos[k]||0)+s.tipos[k]; for(const k in s.semanas)d.semanas[k]=(d.semanas[k]||0)+s.semanas[k]; }
+  for(const nn in src.A){ const s=src.A[nn]; const d=(dst.A[nn]=dst.A[nn]||{nome:s.nome,total:0,niveis:{},tipos:{},semanas:{},dias:{}});
+    d.total+=s.total; for(const k in s.niveis)d.niveis[k]=(d.niveis[k]||0)+s.niveis[k]; for(const k in s.tipos)d.tipos[k]=(d.tipos[k]||0)+s.tipos[k]; for(const k in s.semanas)d.semanas[k]=(d.semanas[k]||0)+s.semanas[k];
+    d.dias=d.dias||{}; for(const dk in (s.dias||{})){ const sd=s.dias[dk]; const td=(d.dias[dk]=d.dias[dk]||{t:0,tp:{},nv:{}}); td.t+=sd.t||0; for(const k in (sd.tp||{}))td.tp[k]=(td.tp[k]||0)+sd.tp[k]; for(const k in (sd.nv||{}))td.nv[k]=(td.nv[k]||0)+sd.nv[k]; } }
   const sp=src.placaUO||{}; for(const pk in sp){ const cur=dst.placaUO[pk]; if(!cur||(sp[pk].n||0)>(cur.n||0)) dst.placaUO[pk]=sp[pk]; }
   const st=src.tl||{}; for(const nn in st){ const arr=(dst.tl[nn]=dst.tl[nn]||[]); for(const e of st[nn]){ if(arr.length<5000) arr.push(e); } } }
 // movimentação de VÁRIOS dias (streaming — 1 arquivo por vez, como o zip)
@@ -3148,8 +3157,9 @@ async function spLoadAll(interactive){
   if(byTypeAll.boletim) loadBoletim(new File([await spCombinar(byTypeAll.boletim)],'boletim_motorista.csv'));
   if(byTypeAll.pedidos) loadPedidos(new File([await spCombinar(byTypeAll.pedidos)],'pedidos.csv'));
   // 4) ALERTAS (soma os dias, streaming + merge — não guarda o texto todo)
-  if(byTypeAll.alertas){ const acc={A:{},n:0,placaUO:{},tl:{}}; const keep=namesOfInterest(); let k=0;
-    for(const it of byTypeAll.alertas){ try{ const ab=await fetchRetry(it['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()); mergeAlertas(acc, aggAlertas(decodeText(ab), keep)); k++; if(k%5===0||k===byTypeAll.alertas.length) toast('Alertas: '+k+'/'+byTypeAll.alertas.length+'…'); }catch(_){} }
+  if(byTypeAll.alertas){ const acc={A:{},n:0,placaUO:{},tl:{}}; const keep=namesOfInterest(); let k=0, fail=0;
+    for(const it of byTypeAll.alertas){ try{ const ab=await fetchRetry(it['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()); mergeAlertas(acc, aggAlertas(decodeText(ab), keep)); }catch(_){ fail++; } k++; if(k%5===0||k===byTypeAll.alertas.length) toast('Alertas: '+k+'/'+byTypeAll.alertas.length+(fail?(' · '+fail+' falha(s)'):'')+'…'); }
+    if(fail) toast('⚠ Alertas: '+fail+' de '+byTypeAll.alertas.length+' arquivo(s) falharam — total pode estar incompleto');
     ALERTS=acc.A; ALERTS_N=acc.n; if(acc.placaUO&&Object.keys(acc.placaUO).length) PLACA_UO=acc.placaUO; AL_TL=acc.tl;
     if(REAL&&RAW){ RAW.alertas=ALERTS; RAW.placaUO=PLACA_UO; RAW.counts=RAW.counts||{}; RAW.counts.alertas=acc.n; saveData(); }
   }
