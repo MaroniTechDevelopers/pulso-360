@@ -1118,7 +1118,7 @@ function analyze(rec){
 
   return Object.assign({}, rec, {
     operacao,
-    punches, entrada, saida, entradaU, saidaU, horasPonto, mov, movUnid, horasMov, km, litros, media, primMov, ultMov,
+    punches, seqP, entrada, saida, entradaU, saidaU, horasPonto, mov, movUnid, horasMov, km, litros, media, primMov, ultMov,
     segs, trimbleMot, semelhanca, foraJornada, horasDedoDuro, ddReal, horaExtra, condutorDivergente, condutorPlan, flags, sev,
     semana: isoWeek(rec.data), semKey:wi.key, mesKey:wi.mesKey, mesLabel:wi.mesLabel,
     pend: flags.filter(f=>f.sev==='pendente').length,
@@ -1373,8 +1373,10 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
   const html=shown.map((g,i)=>{
     const id=prefix+i; ids.push(id); const ponto=[],mov=[],almoco=[],alertas=[],ident=[],interj=[]; let dd=0,km=0,hpon=0,hcond=0,hex=0,nAlto=0,restMin=null,restViol=0; const placas=new Set(), dias=new Set(), ops=new Set();
     g.recs.forEach(r=>{ const dIdx=Math.round((Date.parse(r.data)-Date.parse(g.start))/86400000); const off=dIdx*1440; dias.add(r.data); if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
-      for(let j=0;j+1<r.punches.length;j+=2){ const a=r.punches[j], b=r.punches[j+1]; if(b>=a) ponto.push([off+a,off+b]); else { ponto.push([off+a,off+1440]); ponto.push([off,off+b]); } }   // divide no cruzamento da meia-noite
-      if(r.punches.length===1) ponto.push([off+r.punches[0],off+r.punches[0]+8]);
+      const P = (r.seqP && r.seqP.length===r.punches.length) ? r.seqP : r.punches;   // desdobrado: turno noturno vai p/ o dia seguinte
+      for(let j=0;j+1<P.length;j+=2){ let a=off+P[j]; const b=off+P[j+1];
+        while(a<b){ const dayEnd=(Math.floor(a/1440)+1)*1440; const e=Math.min(b,dayEnd); ponto.push([a,e]); a=e; } }   // corta em CADA meia-noite
+      if(P.length===1) ponto.push([off+P[0],off+P[0]+8]);
       const idDiv=r.idDivergente||r.condutorDivergente; const idWho=r.idDivergente?(r.trimbleMot||''):(r.condutorDivergente?r.condutorPlan:'');
       r.mov.forEach(s=>{ const fora=(r.entrada!=null&&(s.ini<r.entrada-CFG.tol||s.fim>r.saida+CFG.tol)); mov.push({a:off+s.ini,b:off+s.fim,km:s.km,placa:s.placa,fora}); if(s.placa)placas.add(s.placa); km+=s.km||0; ident.push({a:off+s.ini,b:off+s.fim,ok:true,div:idDiv,who:idWho}); });
       (r.movUnid||[]).forEach(s=> ident.push({a:off+s.ini,b:off+s.fim,ok:false}));
