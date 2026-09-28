@@ -126,11 +126,6 @@
   :root[data-theme="dark"] .filterbar input[type=date]{color-scheme:dark}
   .filterbar select:hover,.filterbar input[type=text]:hover,.filterbar input[type=date]:hover{border-color:var(--gold)}
   .filterbar select:focus,.filterbar input[type=text]:focus,.filterbar input[type=date]:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--ring)}
-  .filterbar .f{position:relative}
-  .filterbar .f label{padding-right:18px}
-  .filterbar .f .fclr{position:absolute;top:-1px;right:0;width:16px;height:16px;border:none;border-radius:50%;background:var(--surface-2);color:var(--muted);font-size:13px;line-height:1;cursor:pointer;padding:0;display:none;align-items:center;justify-content:center;box-shadow:var(--shadow-sm)}
-  .filterbar .f.has-val .fclr{display:inline-flex}
-  .filterbar .f .fclr:hover{background:var(--critical);color:#fff}
 
   /* ============ KPI ============ */
   .kpis{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
@@ -196,13 +191,7 @@
   .wtl-ruler{position:relative;height:15px;margin:0 0 3px 84px}
   .wtl-ruler .tick{position:absolute;top:0;transform:translateX(-50%);font-size:9.5px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
   .wtl-ruler .tick.day{color:var(--ink-2);font-weight:600}
-  .wtl-ruler .tick.feriado{color:var(--critical);font-weight:700}
   .wtl-ruler .tick i{position:absolute;top:13px;left:50%;width:1px;height:6px;background:var(--baseline)}
-  /* rótulo do dia (fixo, centralizado sobre as horas) — aparece ao dar zoom num dia */
-  .wtl-day{position:relative;height:0;display:none}
-  .wtl-day.on{display:block;height:22px}
-  .wtl-day span{position:absolute;left:calc(50% + 42px);transform:translateX(-50%);top:0;font-size:12px;font-weight:700;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:2px 12px;white-space:nowrap;z-index:6;box-shadow:0 1px 3px rgba(0,0,0,.10)}
-  .wtl-day span.feriado{color:var(--critical);border-color:color-mix(in srgb,var(--critical) 40%,var(--border))}
   .wtl .lane .gl.day{background:var(--baseline);width:2px}
   /* marcadores de alerta no horário exato (linha do tempo) — ícone por tipo + haste por severidade */
   .lane.lane-al{height:24px;background:var(--surface-2);overflow:visible}
@@ -416,11 +405,11 @@
   <!-- FILTER BAR (compartilhada) -->
   <div class="filterbar" id="filterbar">
     <div class="f"><label>Fechamento (16→15)</label><select id="fFecha"><option value="">Todos</option></select></div>
-    <div class="f"><label>Operação</label><input type="text" id="fOp" list="fOpList" placeholder="Digite a operação…" autocomplete="off"><datalist id="fOpList"></datalist></div>
+    <div class="f"><label>Operação</label><select id="fOp"><option value="">Todas</option></select></div>
     <div class="f"><label>Dia</label><select id="fDia"><option value="">Todos</option></select></div>
     <div class="f"><label>De (data)</label><input type="date" id="fDe"></div>
     <div class="f"><label>Até (data)</label><input type="date" id="fAte"></div>
-    <div class="f"><label>Motorista</label><input type="text" id="fMot" list="fMotList" placeholder="Digite o nome…" autocomplete="off"><datalist id="fMotList"></datalist></div>
+    <div class="f"><label>Motorista</label><select id="fMot"><option value="">Todos</option></select></div>
     <div class="f"><label>Situação</label><select id="fStatus">
       <option value="">Todas</option>
       <option value="critico">Prioridade</option>
@@ -570,22 +559,22 @@
       <div class="drop" id="drop-ponto">
         <h3><span class="num">1</span> Jornada (ponto)</h3>
         <p>Espelho de ponto. Colunas: <code>Nome do funcionário</code>, <code>Nome do departamento</code> (operação), <code>Dia</code>, <code>Entrada 1…6</code> / <code>Saída 1…6</code>.</p>
-        <input type="file" id="filePonto" accept=".csv,.xlsx,.xls,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('filePonto').click()">Selecionar arquivos (vários dias)</button>
+        <input type="file" id="filePonto" accept=".csv,.xlsx,.xls,.txt" hidden>
+        <button class="btn solid" onclick="document.getElementById('filePonto').click()">Selecionar arquivo</button>
         <div class="status-line" id="stPonto">nenhum arquivo — usando demonstração</div>
       </div>
       <div class="drop" id="drop-mov">
         <h3><span class="num">2</span> Movimentação + Identificação (Trimble)</h3>
         <p>Histórico do veículo com o condutor identificado. Colunas: <code>Veículo</code>, <code>Ocorrência</code>, <code>Data/Hora inicial</code> / <code>final</code>, <code>Motorista</code>, <code>Distância</code>, <code>Consumo</code>. Aceita <code>.zip</code> com vários CSVs diários (grande) — carregue a jornada antes.</p>
-        <input type="file" id="fileMov" accept=".zip,.csv,.xlsx,.xls,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('fileMov').click()">Selecionar arquivos (vários dias)</button>
+        <input type="file" id="fileMov" accept=".zip,.csv,.xlsx,.xls,.txt" hidden>
+        <button class="btn solid" onclick="document.getElementById('fileMov').click()">Selecionar arquivo</button>
         <div class="status-line" id="stMov">nenhum arquivo — usando demonstração</div>
       </div>
       <div class="drop" id="drop-alertas">
         <h3><span class="num">3</span> Alertas (Trimble) <span style="font-size:11px;color:var(--muted);font-weight:400">opcional</span></h3>
         <p>Histórico de alertas. Colunas: <code>Motorista</code>, <code>Tipo</code>, <code>Nível</code>, <code>UO</code>, <code>Data</code>. Aceita <code>.zip</code> ou <code>.csv</code> — só conta (não guarda as linhas).</p>
-        <input type="file" id="fileAlertas" accept=".zip,.csv,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('fileAlertas').click()">Selecionar arquivos (vários dias)</button>
+        <input type="file" id="fileAlertas" accept=".zip,.csv,.txt" hidden>
+        <button class="btn solid" onclick="document.getElementById('fileAlertas').click()">Selecionar arquivo</button>
         <div class="status-line" id="stAlertas">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-tms">
@@ -612,15 +601,15 @@
       <div class="drop" id="drop-boletim">
         <h3><span class="num">7</span> Boletim do Motorista <span style="font-size:11px;color:var(--muted);font-weight:400">ocorrências · alertas por tipo</span></h3>
         <p>Boletim do Motorista (Trimble), 1 linha por <b>motorista + dia</b>. Traz os alertas por tipo em colunas: <code>Uso de Celular</code>, <code>Fadiga</code>, <code>Distração</code>, <code>Sem Cinto</code>, <code>Freada</code>, <code>Excesso Velocidade</code>, <code>Parado Ligado</code>… Alimenta os <b>blocos por tipo</b> da ficha. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
-        <input type="file" id="fileBoletim" accept=".zip,.csv,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('fileBoletim').click()">Selecionar arquivos (vários dias)</button>
+        <input type="file" id="fileBoletim" accept=".zip,.csv,.txt" hidden>
+        <button class="btn solid" onclick="document.getElementById('fileBoletim').click()">Selecionar arquivo</button>
         <div class="status-line" id="stBoletim">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-pedidos">
         <h3><span class="num">8</span> Relatório de Pedidos <span style="font-size:11px;color:var(--muted);font-weight:400">viagens · operação por viagem</span></h3>
         <p>Pedidos/viagens do TMS. Colunas: <code>CPF Motoristas</code>, <code>Veículos</code>, <code>Centro Resultado</code>, <code>Data Carregamento</code>. <b>Opcional</b> (a operação já vem da UO da Trimble) — serve p/ a divergência <b>condutor não vinculado à placa</b> e operação por viagem. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
-        <input type="file" id="filePedidos" accept=".zip,.csv,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('filePedidos').click()">Selecionar arquivos (vários dias)</button>
+        <input type="file" id="filePedidos" accept=".zip,.csv,.txt" hidden>
+        <button class="btn solid" onclick="document.getElementById('filePedidos').click()">Selecionar arquivo</button>
         <div class="status-line" id="stPedidos">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-saude">
@@ -633,8 +622,8 @@
       <div class="drop" id="drop-bdv">
         <h3><span class="num">10</span> Boletim do Veículo <span style="font-size:11px;color:var(--muted);font-weight:400">identificação · UO · câmera</span></h3>
         <p>Boletim do Veículo (Trimble), 1 linha por <b>placa + dia</b>. Colunas: <code>PLACA</code>, <code>UO</code> (operação), <code>MOTORISTAS</code> (vazio = não identificado), <code>DISTÂNCIA PERCORRIDA</code>, <code>SEM MOTORISTA</code>, <code>CÂMERA OBSTRUÍDA</code>, <code>DESCONEXÃO DA CÂMERA</code>. É a fonte da <b>aderência de identificação</b> (dias identificados ÷ dias que moveu), da <b>operação pela UO</b> e da <b>saúde da câmera</b> p/ o plano de ação. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
-        <input type="file" id="fileBdv" accept=".zip,.csv,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('fileBdv').click()">Selecionar arquivos (vários dias)</button>
+        <input type="file" id="fileBdv" accept=".zip,.csv,.txt" hidden>
+        <button class="btn solid" onclick="document.getElementById('fileBdv').click()">Selecionar arquivo</button>
         <div class="status-line" id="stBdv">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-motoristas">
@@ -779,15 +768,6 @@ function weekInfo(iso){
            mesKey:thu.getUTCFullYear()+'-'+String(thu.getUTCMonth()+1).padStart(2,'0'),
            mesLabel:MESES[thu.getUTCMonth()]+'/'+String(thu.getUTCFullYear()).slice(2) };
 }
-// período (segunda→domingo) de uma semana a partir da segunda-feira (ISO)
-function semanaPeriodo(mondayISO){ if(!mondayISO) return ''; const e=new Date(Date.parse(mondayISO)+6*86400000).toISOString().slice(0,10); return brDate(mondayISO)+' até '+brDate(e); }
-function semanaPeriodoCurto(mondayISO){ if(!mondayISO) return ''; const e=new Date(Date.parse(mondayISO)+6*86400000).toISOString().slice(0,10); const dd=iso=>{ const m=String(iso).match(/-(\d\d)-(\d\d)$/); return m?m[2]+'/'+m[1]:iso; }; return dd(mondayISO)+'–'+dd(e); }
-// domingos e FERIADOS NACIONAIS (fixos + Sexta-feira Santa) → dia em vermelho
-function _pascoa(y){ const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,mm=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*mm+114)/31),da=((h+l-7*mm+114)%31)+1; return new Date(Date.UTC(y,mo-1,da)); }
-const FERIADOS_NAC=['01-01','04-21','05-01','09-07','10-12','11-02','11-15','11-20','12-25']; // + Sexta-feira Santa (móvel)
-function isFeriado(iso){ const m=String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m) return false; const md=m[2]+'-'+m[3]; if(FERIADOS_NAC.includes(md)) return true; const gf=new Date(_pascoa(+m[1]).getTime()-2*86400000); return md===String(gf.getUTCMonth()+1).padStart(2,'0')+'-'+String(gf.getUTCDate()).padStart(2,'0'); }
-function isDomingo(iso){ const m=String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m) return false; return new Date(Date.UTC(+m[1],+m[2]-1,+m[3])).getUTCDay()===0; }
-function diaVermelho(iso){ return isDomingo(iso)||isFeriado(iso); }
 // faixa de farol agrupada por mês (cada mês com suas semanas)
 function farolStripHTML(semanas, weeks, opts){
   opts=opts||{}; const meses=[], byMes={};
@@ -796,8 +776,8 @@ function farolStripHTML(semanas, weeks, opts){
     const g=byMes[mk];
     const dots=g.weeks.map(w=>{ const has=(w.key in semanas); const cor=has?FAROL_COR[farol(semanas[w.key])]:'var(--baseline)';
       const hrs=has?hDec(semanas[w.key]):'sem dado';
-      if(opts.showHours) return `<span class="fweek"><span class="fdot" style="background:${cor}" title="${semanaPeriodo(w.key)}: ${hrs}"></span><span class="fwk-lab">${semanaPeriodoCurto(w.key)}</span><span class="fwk-h">${has?hDec(semanas[w.key]):'—'}</span></span>`;
-      return `<span class="fdot ${opts.size==='sm'?'sm':''}" style="background:${cor}" title="${semanaPeriodo(w.key)}: ${hrs}"></span>`;
+      if(opts.showHours) return `<span class="fweek"><span class="fdot" style="background:${cor}" title="${w.label}: ${hrs}"></span><span class="fwk-lab">${w.label}</span><span class="fwk-h">${has?hDec(semanas[w.key]):'—'}</span></span>`;
+      return `<span class="fdot ${opts.size==='sm'?'sm':''}" style="background:${cor}" title="${w.label} · ${g.mesLabel}: ${hrs}"></span>`;
     }).join('');
     return `<span class="fmes"><span class="fmes-lab">${g.mesLabel}</span><span class="fmes-dots">${dots}</span></span>`;
   }).join('')+'</div>';
@@ -902,35 +882,21 @@ function admissaoDe(nome){ const nn=norm(nome);
   if(ADMISSAO && ADMISSAO[nn]) return ADMISSAO[nn];
   if(ADMISSAO_CPF && typeof NOME2CPF!=='undefined' && NOME2CPF){ const cpf=NOME2CPF[nn]; if(cpf && ADMISSAO_CPF[cpf]) return ADMISSAO_CPF[cpf]; }
   return (DRIVERS[nome]&&DRIVERS[nome].admissao)||''; }
-// MÉDIA DESLIGADA: a média medida da Trimble ainda não vem preenchida nos exports (coluna vazia).
-// Enquanto não tivermos a fonte assertiva, a média fica em branco ("—") no painel todo.
-// Para religar quando a Trimble corrigir o export, troque para false.
-const MEDIA_OFF = true;
-// AUTO_SP: conexão automática com o SharePoint (auto-carregar relatórios + sincronizar tratativas).
-// DESLIGADO (false) = modo IMPORTAÇÃO MANUAL pela aba Dados, até termos a base de dados. Religar = true.
-const AUTO_SP = false;
 // média oficial do motorista: abastecimento real (bombas) > estimativa Trimble (km/litros) > cadastro demo
-function mediaDe(nome){ if(MEDIA_OFF) return null; if(ABAST){ const a=ABAST[norm(nome)]; if(a&&a.media!=null) return a.media; }
+function mediaDe(nome){ if(ABAST){ const a=ABAST[norm(nome)]; if(a&&a.media!=null) return a.media; }
   let km=0,l=0; for(const r of RECORDS){ if(r.motoristaEscala===nome){ km+=r.km||0; l+=r.litros||0; } } return l>0? km/l : (drv(nome).media!=null?drv(nome).media:null); }
 const NIVEL_DEF=[{k:'ALTO',lab:'Alto',ic:'🔴'},{k:'MEDIO',lab:'Médio',ic:'🟠'},{k:'BAIXO',lab:'Baixo',ic:'🟡'}];
 function tipoLabel(t){ return String(t||'').replace(/_/g,' ').toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase()); }
 // alertas reais de um motorista — Boletim (todos os tipos) tem prioridade; herda a severidade do relatório de Alertas se houver
-function alertasReais(nome){ const nn=norm(nome);
-  if(ALERTS){ const a=ALERTS[nn]; return a? {nome, total:a.total, tipos:a.tipos||{}, niveis:a.niveis||{}, semanas:a.semanas||{}} : {nome, total:0, tipos:{}, niveis:{}, semanas:{}}; }  // relatório de Alertas = fonte da verdade
-  const b=BOL&&BOL[nn]; if(b) return {nome, total:b.total, tipos:b.tipos||{}, niveis:{}, semanas:{}};   // fallback: Boletim do Motorista
-  return null; }
+function alertasReais(nome){ const nn=norm(nome); const b=BOL&&BOL[nn], a=ALERTS&&ALERTS[nn];
+  if(b) return {nome, total:b.total, tipos:b.tipos||{}, niveis:(a&&a.niveis)||{}, semanas:(a&&a.semanas)||{}};
+  return a||null; }
 // resumo de alertas de um motorista — usa o relatório real se carregado; senão o cadastro demo
 function alertasResumo(nome, range){
   const nn=norm(nome);
   // com filtro de data: conta por dia (Boletim) ou por evento (Alertas/AL_TL)
   if(range){
-    // 1º) relatório de Alertas por-dia (fonte da verdade, sem teto)
-    if(ALERTS){ const ar=ALERTS[nn]; let total=0; const tipos={}, niveis={};
-      if(ar && ar.dias){ for(const d in ar.dias){ if(d>=range.de && d<=range.ate){ const dd=ar.dias[d]; total+=dd.t; for(const k in (dd.tp||{}))tipos[k]=(tipos[k]||0)+dd.tp[k]; for(const k in (dd.nv||{}))niveis[k]=(niveis[k]||0)+dd.nv[k]; } } }
-      const badges=NIVEL_DEF.filter(x=>niveis[x.k]).map(x=>({lab:x.lab,ic:x.ic,n:niveis[x.k],hot:x.k==='ALTO'})); return {total, badges, real:true, niveis, tipos}; }
-    // 2º) fallback: Boletim do Motorista (por dia)
     if(BOL_DAY){ let total=0; const tipos={}; const dm=BOL_DAY[nn]||{}; for(const d in dm){ if(d>=range.de && d<=range.ate){ total+=dm[d].t; const tp=dm[d].tipos; for(const k in tp) tipos[k]=(tipos[k]||0)+tp[k]; } } return {total, badges:[], real:true, niveis:{}, tipos}; }
-    // 3º) fallback: linha do tempo (limitada)
     if(AL_TL){ let total=0; const tipos={}, niveis={}; (AL_TL[nn]||[]).forEach(e=>{ if(e[0]>=range.de && e[0]<=range.ate){ total++; const tp=e[3]||'ALERTA'; tipos[tp]=(tipos[tp]||0)+1; const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':''; if(nv)niveis[nv]=(niveis[nv]||0)+1; } }); const badges=NIVEL_DEF.filter(d=>niveis[d.k]).map(d=>({lab:d.lab,ic:d.ic,n:niveis[d.k],hot:d.k==='ALTO'})); return {total, badges, real:true, niveis, tipos}; }
   }
   const real=alertasReais(nome);
@@ -1029,13 +995,10 @@ function analyze(rec){
   const placasR = (rec.placas&&rec.placas.length)?rec.placas:(rec.placa?[rec.placa]:[]);
   let opPlaca=''; for(const p of placasR){ opPlaca=operacaoDaPlaca(p); if(opPlaca) break; }
   const operacao = opPlaca || opDaViagem(placasR, rec.data) || ((rec.operacao && rec.operacao!=='—') ? rec.operacao : '—');
-  // --- ponto: batidas em ORDEM cronológica; desdobra a virada de meia-noite (NÃO ordenar — quebraria turno noturno) ---
-  const rawP=(rec.ponto||[]).map(toMin).filter(v=>v!=null);
-  const seqP=[]; { let add=0; for(let i=0;i<rawP.length;i++){ let v=rawP[i]+add; if(i>0 && v<seqP[i-1]){ add+=1440; v=rawP[i]+add; } seqP.push(v); } }
-  const punches=rawP;   // p/ a linha do tempo (eixo 0–24h do dia)
-  let entrada=rawP.length?rawP[0]:null, saida=rawP.length?rawP[rawP.length-1]:null;   // início/fim reais (exibição, minuto do dia)
-  const entradaU=seqP.length?seqP[0]:null, saidaU=seqP.length?seqP[seqP.length-1]:null;   // desdobrados (podem passar de 24h no turno noturno)
-  let horasPonto=0; for(let i=0;i+1<seqP.length;i+=2) horasPonto+=seqP[i+1]-seqP[i];   // = Total Trabalhado do relatório (confere 99,8%)
+  // --- ponto: intervalos trabalhados = pares consecutivos ---
+  const punches=(rec.ponto||[]).map(toMin).filter(v=>v!=null).sort((a,b)=>a-b);
+  let entrada=punches.length?punches[0]:null, saida=punches.length?punches[punches.length-1]:null;
+  let horasPonto=0; for(let i=0;i+1<punches.length;i+=2) horasPonto+=punches[i+1]-punches[i];
   // --- movimentação ---
   const mov=(rec.movimento||[]).map(s=>({ini:toMin(s.ini),fim:toMin(s.fim),km:+s.km||0,litros:+s.litros||0,placa:s.placa||''})).filter(s=>s.ini!=null&&s.fim!=null&&s.fim>=s.ini);
   const movUnid=(rec.movUnid||[]).map(s=>({ini:toMin(s.ini),fim:toMin(s.fim)})).filter(s=>s.ini!=null&&s.fim!=null&&s.fim>=s.ini);
@@ -1056,16 +1019,16 @@ function analyze(rec){
 
   // --- janela da jornada p/ "fora da jornada" ---
   let foraJornada=0;
-  if(entradaU!=null&&saidaU!=null){
-    const lo=entradaU-tol, hi=saidaU+tol;   // janela desdobrada (cobre turno noturno)
+  if(entrada!=null&&saida!=null){
+    const lo=entrada-tol, hi=saida+tol;
     mov.forEach(s=>{ if(s.ini<lo) foraJornada+=Math.min(s.fim,lo)-s.ini; if(s.fim>hi) foraJornada+=s.fim-Math.max(s.ini,hi); });
     foraJornada=Math.max(0,foraJornada);
   }
 
   // --- ALMOÇO: pausas entre pares trabalhados; a maior pausa >= almocoMin é o almoço ---
-  const breaks=[]; for(let i=1;i+1<seqP.length;i+=2) breaks.push([seqP[i],seqP[i+1]]);
+  const breaks=[]; for(let i=1;i+1<punches.length;i+=2) breaks.push([punches[i],punches[i+1]]);
   const lunch = breaks.filter(b=>b[1]-b[0]>=CFG.almocoMin).sort((a,b)=>(b[1]-b[0])-(a[1]-a[0]))[0]||null;
-  const jornadaSpan = (entradaU!=null&&saidaU!=null)?(saidaU-entradaU):0;
+  const jornadaSpan = (entrada!=null&&saida!=null)?(saida-entrada):0;
   // caso A: marcou almoço mas dirigiu na pausa → interseção movimento × janela do almoço
   let almocoDrivenSegs=[], almocoDirigido=0;
   if(lunch){ const [ls,le]=lunch; mov.forEach(s=>{ const a=Math.max(s.ini,ls),b=Math.min(s.fim,le); if(b>a){almocoDrivenSegs.push({ini:a,fim:b});almocoDirigido+=b-a;} }); }
@@ -1121,7 +1084,7 @@ function analyze(rec){
 
   return Object.assign({}, rec, {
     operacao,
-    punches, seqP, entrada, saida, entradaU, saidaU, horasPonto, mov, movUnid, horasMov, km, litros, media, primMov, ultMov,
+    punches, entrada, saida, horasPonto, mov, movUnid, horasMov, km, litros, media, primMov, ultMov,
     segs, trimbleMot, semelhanca, foraJornada, horasDedoDuro, ddReal, horaExtra, condutorDivergente, condutorPlan, flags, sev,
     semana: isoWeek(rec.data), semKey:wi.key, mesKey:wi.mesKey, mesLabel:wi.mesLabel,
     pend: flags.filter(f=>f.sev==='pendente').length,
@@ -1148,9 +1111,7 @@ function build(){
   // INTERJORNADA (CLT 11h): descanso entre o fim de uma jornada e o início da próxima (por motorista, dias trabalhados consecutivos)
   const jrn={}; RECORDS.forEach(r=>{ if(r.punches&&r.punches.length){ (jrn[r.motoristaEscala]=jrn[r.motoristaEscala]||[]).push(r); } });
   for(const nm in jrn){ const L=jrn[nm].sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
-    for(let i=1;i<L.length;i++){ const p=L[i-1], c=L[i];
-      const pFim=(p.saidaU!=null?p.saidaU:p.punches[p.punches.length-1]);   // fim desdobrado (turno noturno cai no dia seguinte)
-      const cIni=(c.entrada!=null?c.entrada:c.punches[0]);
+    for(let i=1;i<L.length;i++){ const p=L[i-1], c=L[i]; const pFim=p.punches[p.punches.length-1], cIni=c.punches[0];
       const rest=Math.round((Date.parse(c.data)+cIni*60000-(Date.parse(p.data)+pFim*60000))/60000);
       if(rest>0){ c.interjornada=rest; if(rest<CFG.interjornadaMin && !c.flags.some(f=>f.k==='interjornada')){
         c.flags.push({sev:'atencao',k:'interjornada',t:'Descanso entre jornadas < 11h ('+hDec(rest)+')'});
@@ -1165,14 +1126,13 @@ function build(){
    ============================================================ */
 function filtered(){
   const fe=$('#fFecha').value, op=$('#fOp').value, dia=$('#fDia').value, de=$('#fDe').value, ate=$('#fAte').value, mot=$('#fMot').value, st=$('#fStatus').value, q=norm($('#fBusca').value);
-  const mn=mot?norm(mot):'';   // Motorista por substring (digitar parcial já filtra)
   return RECORDS.filter(r=>{
     if(fe){ const f=fechamento(r.data); if(!f||f.key!==fe) return false; }
     if(de && r.data<de) return false;               // intervalo de datas (independe do fechamento)
     if(ate && r.data>ate) return false;
     if(op && r.operacao!==op) return false;
     if(dia && r.data!==dia) return false;
-    if(mn && !norm(r.motoristaEscala).includes(mn)) return false;
+    if(mot && r.motoristaEscala!==mot) return false;
     if(st && r.sev!==st) return false;
     if(q && !(norm(r.motoristaEscala).includes(q)||norm(r.placa).includes(q)||norm(r.trimbleMot).includes(q))) return false;
     return true;
@@ -1182,7 +1142,7 @@ function fillFilters(){
   const ops=[...new Set(RECORDS.map(r=>r.operacao))].sort();
   const dias=[...new Set(RECORDS.map(r=>r.data))].sort().reverse();
   const mots=[...new Set(RECORDS.map(r=>r.motoristaEscala))].sort();
-  fillList('#fOpList',ops); fillList('#fMotList',mots);   // Operação e Motorista viraram campo de digitar (com sugestões)
+  fillSel('#fOp',ops); fillSel('#fMot',mots);
   fillSel('#fDia',dias,brDate);
   // fechamentos presentes (mais recente primeiro)
   const fmap=new Map(); RECORDS.forEach(r=>{ const f=fechamento(r.data); if(f&&!fmap.has(f.key)) fmap.set(f.key,f); });
@@ -1190,7 +1150,6 @@ function fillFilters(){
   const el=$('#fFecha'), cur=el.value; el.innerHTML='<option value="">Todos</option>'+fechas.map(f=>`<option value="${f.key}">${f.label}</option>`).join(''); if(fechas.some(f=>f.key===cur)) el.value=cur;
 }
 function fillSel(sel,arr,fmt){ const el=$(sel), cur=el.value; el.innerHTML='<option value="">'+el.options[0].text.replace(/\s*\(.*/,'')+'</option>'+arr.map(v=>`<option value="${v}">${fmt?fmt(v):v}</option>`).join(''); if(arr.includes(cur)) el.value=cur; }
-function fillList(id,arr){ const el=$(id); if(el) el.innerHTML=arr.map(v=>`<option value="${String(v).replace(/"/g,'&quot;')}"></option>`).join(''); }
 
 /* ============================================================
    RENDER — KPIs
@@ -1204,23 +1163,21 @@ function renderKpis(rows){
   const motsDedo=new Set(rows.filter(r=>(r.ddReal||0)>0).map(r=>r.motoristaEscala)).size;
   const hex=rows.reduce((a,r)=>a+(r.horaExtra||0),0);
   const motsHex=new Set(rows.filter(r=>r.horaExtra>0).map(r=>r.motoristaEscala)).size;
-  const movSemPonto=rows.filter(r=>r.horasMov>=CFG.movMin && r.punches.length===0).length;   // = divergência "Ponto a registrar" (mesma regra do flag)
+  const movSemPonto=rows.filter(r=>r.movimento.length>0 && r.punches.length===0).length;
   const pontoSemMov=rows.filter(r=>r.punches.length>0 && r.movimento.length===0).length;
   const interj=rows.filter(r=>r.interjornada!=null && r.interjornada<CFG.interjornadaMin).length;   // descanso < 11h
   const motsInterj=new Set(rows.filter(r=>r.interjornada!=null && r.interjornada<CFG.interjornadaMin).map(r=>r.motoristaEscala)).size;
   // cobertura de ponto: dos dias com movimento, quantos têm ponto
-  const movDays=rows.filter(r=>r.horasMov>=CFG.movMin).length;
+  const movDays=rows.filter(r=>r.movimento.length>0).length;
   const cobPonto=movDays?Math.round((movDays-movSemPonto)/movDays*100):null;
   const motSet=[...new Set(rows.map(r=>r.motoristaEscala))];
-  const medFrota=(function(){ if(MEDIA_OFF) return null;
-    if(ABAST){ let km=0,l=0; motSet.forEach(m=>{ const a=ABAST[norm(m)]; if(a){km+=a.km;l+=a.litros;} }); if(l>0) return km/l; }
+  const medFrota=(function(){ if(ABAST){ let km=0,l=0; motSet.forEach(m=>{ const a=ABAST[norm(m)]; if(a){km+=a.km;l+=a.litros;} }); if(l>0) return km/l; }
     let km=0,l=0; rows.forEach(r=>{km+=r.km||0;l+=r.litros||0;}); if(l>0) return km/l;
     const a=motSet.map(m=>drv(m).media).filter(v=>v!=null); return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; })();
   let alertKpi=null;
   if(ALERTS||BOL){ const rng=activeRange(); let tot=0,alto=0,nmot=0; motSet.forEach(m=>{ const a=alertasResumo(m, rng); if(a&&a.total){ tot+=a.total; nmot++; if(a.niveis&&a.niveis.ALTO)alto++; } }); alertKpi={tot,alto,nmot}; }
   // ① Identificação (aderência da câmera) da seleção atual — ponderada pelas horas de condução
-  const _motF = $('#fMot').value || $('#fBusca').value;
-  const identSel = _motF ? aderRecs(rows) : (identFrotaPlacas()!=null ? identFrotaPlacas() : aderRecs(rows));   // frota = MESMA base da aba Aderência (por placa); motorista filtrado = registros dele
+  const identSel = aderRecs(rows);   // aderência ponderada pelo tempo (min identificados ÷ min total)
   // Placas OK × placas p/ ação (equipamento) — pela identificação (PLACA_MOV); respeita o filtro de operação
   let placOk=null, placAcao=null, placZero=null;
   if(typeof PLACA_MOV!=='undefined' && PLACA_MOV){ const opF=$('#fOp').value; placOk=0; placAcao=0; placZero=0;
@@ -1236,7 +1193,7 @@ function renderKpis(rows){
     {lab:'Interjornada < 11h',val:interj,sub:motsInterj+' motorista(s) · descanso insuficiente',ac:interj>0?'var(--critical)':'var(--good)',tab:'diverg'},
     alertKpi
       ? {lab:'⚠ Alertas (câmera/telemetria)',val:alertKpi.tot.toLocaleString('pt-BR'),sub:(alertKpi.alto?alertKpi.alto+' motorista(s) c/ nível alto':alertKpi.nmot+' motorista(s) c/ alerta'),ac:'var(--s7)',tab:'linha'}
-      : {lab:'④ Média da frota',val:(medFrota==null?'—':medFrota.toFixed(2).replace('.',',')),sub:(medFrota==null?'aguardando média da Trimble':'meta '+CFG.meta.toFixed(2).replace('.',',')),ac:(medFrota!=null&&medFrota>=CFG.meta)?'var(--good)':'var(--muted)',tab:'media'},
+      : {lab:'④ Média da frota',val:(medFrota==null?'—':medFrota.toFixed(2).replace('.',',')),sub:(medFrota==null?'plugar Marcante':'meta '+CFG.meta.toFixed(2).replace('.',',')),ac:(medFrota!=null&&medFrota>=CFG.meta)?'var(--good)':'var(--muted)',tab:'media'},
     {lab:'Horas extras (&gt;7h20)',val:hDec(hex),sub:motsHex+' motorista(s) acima da jornada',ac:hex>0?'var(--warning)':'var(--muted)',tab:'tabela'},
   ];
   if(placOk!=null){ const placTot=placOk+placAcao; K.splice(1,0,
@@ -1280,23 +1237,13 @@ function semanaAgg(rows){
       m.recs.push(r);
       if(r.idDivergente) m.idDiv++; if(r.sev==='pendente') m.pend++; });
     const rng=activeRange();
-    Object.values(mots).forEach(m=>{ const d=drv(m.nome); const ab=ABAST&&ABAST[norm(m.nome)]; m.media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(m.litros>0?(m.km/m.litros):d.media)); m.op=op; m.meta=metaVeic(m.placa,op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
+    Object.values(mots).forEach(m=>{ const d=drv(m.nome); const ab=ABAST&&ABAST[norm(m.nome)]; m.media=(ab&&ab.media!=null)?ab.media:(m.litros>0?(m.km/m.litros):d.media); m.op=op; m.meta=metaVeic(m.placa,op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
       m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs);   // ponderado pelo tempo (min identificados ÷ total)
       m.aj=aderJornada(m.recs);   // aderência de jornada (score positivo)
-      const alR=alertasResumo(m.nome, rng); m._alR=alR; m._alTot=alR.total||0; m._alAlto=(alR.niveis&&alR.niveis.ALTO)||0;   // mesma fonte p/ risco, ranking e capa
-      m.risco=riscoComposto(m, alR); m.farolUlt=m.risco.cls; });
-    // RANKING do PIOR→MELHOR por TODOS os requisitos (score composto, normalizado dentro da operação)
-    const arr=Object.values(mots); const mx=f=>Math.max(1,...arr.map(f));
-    const mDd=mx(m=>m.ddReal||0), mAlto=mx(m=>m._alAlto||0), mTot=mx(m=>m._alTot||0);
-    arr.forEach(m=>{ const nFora=(m.ddReal||0)/mDd; const nAlto=(m._alAlto||0)/mAlto; const nTot=(m._alTot||0)/mTot;
-      const nIdent=(m.ident==null)?0:Math.max(0,(CFG.sem-m.ident)/CFG.sem);                       // identificação abaixo do limite
-      const nMedia=(!MEDIA_OFF && m.media!=null && m.meta && m.media<m.meta)?((m.meta-m.media)/m.meta):0;
-      m._score = nFora + (nTot*0.6 + nAlto*0.4) + nIdent + nMedia; });                             // 0 = melhor · quanto maior, pior
-    const rk={vermelho:0,amarelo:1,verde:2};
-    arr.sort((a,b)=> (rk[a.risco.cls]-rk[b.risco.cls]) || (b._score-a._score) || ((b.ddReal||0)-(a.ddReal||0)));
-    return { op, list:arr,
+      m.risco=riscoComposto(m, alertasResumo(m.nome, rng)); m.farolUlt=m.risco.cls; });
+    return { op, list:Object.values(mots).sort((a,b)=>{ const rk={vermelho:0,amarelo:1,verde:2}; return (rk[a.risco.cls]-rk[b.risco.cls]) || b.ddReal-a.ddReal; }),
              dd:opRows.reduce((a,r)=>a+(r.ddReal||0),0), aj:aderJornada(opRows),
-             motsDedo:arr.filter(m=>m.ddReal>0).length };
+             motsDedo:Object.values(mots).filter(m=>m.ddReal>0).length };
   });
   return { weeks, ultima, data };
 }
@@ -1316,7 +1263,7 @@ function capinha(m,weeks){
   const strip=farolStripHTML(m.semanas, weeks, {size:'sm'});
   const medaOk = m.media!=null && m.media>=(m.meta!=null?m.meta:CFG.meta);
   const medaTxt = m.media!=null ? m.media.toFixed(2).replace('.',',') : '—';
-  const alR = m._alR || alertasResumo(m.nome); const totAl = alR.total;
+  const alR = alertasResumo(m.nome); const totAl = alR.total;
   const alBadges = alR.badges.slice(0,3).map(b=>`<span class="abadge ${b.hot?'hot':''}" title="${b.lab}">${b.ic}${b.n}</span>`).join('') || '<span class="abadge ok">sem alertas</span>';
   return `<button class="capinha" data-mot="${encodeURIComponent(m.nome)}">
     <div class="cap-top">
@@ -1326,7 +1273,7 @@ function capinha(m,weeks){
     </div>
     <div class="cap-metrics">
       <div class="cm"><span>Identif.</span><b class="${m.ident==null?'':(m.ident>=CFG.sem?'ok':'bad')}">${m.ident==null?'—':m.ident+'%'}</b></div>
-      <div class="cm"><span>Média</span><b class="${m.media==null?'':(medaOk?'ok':'bad')}">${medaTxt}</b></div>
+      <div class="cm"><span>Média</span><b class="${medaOk?'ok':'bad'}">${medaTxt}</b></div>
       <div class="cm"><span>Fora da jornada</span><b class="${m.ddReal>0?'bad':''}" title="horas de condução fora do horário do ponto${m.aj!=null?' · aderência de jornada '+m.aj+'%':''}">${m.ddReal>0?hDec(m.ddReal):'0h'}</b></div>
       <div class="cm"><span>Alertas</span><b class="${totAl>=5?'bad':''}">${totAl}</b></div>
     </div>
@@ -1377,7 +1324,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
     let gkey,start,total,label;
     if(mode==='dia'){ gkey=r.data; start=r.data; total=1440; label=brDate(r.data); }
     else if(mode==='fecha'){ const f=fechamento(r.data); if(!f) return; gkey=f.key; start=f.start; total=fechaMin(f); label=f.label; }
-    else { gkey=r.semKey; start=r.semKey; total=WEEK; label=semanaPeriodo(r.semKey); }
+    else { gkey=r.semKey; start=r.semKey; total=WEEK; label=r.semana+' · '+r.mesLabel; }
     const k=r.motoristaEscala+'|'+gkey;
     const g=(grp[k]=grp[k]||{nome:r.motoristaEscala,gkey,start,total,label,recs:[]}); g.recs.push(r);
   });
@@ -1386,10 +1333,8 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
   const html=shown.map((g,i)=>{
     const id=prefix+i; ids.push(id); const ponto=[],mov=[],almoco=[],alertas=[],ident=[],interj=[]; let dd=0,km=0,hpon=0,hcond=0,hex=0,nAlto=0,restMin=null,restViol=0; const placas=new Set(), dias=new Set(), ops=new Set();
     g.recs.forEach(r=>{ const dIdx=Math.round((Date.parse(r.data)-Date.parse(g.start))/86400000); const off=dIdx*1440; dias.add(r.data); if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
-      const P = (r.seqP && r.seqP.length===r.punches.length) ? r.seqP : r.punches;   // desdobrado: turno noturno vai p/ o dia seguinte
-      for(let j=0;j+1<P.length;j+=2){ let a=off+P[j]; const b=off+P[j+1];
-        while(a<b){ const dayEnd=(Math.floor(a/1440)+1)*1440; const e=Math.min(b,dayEnd); ponto.push([a,e]); a=e; } }   // corta em CADA meia-noite
-      if(P.length===1) ponto.push([off+P[0],off+P[0]+8]);
+      for(let j=0;j+1<r.punches.length;j+=2) ponto.push([off+r.punches[j],off+r.punches[j+1]]);
+      if(r.punches.length===1) ponto.push([off+r.punches[0],off+r.punches[0]+8]);
       const idDiv=r.idDivergente||r.condutorDivergente; const idWho=r.idDivergente?(r.trimbleMot||''):(r.condutorDivergente?r.condutorPlan:'');
       r.mov.forEach(s=>{ const fora=(r.entrada!=null&&(s.ini<r.entrada-CFG.tol||s.fim>r.saida+CFG.tol)); mov.push({a:off+s.ini,b:off+s.fim,km:s.km,placa:s.placa,fora}); if(s.placa)placas.add(s.placa); km+=s.km||0; ident.push({a:off+s.ini,b:off+s.fim,ok:true,div:idDiv,who:idWho}); });
       (r.movUnid||[]).forEach(s=> ident.push({a:off+s.ini,b:off+s.fim,ok:false}));
@@ -1403,7 +1348,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
     ZTL[id]={weekStart:g.start, ponto, mov, almoco, alertas, ident, interj, t0:0, t1:g.total, total:g.total};
     const opsArr=[...ops]; const opTxt=opsArr.join(', ')||'—';
     const meta=`<div class="meta">
-      ${showNome!==false?`<div class="m"><span>${mode==='fecha'?'Fechamento':(mode==='dia'?'Dia':'Semana')}</span><b>${g.label}</b></div>`:''}
+      <div class="m"><span>${mode==='fecha'?'Fechamento':(mode==='dia'?'Dia':'Semana')}</span><b>${g.label}</b></div>
       <div class="m"><span>Operação${opsArr.length>1?' ⚠':''}</span><b style="color:${opsArr.length>1?'var(--serious)':'inherit'}" title="${opsArr.length>1?'rodou em '+opsArr.length+' operações no período':''}">${opTxt}</b></div>
       <div class="m"><span>h ponto</span><b>${hpon?hDec(hpon):'—'}</b></div>
       <div class="m"><span>h condução</span><b style="color:${hcond>hpon+CFG.tol?'var(--serious)':'inherit'}">${hcond?hDec(hcond):'—'}</b></div>
@@ -1419,7 +1364,6 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
       : `<div class="tl-head"><div class="who"><b>${g.label}</b><small>${[...placas].join(', ')||'—'}</small></div>${meta}</div>`;
     return `<div class="card wtl-card">${head}
       <div class="wtl" id="${id}">
-        <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
         <div class="track"><span class="tlab">Ponto</span><div class="lane lane-pt" data-k="ponto"></div></div>
         <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
@@ -1472,7 +1416,6 @@ function buildPlacaCards(placaQ, prefix, cap){
       <div class="m"><span>Km</span><b>${km?Math.round(km).toLocaleString('pt-BR'):'—'}</b></div></div>`;
     return `<div class="card wtl-card"><div class="tl-head"><div class="who"><b>🚚 ${g.placa}</b><small>${[...drivers].map(firstName).join(', ')||'⚠ sem condutor identificado'}</small></div>${meta}</div>
       <div class="wtl" id="${id}">
-        <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
         <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
         <div class="track"><span class="tlab">Identificação</span><div class="lane" data-k="ident"></div></div>
@@ -1513,20 +1456,9 @@ function renderZoom(id){
   let step, dayMode; if(span>16*1440){step=2*1440;dayMode=true;} else if(span>3*1440){step=1440;dayMode=true;} else if(span>12*60){step=360;} else if(span>3*60){step=60;} else {step=30;}
   let ruler='', gl=''; const start=Math.ceil(st.t0/step)*step;
   for(let t=start;t<=st.t1+1;t+=step){ const p=pos(t); if(p<-2||p>102) continue; const dIdx=Math.floor(t/1440), mod=((t%1440)+1440)%1440, day=mod===0;
-    const mostraData=dayMode||day; const diso=new Date(Date.parse(st.weekStart)+dIdx*86400000).toISOString().slice(0,10); const vermelho=mostraData&&diaVermelho(diso);
     const lab = dayMode? fmtDay(st.weekStart,dIdx) : ((day?fmtDay(st.weekStart,dIdx)+' ':'')+hm(mod));
-    ruler+=`<span class="tick ${day?'day':''} ${vermelho?'feriado':''}" style="left:${p}%"${vermelho?' title="'+(isDomingo(diso)?'Domingo':'Feriado nacional')+'"':''}>${lab}<i></i></span>`;
+    ruler+=`<span class="tick ${day?'day':''}" style="left:${p}%">${lab}<i></i></span>`;
     gl+=`<div class="gl ${t%1440===0?'day':''}" style="left:${p}%"></div>`; }
-  // rótulo do dia fixo/centralizado quando o zoom está em ~1 dia (a data some da régua entre meia-noites)
-  const diaHdr=el.querySelector('.wtl-day');
-  if(diaHdr){
-    if(span<=1440*1.5){
-      const mid=(st.t0+st.t1)/2, dIdx=Math.floor(mid/1440);
-      const diso=new Date(Date.parse(st.weekStart)+dIdx*86400000).toISOString().slice(0,10); const verm=diaVermelho(diso);
-      diaHdr.innerHTML=`<span class="${verm?'feriado':''}">${brDate(diso)}${verm?(isDomingo(diso)?' · Domingo':' · Feriado'):''}</span>`;
-      diaHdr.classList.add('on');
-    } else { diaHdr.innerHTML=''; diaHdr.classList.remove('on'); }
-  }
   const seg=(cls,a,b,lab,extra,ttl)=>{ const l=pos(a),r=pos(b); if(r<0||l>100) return ''; const L=Math.max(l,0),W=Math.max(Math.min(r,100)-L,0.3); return `<div class="seg ${cls} ${extra||''}" style="left:${L}%;width:${W}%" title="${ttl||lab||''}">${(r-l)>4?(lab||''):''}</div>`; };
   el.querySelector('.wtl-ruler').innerHTML=ruler;
   const laneP=el.querySelector('.lane[data-k="ponto"]');
@@ -1669,17 +1601,16 @@ function fichaMetrics(nome){
   const adm=admissaoDe(nome); const tempo=tempoDeCasa(adm);
   const kmR=recs.reduce((a,r)=>a+(r.km||0),0), litrosR=recs.reduce((a,r)=>a+(r.litros||0),0);
   const abF=ABAST&&ABAST[norm(nome)];
-  const mediaR = MEDIA_OFF ? null : ((abF&&abF.media!=null)?abF.media:(litrosR>0?kmR/litrosR:d.media));   // desligada até a média da Trimble vir preenchida
+  const mediaR = (abF&&abF.media!=null)?abF.media:(litrosR>0?kmR/litrosR:d.media);   // abastecimento real > Trimble > demo
   const metaFicha = metaVeic(recs.length?(recs.find(r=>r.placa)||{}).placa:'', recs.length?recs[0].operacao:'');
   const medaOk=mediaR!=null&&mediaR>=metaFicha;
   const reco=recomendacao(tempo,mediaR,totAl,ddTotal);
   const risco=riscoComposto({ident:semel, media:mediaR, meta:metaFicha, ddReal:ddRealTotal}, alR);
   const condDiv=recs.filter(r=>r.idDivergente||r.condutorDivergente).length;
-  const diasTrab=new Set(recs.filter(r=>r.punches&&r.punches.length).map(r=>r.data)).size;      // dias com ponto
-  const diasComMov=new Set(recs.filter(r=>r.primMov!=null).map(r=>r.data)).size;                 // dias que dirigiu algum veículo
+  const diasComMov=recs.filter(r=>r.primMov!=null).length;
   const interjViol=recs.filter(r=>r.interjornada!=null && r.interjornada<CFG.interjornadaMin).length;
   const restMinF=recs.reduce((m,r)=>(r.interjornada!=null?(m==null?r.interjornada:Math.min(m,r.interjornada)):m),null);
-  return {nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,risco,condDiv,diasTrab,diasComMov,interjViol,restMinF};
+  return {nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,risco,condDiv,diasComMov,interjViol,restMinF};
 }
 // pontos críticos e positivos p/ o relatório executivo
 function fichaPontos(M){
@@ -1727,7 +1658,7 @@ function planoDeAcao(M){
 function renderFicha(){
   const nome=fichaAtual; if(!nome){ $('#fichaBox').innerHTML=''; return; }
   const M=fichaMetrics(nome);
-  const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,litrosR,abF,mediaR,metaFicha,medaOk,reco,diasTrab,diasComMov,interjViol,restMinF}=M;
+  const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,litrosR,abF,mediaR,metaFicha,medaOk,reco,interjViol,restMinF}=M;
   const fichaRisco=M.risco;
   const {weeks}=semanaAgg(RECORDS);
   const _dayF=dayFilter(); const _recsEvid=_dayF?recs.filter(r=>r.data===_dayF):recs;
@@ -1737,7 +1668,7 @@ function renderFicha(){
   const PL=planoDeAcao(M);  // plano de ação concreto (o que fazer)
   const trats=tratList(nome);   // histórico de tratativas (Lista SharePoint ou local)
   // se logado no M365 e ainda não puxou o banco compartilhado, sincroniza e re-renderiza (1x)
-  if(AUTO_SP && spSignedIn() && TRAT_CACHE===null && !_tratSyncTried){ _tratSyncTried=true; tratSyncFromSP().then(ok=>{ if(ok && fichaAtual===nome) renderFicha(); }); }
+  if(spSignedIn() && TRAT_CACHE===null && !_tratSyncTried){ _tratSyncTried=true; tratSyncFromSP().then(ok=>{ if(ok && fichaAtual===nome) renderFicha(); }); }
   // este motorista rodou em outras operações fora do filtro atual? (evita o "só apareceu 1 dia")
   const _opFilter=$('#fOp').value;
   const allDrvRecs=RECORDS.filter(r=>r.motoristaEscala===nome);
@@ -1787,12 +1718,8 @@ function renderFicha(){
     <div class="card"><ul class="planolist">${PL.map(a=>`<li><span class="pa-ic">${a.ic}</span><div><b>${a.t}</b> — ${a.d}</div></li>`).join('')}</ul></div>
 
     <div class="grid kpis" style="margin-bottom:6px">
-      <div class="card kpi"><div class="accent" style="background:var(--track-ponto)"></div>
-        <div class="lab">Dias trabalhados</div><div class="val tnum">${diasTrab}</div><div class="sub">dias com ponto no período</div></div>
-      <div class="card kpi"><div class="accent" style="background:var(--track-mov)"></div>
-        <div class="lab">Dias com movimentação</div><div class="val tnum">${diasComMov}</div><div class="sub">dias que dirigiu algum veículo</div></div>
       <div class="card kpi"><div class="accent" style="background:${medaOk?'var(--good)':'var(--critical)'}"></div>
-        <div class="lab">④ Média realizada</div><div class="val tnum">${mediaR!=null?mediaR.toFixed(2).replace('.',','):'—'}</div><div class="sub">${mediaR==null?'aguardando média da Trimble':((abF?'real (bomba)':(litrosR>0?'estim. Trimble':'—'))+' · meta '+metaFicha.toFixed(2).replace('.',',')+(medaOk?' ✓':' ✗'))}</div></div>
+        <div class="lab">④ Média realizada</div><div class="val tnum">${mediaR!=null?mediaR.toFixed(2).replace('.',','):'—'}</div><div class="sub">${abF?'real (bomba)':(litrosR>0?'estim. Trimble':'—')} · meta ${metaFicha.toFixed(2).replace('.',',')}${mediaR!=null?(medaOk?' ✓':' ✗'):''}</div></div>
       <div class="card kpi"><div class="accent" style="background:${semel==null?'var(--muted)':(semel>=CFG.sem?'var(--good)':'var(--critical)')}"></div>
         <div class="lab">① Aderência (câmera)</div><div class="val tnum">${semel==null?'—':semel+'<small>%</small>'}</div><div class="sub">movimento do veículo identificado</div></div>
       <div class="card kpi"><div class="accent" style="background:${semelMot==null?'var(--muted)':(semelMot>=CFG.sem?'var(--good)':'var(--critical)')}"></div>
@@ -1903,9 +1830,7 @@ function exportFichaPDF(){
   const nf=v=>v==null?'—':v.toFixed(2).replace('.',',');
   const alto=(M.alR.niveis&&M.alR.niveis.ALTO)||0;
   const kpis=`<div class="kgrid p6">
-    ${pdfKpi('Dias trabalhados', String(M.diasTrab), 'dias com ponto no período', '#f5c800')}
-    ${pdfKpi('Dias com movimentação', String(M.diasComMov), 'dias que dirigiu algum veículo', '#3b82f6')}
-    ${pdfKpi('④ Média realizada', (M.mediaR==null?'—':nf(M.mediaR)), (M.mediaR==null?'aguardando média da Trimble':('meta '+nf(M.metaFicha)+(M.medaOk?' ✓':' ✗'))), M.mediaR==null?'#94a3b8':(M.medaOk?'#10b981':'#ef4444'))}
+    ${pdfKpi('④ Média realizada', (M.mediaR==null?'—':nf(M.mediaR)), 'meta '+nf(M.metaFicha)+(M.mediaR!=null?(M.medaOk?' ✓':' ✗'):''), M.medaOk?'#10b981':'#ef4444')}
     ${pdfKpi('① Aderência (câmera)', (M.semel==null?'—':M.semel+'<small>%</small>'), 'movimento do veículo identificado', M.semel==null?'#94a3b8':(M.semel>=CFG.sem?'#10b981':'#ef4444'))}
     ${pdfKpi('Aderência (motorista)', (M.semelMot==null?'—':M.semelMot+'<small>%</small>'), 'reconhecido como '+pdfEsc(firstName(nome)), M.semelMot==null?'#94a3b8':(M.semelMot>=CFG.sem?'#10b981':'#ef4444'))}
     ${pdfKpi('③ Aderência de jornada', (M.aderJornadaVal==null?'—':M.aderJornadaVal+'<small>%</small>'), hDec(M.ddRealTotal)+' fora da jornada', M.aderJornadaVal==null?'#94a3b8':(M.aderJornadaVal>=90?'#10b981':M.aderJornadaVal>=70?'#f59e0b':'#ef4444'))}
@@ -1943,13 +1868,12 @@ function exportPainelPDF(){
   const dedo=rows.reduce((a,r)=>a+(r.ddReal||0),0);
   const motsDedo=new Set(rows.filter(r=>(r.ddReal||0)>0).map(r=>r.motoristaEscala)).size;
   const hex=rows.reduce((a,r)=>a+(r.horaExtra||0),0);
-  const movSemPonto=rows.filter(r=>r.horasMov>=CFG.movMin && r.punches.length===0).length;   // = divergência "Ponto a registrar" (mesma regra do flag)
+  const movSemPonto=rows.filter(r=>r.movimento.length>0 && r.punches.length===0).length;
   const pontoSemMov=rows.filter(r=>r.punches.length>0 && r.movimento.length===0).length;
-  const movDays=rows.filter(r=>r.horasMov>=CFG.movMin).length;
+  const movDays=rows.filter(r=>r.movimento.length>0).length;
   const cobPonto=movDays?Math.round((movDays-movSemPonto)/movDays*100):null;
   const motSet=[...new Set(rows.map(r=>r.motoristaEscala))];
-  const _motFp = $('#fMot').value || $('#fBusca').value;
-  const identSel = _motFp ? aderRecs(rows) : (identFrotaPlacas()!=null ? identFrotaPlacas() : aderRecs(rows));   // frota = base por placa (bate com a tela)
+  const identSel=aderRecs(rows);   // ponderado pelo tempo
   const ajP=aderJornada(rows);     // aderência de jornada (score positivo)
   let alertTot=0,alertAlto=0; if(ALERTS||BOL){ const rng=activeRange(); motSet.forEach(m=>{ const a=alertasResumo(m,rng); if(a&&a.total){ alertTot+=a.total; if(a.niveis&&a.niveis.ALTO)alertAlto++; } }); }
   // placas OK × ação
@@ -2078,7 +2002,6 @@ function renderTable(rows){
    RENDER GERAL
    ============================================================ */
 function renderAll(){
-  if(typeof updateFilterClears==='function') updateFilterClears();
   const rows=filtered();
   renderKpis(rows);
   renderSemana(rows);
@@ -2323,7 +2246,6 @@ function mediaAgg(rows){
 }
 function renderMedia(rows){
   const kbox=$('#mediaKpis'), box=$('#mediaBox');
-  if(MEDIA_OFF){ if(kbox) kbox.innerHTML=''; if(box) box.innerHTML='<div class="card" style="padding:30px 24px;text-align:center"><div style="font-size:32px">⛽</div><h3 style="margin:10px 0 6px;font-size:16px">Média em integração direta com a Trimble</h3><p style="color:var(--muted);font-size:13px;max-width:560px;margin:6px auto;line-height:1.5">A média de consumo passará a vir <b>medida diretamente da telemetria Trimble</b>, por veículo. Enquanto a fonte não chega preenchida no relatório, este indicador fica <b>propositalmente em branco</b> — para não exibir número que ainda não foi validado.</p></div>'; return; }
   const list=mediaAgg(rows); const temAb=ABAST&&list.some(m=>m.mediaA!=null);
   const abaixo=list.filter(m=>m.oficial<m.meta).length;
   // frota (oficial) e conciliação
@@ -2417,11 +2339,10 @@ function aggAlertas(text, keep){
     if(iPlaca>=0 && iUO>=0){ const pl=placaKey(c[iPlaca]); const uo=(c[iUO]||'').trim(); if(pl&&uo){ (puo[pl]=puo[pl]||{})[uo]=(puo[pl][uo]||0)+1; } }
     const nome=(c[iMot]||'').trim(); if(!nome) continue; const nn=norm(nome);
     const tipo=((c[iTipo]||'').trim()||'ALERTA'), nivel=norm(c[iNivel]||'');
-    const a=(A[nn]=A[nn]||{nome, total:0, niveis:{}, tipos:{}, semanas:{}, dias:{}});
+    const a=(A[nn]=A[nn]||{nome, total:0, niveis:{}, tipos:{}, semanas:{}});
     a.total++; a.tipos[tipo]=(a.tipos[tipo]||0)+1; if(nivel)a.niveis[nivel]=(a.niveis[nivel]||0)+1;
     let d=null;
-    if(iData>=0){ d=isoDate(splitDT(c[iData]).date||c[iData]); if(d){ const wk=weekInfo(d).key; if(wk)a.semanas[wk]=(a.semanas[wk]||0)+1;
-        const dd=(a.dias[d]=a.dias[d]||{t:0,tp:{},nv:{}}); dd.t++; dd.tp[tipo]=(dd.tp[tipo]||0)+1; if(nivel)dd.nv[nivel]=(dd.nv[nivel]||0)+1; } }   // por-dia (sem teto) → filtro de data preciso
+    if(iData>=0){ d=isoDate(splitDT(c[iData]).date||c[iData]); if(d){ const wk=weekInfo(d).key; if(wk)a.semanas[wk]=(a.semanas[wk]||0)+1; } }
     // horário exato do alerta → linha do tempo (só p/ motoristas de interesse; controla memória)
     if(d && (!keep || keep.has(nn))){
       let tmin = iHora>=0 ? toMin(c[iHora]) : null;
@@ -2468,7 +2389,7 @@ let MOV_UNSEG_STORE=null;
 function aderDe(placas, data){ let tot=0,idn=0; (placas||[]).forEach(p=>{ const pk=placaKey(p)+'|'+data; tot+=MOV_TOT[pk]||0; idn+=MOV_IDN[pk]||0; }); return tot>0? Math.round(idn/tot*100) : null; }
 // aderência PONDERADA PELO TEMPO de um conjunto de registros (min identificados ÷ min de movimento total)
 // — reflete de verdade o vermelho da trilha (não é média simples dos %s diários)
-function aderRecs(recs){ let idn=0,tot=0; const seen=new Set(); (recs||[]).forEach(r=>{ const arr=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]); arr.forEach(p=>{ const pk=placaKey(p)+'|'+r.data; if(seen.has(pk))return; seen.add(pk); if(MOV_TOT[pk]){ tot+=MOV_TOT[pk]; idn+=(MOV_IDN[pk]||0); } }); });
+function aderRecs(recs){ let idn=0,tot=0; (recs||[]).forEach(r=>{ const arr=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]); arr.forEach(p=>{ const pk=placaKey(p)+'|'+r.data; if(MOV_TOT[pk]){ tot+=MOV_TOT[pk]; idn+=(MOV_IDN[pk]||0); } }); });
   if(tot>0) return Math.round(idn/tot*100);
   let s=0,n=0; (recs||[]).forEach(r=>{ if(r.semelhanca!=null){ s+=r.semelhanca; n++; } }); return n?Math.round(s/n):null; }   // fallback demo (sem movimentação)
 // aderência DO MOTORISTA: min reconhecidos COMO ELE ÷ min de movimento do veículo nos dias dele (a da câmera conta qualquer condutor)
@@ -2477,10 +2398,6 @@ function aderMotoristaRecs(recs){ let meu=0,tot=0; (recs||[]).forEach(r=>{ meu+=
   let s=0,n=0; (recs||[]).forEach(r=>{ if(r.semelhanca!=null){ s+=r.semelhanca; n++; } }); return n?Math.round(s/n):null; }
 // ADERÊNCIA DE JORNADA (score positivo): % da condução que ocorreu DENTRO da janela do ponto (100% = jornada certinha)
 function aderJornada(recs){ let cond=0,fora=0; (recs||[]).forEach(r=>{ if(r.punches&&r.punches.length){ cond+=(r.horasMov||0); fora+=(r.ddReal||0); } }); return cond>0? Math.max(0,Math.round((cond-fora)/cond*100)) : null; }
-// identificação da FROTA — MESMA base da aba Aderência (por placa, PLACA_MOV, filtrada por operação):
-// conta TODO o movimento (identificado + não identificado), inclusive dias 100% sem identificação — número honesto e reconciliado
-function identFrotaPlacas(){ if(typeof PLACA_MOV==='undefined' || !PLACA_MOV) return null; const opF=$('#fOp').value; let idn=0,tot=0;
-  for(const pk in PLACA_MOV){ const g=PLACA_MOV[pk]; if(!g.tot) continue; if(opF && operacaoDaPlaca(pk)!==opF) continue; tot+=g.tot; idn+=(g.idn||0); } return tot>0? Math.round(idn/tot*100) : null; }
 function ajColor(v){ return v==null?'var(--muted)':(v>=90?'var(--good)':(v>=70?'var(--warning)':'var(--critical)')); }
 // JORNADA (ponto): batidas em colunas Entrada N / Saída N, por (motoristaNorm|dia)
 function parseJornada(P){
@@ -2998,19 +2915,12 @@ async function spToken(interactive){
   if(!interactive) return null;
   const r=await pca.acquireTokenPopup(req); return r.accessToken;
 }
-async function gget(path, token, tries){
-  tries=(tries==null)?8:tries;
+async function gget(path, token){
   const r=await fetch('https://graph.microsoft.com/v1.0'+path,{ headers:{ Authorization:'Bearer '+token } });
-  if((r.status===429||r.status===503) && tries>0){ const ra=parseInt(r.headers.get('Retry-After')||'',10); const wait=(isFinite(ra)&&ra>0?ra:15); const p=$('#dataModeTxt'); if(p)p.textContent='SharePoint ocupado — aguardando '+wait+'s…'; await new Promise(s=>setTimeout(s,(wait+1)*1000)); return gget(path, token, tries-1); }
   if(!r.ok){ const t=await r.text().catch(()=>''); throw new Error('Graph '+r.status+(t?': '+t.slice(0,180):'')); }
   return r.json();
 }
-// fetch com retry p/ os downloads (downloadUrl) — respeita 429/503
-async function fetchRetry(url, opts, tries){ tries=(tries==null)?5:tries;
-  const r=await fetch(url, opts);
-  if((r.status===429||r.status===503) && tries>0){ const ra=parseInt(r.headers.get('Retry-After')||'',10); const wait=(isFinite(ra)&&ra>0?ra:15); await new Promise(s=>setTimeout(s,(wait+1)*1000)); return fetchRetry(url, opts, tries-1); }
-  return r; }
-async function spHead(url){ try{ let r=await fetchRetry(url,{headers:{Range:'bytes=0-8191'}}); if(!r.ok && r.status!==206) r=await fetchRetry(url); const buf=await r.arrayBuffer(); const txt=decodeText(buf); const nl=txt.indexOf('\n'); return norm(nl<0?txt:txt.slice(0,nl)); }catch(e){ return ''; } }
+async function spHead(url){ try{ let r=await fetch(url,{headers:{Range:'bytes=0-8191'}}); if(!r.ok && r.status!==206) r=await fetch(url); const buf=await r.arrayBuffer(); const txt=decodeText(buf); const nl=txt.indexOf('\n'); return norm(nl<0?txt:txt.slice(0,nl)); }catch(e){ return ''; } }
 function detectTipo(name, header, ext){
   const n=norm(name), h=header||'';
   if(ext==='xlsx'||ext==='xls'){ if(/ABASTEC/.test(n)) return 'abast'; if(/MEDIA|META/.test(n)) return 'metas'; if(/CAVALO|CAMERA|SAUDE|\bCAM\b/.test(n)) return 'saude'; return null; }
@@ -3025,70 +2935,12 @@ function detectTipo(name, header, ext){
   if(h.includes('MOTORISTA')&&h.includes('CPF')&&(h.includes('VEICULOS')||h.includes('MEDIA CONSUMO'))) return 'boletim';
   return null;
 }
-function spGrab(f){ return fetchRetry(f['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()).then(ab=>new File([ab], f.name)); }
+function spGrab(f){ return fetch(f['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()).then(ab=>new File([ab], f.name)); }
 function readFileP(file){ return new Promise(res=>readFile(file,res)); }
-// baixa e concatena o texto de vários arquivos (cabeçalho só 1x) — p/ tipos pequenos (jornada/boletins/pedidos)
-async function spCombinar(items){ let out='',first=true; for(const it of items){ const ab=await fetchRetry(it['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()); let txt=decodeText(ab).replace(/^﻿/,''); if(first){ out=txt; first=false; } else { const nl=txt.indexOf('\n'); out+='\n'+(nl>=0?txt.slice(nl+1):txt); } } return out; }
-// soma alertas de VÁRIOS dias (streaming + merge) — não guarda o texto todo
-function mergeAlertas(dst, src){ dst.n=(dst.n||0)+(src.n||0);
-  for(const nn in src.A){ const s=src.A[nn]; const d=(dst.A[nn]=dst.A[nn]||{nome:s.nome,total:0,niveis:{},tipos:{},semanas:{},dias:{}});
-    d.total+=s.total; for(const k in s.niveis)d.niveis[k]=(d.niveis[k]||0)+s.niveis[k]; for(const k in s.tipos)d.tipos[k]=(d.tipos[k]||0)+s.tipos[k]; for(const k in s.semanas)d.semanas[k]=(d.semanas[k]||0)+s.semanas[k];
-    d.dias=d.dias||{}; for(const dk in (s.dias||{})){ const sd=s.dias[dk]; const td=(d.dias[dk]=d.dias[dk]||{t:0,tp:{},nv:{}}); td.t+=sd.t||0; for(const k in (sd.tp||{}))td.tp[k]=(td.tp[k]||0)+sd.tp[k]; for(const k in (sd.nv||{}))td.nv[k]=(td.nv[k]||0)+sd.nv[k]; } }
-  const sp=src.placaUO||{}; for(const pk in sp){ const cur=dst.placaUO[pk]; if(!cur||(sp[pk].n||0)>(cur.n||0)) dst.placaUO[pk]=sp[pk]; }
-  const st=src.tl||{}; for(const nn in st){ const arr=(dst.tl[nn]=dst.tl[nn]||[]); for(const e of st[nn]){ if(arr.length<5000) arr.push(e); } } }
-// movimentação de VÁRIOS dias (streaming — 1 arquivo por vez, como o zip)
-async function ingestMovFiles(items){ MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={};
-  const jor=parseJornada(pending.ponto); const movRaw={}; let movRows=0,k=0;
-  for(const it of items){ try{ const ab=await fetchRetry(it['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()); movRows+=accMov(parseCSV(decodeText(ab)), movRaw, jor.roster); k++; if(k%5===0||k===items.length) toast('Movimentação: '+k+'/'+items.length+'…'); }catch(_){} }
-  finalizeRecords(jor, movRaw, movRows, pending.ponto.length); }
-
-/* ===== IMPORTAÇÃO MANUAL de VÁRIOS arquivos (período completo, sem SharePoint) ===== */
-// csv/txt → texto; zip → concatena os CSVs de dentro (cabeçalho só 1x)
-async function fileToText(file){
-  const ext=(file.name.split('.').pop()||'').toLowerCase(); const buf=await file.arrayBuffer();
-  if(ext==='zip'){ if(typeof JSZip==='undefined') throw new Error('sem JSZip'); const zip=await JSZip.loadAsync(buf);
-    const names=Object.keys(zip.files).filter(n=>/\.csv$/i.test(n)&&!zip.files[n].dir).sort(); let out='',first=true;
-    for(const nm of names){ let t=decodeText(await zip.files[nm].async('arraybuffer')).replace(/^﻿/,''); if(first){out=t;first=false;} else { const nl=t.indexOf('\n'); out+='\n'+(nl>=0?t.slice(nl+1):t); } } return out; }
-  return decodeText(buf).replace(/^﻿/,'');
-}
-// vários arquivos → 1 texto (cabeçalho só 1x), ordenado por nome (= data)
-async function combinarFilesTexto(files){
-  const arr=[...files].sort((a,b)=>String(a.name).localeCompare(b.name)); let out='',first=true;
-  for(const f of arr){ let t=''; try{ t=await fileToText(f); }catch(_){ } if(!t) continue; if(first){out=t;first=false;} else { const nl=t.indexOf('\n'); out+='\n'+(nl>=0?t.slice(nl+1):t); } }
-  return out;
-}
-// MOVIMENTAÇÃO local (vários csv/zip) — streaming (1 arquivo por vez), soma os dias
-async function loadMovLocais(files){
-  if(!(pending.ponto&&pending.ponto.length)){ toast('Carregue primeiro a jornada (ponto)'); return; }
-  MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={};
-  const jor=parseJornada(pending.ponto); const movRaw={}; let movRows=0, done=0;
-  const arr=[...files].sort((a,b)=>String(a.name).localeCompare(b.name));
-  for(const f of arr){ try{ const ext=(f.name.split('.').pop()||'').toLowerCase();
-      if(ext==='zip'){ const zip=await JSZip.loadAsync(await f.arrayBuffer()); const names=Object.keys(zip.files).filter(n=>/\.csv$/i.test(n)&&!zip.files[n].dir).sort(); for(const nm of names){ movRows+=accMov(parseCSV(decodeText(await zip.files[nm].async('arraybuffer'))), movRaw, jor.roster); } }
-      else { movRows+=accMov(parseCSV(await fileToText(f)), movRaw, jor.roster); } }catch(_){}
-    done++; toast('Movimentação: '+done+'/'+arr.length+'…'); }
-  finalizeRecords(jor, movRaw, movRows, pending.ponto.length);
-  toast('Movimentação ✓ '+arr.length+' arquivo(s) · '+movRows.toLocaleString('pt-BR')+' movimentos · '+(RECORDS?RECORDS.length:0)+' motorista-dias');
-}
-// ALERTAS local (vários csv/zip) — streaming + merge, soma os dias (não guarda o texto todo)
-async function loadAlertasLocais(files){
-  const acc={A:{},n:0,placaUO:{},tl:{}}; const keep=namesOfInterest(); const arr=[...files].sort((a,b)=>String(a.name).localeCompare(b.name)); let done=0,fail=0;
-  for(const f of arr){ try{ const ext=(f.name.split('.').pop()||'').toLowerCase();
-      if(ext==='zip'){ const zip=await JSZip.loadAsync(await f.arrayBuffer()); const names=Object.keys(zip.files).filter(n=>/\.csv$/i.test(n)&&!zip.files[n].dir).sort(); for(const nm of names){ mergeAlertas(acc, aggAlertas(decodeText(await zip.files[nm].async('arraybuffer')), keep)); } }
-      else { mergeAlertas(acc, aggAlertas(await fileToText(f), keep)); } }catch(_){ fail++; }
-    done++; toast('Alertas: '+done+'/'+arr.length+(fail?(' · '+fail+' falha(s)'):'')+'…'); }
-  ALERTS=acc.A; ALERTS_N=acc.n; if(acc.placaUO&&Object.keys(acc.placaUO).length) PLACA_UO=acc.placaUO; AL_TL=acc.tl;
-  if(REAL&&RAW){ RAW.alertas=ALERTS; RAW.placaUO=PLACA_UO; RAW.counts=RAW.counts||{}; RAW.counts.alertas=acc.n; saveData(); }
-  build(); fillFilters(); updateDropStatus(); renderAll();
-  if(fail) toast('⚠ Alertas: '+fail+' arquivo(s) falharam — total pode estar incompleto');
-  toast('Alertas ✓ '+acc.n.toLocaleString('pt-BR')+' eventos · '+Object.keys(acc.A).length+' motoristas');
-}
 // varre uma pasta e TODAS as subpastas (tipo→ano→mês→dia), juntando os arquivos
 // cada arquivo guarda em _top o nome da pasta de 1º nível (o "tipo") p/ identificar sem baixar
 async function spWalk(siteId, folderId, token, acc, depth, top){
-  acc=acc||[]; if(depth>8) return acc;
-  // SharePoint NÃO suporta $expand=children — listagem recursiva simples,
-  // protegida pelo retry do gget (429/503 respeitando Retry-After).
+  acc=acc||[]; if(depth>7) return acc;
   let url='/sites/'+siteId+'/drive/items/'+folderId+'/children?$top=200';
   while(url){
     const j=await gget(url.replace('https://graph.microsoft.com/v1.0',''), token);
@@ -3125,54 +2977,6 @@ async function spCriarEstrutura(){
   }catch(e){ toast('Erro ao criar estrutura: '+(e.message||e)); }
   if(btn){ btn.disabled=false; btn.textContent='📁 Organizar pastas'; }
 }
-// ===== DELTA: só o que MUDOU desde a última leitura (poucas chamadas → sem 429) =====
-// descobre a pasta de 1º nível (o "tipo") a partir do caminho do arquivo (parentReference.path)
-function spTopFromPath(path){
-  if(!path) return '';
-  let p=path; try{ p=decodeURIComponent(path); }catch(e){}
-  for(const name of SP_ESTRUTURA){ if(p.indexOf('/'+name+'/')>=0 || p.endsWith('/'+name)) return name; }
-  return '';
-}
-// percorre as páginas do delta; se deltaLink for dado, traz só as mudanças desde aquele ponto
-async function spDelta(siteId, folderId, token, deltaLink){
-  let url=deltaLink || ('/sites/'+siteId+'/drive/items/'+folderId+'/delta?$top=200');
-  const files=[]; let next='';
-  while(url){
-    const path=(url.indexOf('http')===0)? url.replace('https://graph.microsoft.com/v1.0','') : url;
-    const j=await gget(path, token);
-    for(const it of (j.value||[])){
-      if(it.deleted) continue;                    // ignora exclusões (não removemos do cache)
-      if(it.folder || !it.file) continue;         // só arquivos
-      it._top=spTopFromPath(it.parentReference && it.parentReference.path);
-      files.push(it);                             // download url validado em spDiscover
-    }
-    if(j['@odata.nextLink']) url=j['@odata.nextLink'];
-    else { next=j['@odata.deltaLink']||''; url=''; }
-  }
-  return { files, deltaLink: next };
-}
-// descoberta da carga COMPLETA: tenta delta (barato); se falhar, cai na varredura recursiva
-async function spDiscover(site, rootItem, token){
-  try{
-    const d=await spDelta(site.id, rootItem.id, token, null);
-    // só usa o delta se trouxe arquivos E todos com link de download; senão varre (garante o link)
-    if(d.files.length && d.files.every(f=>f['@microsoft.graph.downloadUrl'])){
-      try{ localStorage.setItem('sp_delta', d.deltaLink||''); }catch(e){} return d.files;
-    }
-  }catch(e){ /* delta indisponível → varredura */ }
-  try{ localStorage.removeItem('sp_delta'); }catch(e){}
-  return await spWalk(site.id, rootItem.id, token, [], 0, '');
-}
-// checagem barata no boot: há arquivos novos desde a última carga? (não avança o marcador)
-async function spTemNovidade(){
-  try{
-    const dl=localStorage.getItem('sp_delta'); if(!dl) return true;    // sem marcador → precisa carga completa
-    const token=await spToken(false); if(!token) return false;
-    const site=await gget('/sites/'+SP_CFG.siteHost+':'+SP_CFG.sitePath, token);
-    const d=await spDelta(site.id, null, token, dl);                   // reusa o deltaLink guardado (read-only)
-    return d.files.length>0;
-  }catch(e){ return true; }                                           // na dúvida, recarrega
-}
 async function spLoadAll(interactive){
   const setPill=t=>{ const p=$('#dataModeTxt'); if(p)p.textContent=t; };
   let token; try{ token=await spToken(interactive); }catch(e){ toast('Login: '+(e.message||'cancelado')); return false; }
@@ -3182,49 +2986,37 @@ async function spLoadAll(interactive){
   try{
     site=await gget('/sites/'+SP_CFG.siteHost+':'+SP_CFG.sitePath, token);
     const rootItem=await gget('/sites/'+site.id+'/drive/root:/'+encodeURIComponent(SP_CFG.folder), token);
-    files=await spDiscover(site, rootItem, token);   // DELTA (poucas chamadas) c/ fallback p/ varredura recursiva
+    files=await spWalk(site.id, rootItem.id, token, [], 0, '');   // varre a pasta + subpastas (tipo/ano/mês/dia)
   }catch(e){ toast('Erro no SharePoint — '+e.message); setPill('erro no SharePoint'); return false; }
   if(!files.length){ toast('Nenhum arquivo encontrado na pasta/subpastas'); return false; }
-  // agrupa TODOS os arquivos por tipo (SOMA todos os dias)
-  const byTypeAll={};
+  files.sort((a,b)=> String(b.lastModifiedDateTime||'').localeCompare(String(a.lastModifiedDateTime||'')));  // mais novo primeiro
+  const byType={};
   for(const f of files){
     let t=SP_TOP2TIPO[f._top]||'';                 // pela pasta de tipo (sem baixar)
     if(!t){ const ext=(f.name.split('.').pop()||'').toLowerCase(); let header=''; if(ext==='csv'||ext==='txt') header=await spHead(f['@microsoft.graph.downloadUrl']); t=detectTipo(f.name, header, ext); }
-    if(!t) continue; (byTypeAll[t]=byTypeAll[t]||[]).push(f);
+    if(!t) continue; if(!byType[t]) byType[t]=f;   // ordenado por data → o 1º de cada tipo é o mais recente
   }
-  const tipos=Object.keys(byTypeAll);
-  if(!tipos.length){ toast('Nenhum relatório reconhecido na pasta ('+files.length+' arquivo(s))'); return false; }
-  tipos.forEach(t=>byTypeAll[t].sort((a,b)=>String(a.name).localeCompare(String(b.name))));   // por dia (o nome tem a data)
-  const ultimo=items=>items[items.length-1];   // cadastro = o mais recente
-  toast('Somando os dias de '+tipos.length+' tipo(s)…'); setPill('somando os dias…');
-  // 1) JORNADA (soma os dias) → define o roster
-  if(byTypeAll.jornada){ pending.ponto=parseCSV(await spCombinar(byTypeAll.jornada)); }
-  // 2) MOVIMENTAÇÃO (soma os dias, streaming)
-  if(byTypeAll.mov && pending.ponto){ const zips=byTypeAll.mov.filter(f=>/\.zip$/i.test(f.name));
-    if(zips.length && byTypeAll.mov.length===zips.length){ ingestMovZip(await spGrab(zips[0])); }
-    else { await ingestMovFiles(byTypeAll.mov.filter(f=>!/\.zip$/i.test(f.name))); } }
-  else if(byTypeAll.jornada && pending.ponto){ ingest(); }
-  // 3) enriquecimentos (cadastro = último; diários = combinados)
-  if(byTypeAll.motoristas) loadMotoristas(await spGrab(ultimo(byTypeAll.motoristas)));
-  if(byTypeAll.tms) readFile(await spGrab(ultimo(byTypeAll.tms)), rows=>ingestTMS(rows));
-  if(byTypeAll.saude) loadSaude(await spGrab(ultimo(byTypeAll.saude)));
-  if(byTypeAll.abast) loadAbastecimento(await spGrab(ultimo(byTypeAll.abast)));
-  if(byTypeAll.metas) loadMetas(await spGrab(ultimo(byTypeAll.metas)));
-  if(byTypeAll.bdv) loadBoletimVeiculo(new File([await spCombinar(byTypeAll.bdv)],'boletim_veiculo.csv'));
-  if(byTypeAll.boletim) loadBoletim(new File([await spCombinar(byTypeAll.boletim)],'boletim_motorista.csv'));
-  if(byTypeAll.pedidos) loadPedidos(new File([await spCombinar(byTypeAll.pedidos)],'pedidos.csv'));
-  // 4) ALERTAS (soma os dias, streaming + merge — não guarda o texto todo)
-  if(byTypeAll.alertas){ const acc={A:{},n:0,placaUO:{},tl:{}}; const keep=namesOfInterest(); let k=0, fail=0;
-    for(const it of byTypeAll.alertas){ try{ const ab=await fetchRetry(it['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()); mergeAlertas(acc, aggAlertas(decodeText(ab), keep)); }catch(_){ fail++; } k++; if(k%5===0||k===byTypeAll.alertas.length) toast('Alertas: '+k+'/'+byTypeAll.alertas.length+(fail?(' · '+fail+' falha(s)'):'')+'…'); }
-    if(fail) toast('⚠ Alertas: '+fail+' de '+byTypeAll.alertas.length+' arquivo(s) falharam — total pode estar incompleto');
-    ALERTS=acc.A; ALERTS_N=acc.n; if(acc.placaUO&&Object.keys(acc.placaUO).length) PLACA_UO=acc.placaUO; AL_TL=acc.tl;
-    if(REAL&&RAW){ RAW.alertas=ALERTS; RAW.placaUO=PLACA_UO; RAW.counts=RAW.counts||{}; RAW.counts.alertas=acc.n; saveData(); }
-  }
-  build(); fillFilters(); updateDropStatus(); renderAll();
-  const resumo=tipos.map(t=>t+(byTypeAll[t].length>1?' ×'+byTypeAll[t].length:'')).join(', ');
-  setPill('dados reais · SharePoint ('+files.length+' arquivos)');
+  const achou=Object.keys(byType);
+  if(!achou.length){ toast('Nenhum relatório reconhecido na pasta ('+files.length+' arquivo(s))'); return false; }
+  toast('Baixando '+achou.length+' relatório(s)…');
+  const blob={}; for(const t of achou){ try{ blob[t]=await spGrab(byType[t]); }catch(e){} }
+  // enriquecimentos (cada loader se reconstrói ao terminar)
+  if(blob.motoristas) loadMotoristas(blob.motoristas);
+  if(blob.alertas) loadAlertas(blob.alertas);
+  if(blob.tms) readFile(blob.tms, rows=>ingestTMS(rows));
+  if(blob.bdv) loadBoletimVeiculo(blob.bdv);
+  if(blob.boletim) loadBoletim(blob.boletim);
+  if(blob.pedidos) loadPedidos(blob.pedidos);
+  if(blob.saude) loadSaude(blob.saude);
+  if(blob.abast) loadAbastecimento(blob.abast);
+  if(blob.metas) loadMetas(blob.metas);
+  // núcleo: jornada (define o roster) + movimentação
+  if(blob.jornada){ pending.ponto=await readFileP(blob.jornada); }
+  if(blob.mov){ if(/\.zip$/i.test(blob.mov.name)) ingestMovZip(blob.mov); else { pending.mov=await readFileP(blob.mov); ingest(); } }
+  else if(blob.jornada && pending.ponto){ ingest(); }
+  setPill('dados reais · SharePoint');
   try{ localStorage.setItem('sp_auto','1'); }catch(e){}
-  toast('SharePoint ✓ '+files.length+' arquivo(s) · '+resumo);
+  toast('SharePoint ✓ '+achou.length+' relatório(s): '+achou.join(', '));
   return true;
 }
 
@@ -3335,48 +3127,35 @@ async function gerarSnapshot(){
   try{
     const json=JSON.stringify(snapshotState()); const raw=new TextEncoder().encode(json);
     const g=await _gz(raw);
-    // CHAVE NOVA + ARQUIVO NOVO a cada geração → o link fica CONGELADO (não muda quando você reimporta outra base)
-    const keyRaw=crypto.getRandomValues(new Uint8Array(32));
-    const stamp=new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');   // AAAAMMDDHHMM
-    const fname='dados_'+stamp+'.enc';
+    // chave FIXA por navegador (link estável entre atualizações); some no localStorage do admin
+    let kb64; try{ kb64=localStorage.getItem('integ360_snapkey'); }catch(e){}
+    let keyRaw; if(kb64){ keyRaw=_unb64url(kb64); } else { keyRaw=crypto.getRandomValues(new Uint8Array(32)); try{ localStorage.setItem('integ360_snapkey',_b64url(keyRaw)); }catch(e){} }
     const key=await crypto.subtle.importKey('raw',keyRaw,{name:'AES-GCM'},false,['encrypt']); const iv=crypto.getRandomValues(new Uint8Array(12));
     const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},key,g.b));
-    const file=JSON.stringify({v:1, gz:g.gz, iv:_b64(iv), data:_b64(ct), ts:Date.now()});
-    const blob=new Blob([file],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fname; a.click();
-    const link=SP_CFG.redirectUri+'#k='+_b64url(keyRaw)+'&f='+fname;
-    mostrarLinkSnapshot(link, (file.length/1048576).toFixed(1), fname);
+    const file=JSON.stringify({v:1, gz:g.gz, iv:_b64(iv), data:_b64(ct)});
+    const blob=new Blob([file],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='dados.enc'; a.click();
+    const link=SP_CFG.redirectUri+'#k='+_b64url(keyRaw);
+    mostrarLinkSnapshot(link, (file.length/1048576).toFixed(1));
   }catch(e){ toast('Erro ao gerar snapshot: '+(e.message||e)); }
 }
-async function carregarSnapshotDoLink(kb64, fname){
-  const keyRaw=_unb64url(kb64); const arq=fname||'dados.enc'; const pill=$('#dataModeTxt');
-  toast('Abrindo dados compartilhados…');
-  // GitHub Pages leva ~1 min p/ publicar após o push → tenta de novo enquanto o arquivo não aparece
-  let f=null, lastErr='';
-  for(let i=0;i<12;i++){
-    try{ const r=await fetch(arq+(arq.indexOf('?')<0?'?t=':'&t=')+Date.now(),{cache:'no-store'});
-      if(r.ok){ f=await r.json(); break; } lastErr=arq+' ('+r.status+')';
-    }catch(e){ lastErr=e.message||'rede'; }
-    if(i===0) toast('Aguardando a publicação do snapshot (pode levar ~1 min)…');
-    if(pill) pill.textContent='publicando os dados… aguarde ('+(i+1)+'/12)';
-    await new Promise(s=>setTimeout(s,5000));
-  }
-  if(!f){ toast('Não consegui abrir o snapshot: '+lastErr+' — verifique se publicou (publicar.bat) e aguarde ~1 min'); if(pill) pill.textContent='snapshot indisponível'; return; }
-  try{
+async function carregarSnapshotDoLink(kb64){
+  try{ toast('Abrindo dados compartilhados…');
+    const keyRaw=_unb64url(kb64);
+    const f=await fetch('dados.enc',{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('dados.enc não encontrado'); return r.json(); });
     const iv=_unb64(f.iv), ct=_unb64(f.data);
     const key=await crypto.subtle.importKey('raw',keyRaw,{name:'AES-GCM'},false,['decrypt']);
     let pt=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct));
     if(f.gz) pt=await _gunz(pt);
     restoreState(JSON.parse(new TextDecoder().decode(pt)));
-    if(pill) pill.textContent='dados compartilhados (snapshot)';
+    const pill=$('#dataModeTxt'); if(pill) pill.textContent='dados compartilhados (snapshot)';
     toast('Dados compartilhados carregados ✓');
-  }catch(e){ toast('Não consegui abrir o snapshot: '+(e.message||e)); if(pill) pill.textContent='snapshot inválido'; }
+  }catch(e){ toast('Não consegui abrir o snapshot: '+(e.message||e)); }
 }
-function mostrarLinkSnapshot(link, mb, fname){
-  fname=fname||'dados.enc';
+function mostrarLinkSnapshot(link, mb){
   let bg=document.getElementById('snapModal'); if(bg) bg.remove();
   bg=document.createElement('div'); bg.id='snapModal'; bg.className='modal-bg'; bg.style.display='flex';
-  bg.innerHTML='<div class="modal" style="max-width:620px"><h3>🔗 Link compartilhável gerado (congelado)</h3>'+
-    '<p class="modal-sub"><b>1)</b> O arquivo <b>'+fname+'</b> ('+mb+' MB) foi baixado — coloque-o na pasta <b>integracao-360</b> e rode o <b>publicar.bat</b>.<br><b>2)</b> Compartilhe este link — ele fica <b>congelado</b> nesses dados (não muda quando você importar outra base):</p>'+
+  bg.innerHTML='<div class="modal" style="max-width:620px"><h3>🔗 Link compartilhável gerado</h3>'+
+    '<p class="modal-sub"><b>1)</b> O arquivo <b>dados.enc</b> ('+mb+' MB) foi baixado — coloque-o na pasta <b>integracao-360</b> e rode o <b>publicar.bat</b>.<br><b>2)</b> Compartilhe este link (ele contém a chave; só quem tiver o link vê os dados):</p>'+
     '<input type="text" id="snapLink" readonly value="'+link+'">'+
     '<div class="modal-actions"><button class="btn" id="snapClose" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Fechar</button><button class="btn solid" id="snapCopy">Copiar link</button></div></div>';
   document.body.appendChild(bg);
@@ -3436,40 +3215,21 @@ $('#btnSnapshot').onclick=gerarSnapshot;
 $('#btnEstrutura').onclick=spCriarEstrutura;
 $('#dadosLogout').onclick=async()=>{ try{ if(_msal) await _msal.logoutPopup({}); }catch(e){} try{localStorage.removeItem('sp_auto');}catch(e){} TRAT_CACHE=null; _tratSyncTried=false; applyDadosGate(); goTab('semana'); };
 applyDadosGate();
-// auto-conectar ao SharePoint ao abrir (só quando AUTO_SP=true; senão importação manual)
+// auto: se já autenticou antes nesta máquina, tenta atualizar silenciosamente ao abrir
 (async function(){
   if((location.hash||'').match(/[#&]k=/)) return;   // link compartilhado: o snapshot cuida do carregamento
   const setPill=t=>{ const p=$('#dataModeTxt'); if(p)p.textContent=t; };
   let temCache=0; try{ temCache=await cacheRestaurar(); }catch(e){}
   if(temCache){ setPill('dados locais · '+new Date(temCache).toLocaleString('pt-BR')); }
-  else setPill('importe os relatórios na aba Dados');
-  if(!AUTO_SP) return;   // importação manual: não conecta sozinho no SharePoint
-  // AUTO-CONECTAR ao abrir: se há sessão M365, checa o SharePoint em 2º plano (sem apertar botão)
-  try{ if(typeof msal!=='undefined'){ const pca=spMsal(); if(pca.initialize) await pca.initialize();
-      if(pca.getAllAccounts && pca.getAllAccounts()[0]){
-        if(temCache){
-          setPill('dados locais · verificando SharePoint…');
-          const novidade=await spTemNovidade();   // barato (delta): só olha se mudou
-          if(novidade){ setPill('dados locais · atualizando (arquivos novos)…'); spLoadAll(false).then(ok=>{ if(ok) agendarCache(); }); }
-          else setPill('dados locais · SharePoint sem novidades ✓');
-        } else {
-          setPill('conectando ao SharePoint…');
-          spLoadAll(false).then(ok=>{ if(ok) agendarCache(); });
-        }
-      } }
-  }catch(e){}
+  try{ if(localStorage.getItem('sp_auto')==='1' && typeof msal!=='undefined' && spSignedIn()){
+      if(temCache) setPill('dados locais · atualizando do SharePoint…');
+      spLoadAll(false).then(ok=>{ if(ok) agendarCache(); });
+  } }catch(e){}
 })();
 // filtros
-['#fFecha','#fDia','#fDe','#fAte','#fStatus'].forEach(s=>$(s).addEventListener('change',renderAll));
-['#fBusca','#fOp','#fMot'].forEach(s=>$(s).addEventListener('input',renderAll));   // digitar já filtra
+['#fFecha','#fOp','#fDia','#fDe','#fAte','#fMot','#fStatus'].forEach(s=>$(s).addEventListener('change',renderAll));
+$('#fBusca').addEventListener('input',renderAll);
 $('#clearFilters').onclick=()=>{ ['#fFecha','#fOp','#fDia','#fDe','#fAte','#fMot','#fStatus','#fTipoDiv'].forEach(s=>{const el=$(s); if(el)el.value='';}); $('#fBusca').value=''; renderAll(); };
-// × p/ limpar cada filtro individualmente
-const FILTER_IDS=['#fFecha','#fOp','#fDia','#fDe','#fAte','#fMot','#fStatus','#fBusca'];
-function updateFilterClears(){ FILTER_IDS.forEach(s=>{ const el=$(s); if(!el)return; const f=el.closest('.f'); if(f) f.classList.toggle('has-val', !!el.value); }); }
-(function setupFilterClears(){ FILTER_IDS.forEach(s=>{ const el=$(s); if(!el)return; const f=el.closest('.f'); if(!f||f.querySelector('.fclr'))return;
-  const b=document.createElement('button'); b.className='fclr'; b.type='button'; b.textContent='×'; b.title='Limpar este filtro';
-  b.onclick=(e)=>{ e.preventDefault(); el.value=''; renderAll(); el.focus(); };
-  f.appendChild(b); }); updateFilterClears(); })();
 // ordenação tabela
 $$('#tbl thead th').forEach(th=>th.onclick=()=>{ const k=th.dataset.k; SORT.dir = (SORT.k===k)? -SORT.dir : (k==='_sev'?1:1); SORT.k=k; renderTable(filtered()); });
 $('#expCsv').onclick=exportCsv;
@@ -3481,21 +3241,23 @@ $('#expSemId').onclick=exportSemId;
 // config
 function bindCfg(id,key){ const el=$(id); el.value=CFG[key]; el.addEventListener('input',()=>{ CFG[key]=parseFloat(el.value)||0; saveCfg(); build(); fillFilters(); renderAll(); }); }
 bindCfg('#cfgTol','tol'); bindCfg('#cfgSem','sem'); bindCfg('#cfgFora','fora'); bindCfg('#cfgMovMin','movMin'); bindCfg('#cfgFarol','farolAmareloMax'); bindCfg('#cfgMeta','meta'); bindCfg('#cfgPreco','precoLitro'); bindCfg('#cfgAlmoco','almocoMin'); bindCfg('#cfgJornada','jornadaMaxH'); bindCfg('#cfgJornadaMin','jornadaMin'); bindCfg('#cfgInterjornada','interjornadaMin');
-// import — cada slot aceita VÁRIOS arquivos (período completo); soma os dias
-$('#filePonto').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo jornada ('+fs.length+' arq)…');
-  try{ const txt=await combinarFilesTexto(fs); pending.ponto=parseCSV(txt); updateDropStatus(); if(pending.mov) ingest(); toast('Jornada ✓ '+pending.ponto.length.toLocaleString('pt-BR')+' linhas · '+fs.length+' arquivo(s)'); }catch(err){ toast('Erro ao ler a jornada'); } });
-$('#fileMov').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return;
+// import
+$('#filePonto').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo jornada…'); readFile(e.target.files[0],rows=>{ pending.ponto=rows; updateDropStatus(); if(pending.mov) ingest(); }); } });
+$('#fileMov').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return;
+  const ext=(f.name.split('.').pop()||'').toLowerCase();
   if(!pending.ponto){ toast('Carregue primeiro a jornada (ponto)'); return; }
-  toast('Lendo movimentação ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadMovLocais(fs),30); });
-$('#fileAlertas').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Processando alertas ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadAlertasLocais(fs),30); });
-$('#fileTms').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo TMS…'); readFile(fs[fs.length-1],rows=>ingestTMS(rows)); });
-$('#fileAbast').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo abastecimento (aguarde)…'); setTimeout(()=>loadAbastecimento(fs[fs.length-1]),30); });
-$('#fileMetas').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo metas…'); loadMetas(fs[fs.length-1]); });
-$('#fileBoletim').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length) return; toast('Processando Boletim ('+fs.length+' arq, aguarde)…'); try{ const txt=await combinarFilesTexto(fs); setTimeout(()=>loadBoletim(new File([txt],'boletim.csv')),30); }catch(err){ toast('Erro no Boletim'); } });
-$('#filePedidos').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length) return; toast('Processando Pedidos ('+fs.length+' arq, aguarde)…'); try{ const txt=await combinarFilesTexto(fs); setTimeout(()=>loadPedidos(new File([txt],'pedidos.csv')),30); }catch(err){ toast('Erro nos Pedidos'); } });
-$('#fileSaude').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo saúde das câmeras…'); loadSaude(fs[fs.length-1]); });
-$('#fileBdv').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length) return; toast('Processando Boletim do Veículo ('+fs.length+' arq, aguarde)…'); try{ const txt=await combinarFilesTexto(fs); setTimeout(()=>loadBoletimVeiculo(new File([txt],'bdv.csv')),30); }catch(err){ toast('Erro no Boletim do Veículo'); } });
-$('#fileMotoristas').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo Relatório de Motoristas…'); setTimeout(()=>loadMotoristas(fs[fs.length-1]),30); });
+  if(ext==='zip'){ toast('Lendo movimentação (zip de vários dias, aguarde)…'); setTimeout(()=>ingestMovZip(f),30); }
+  else { toast('Lendo movimentação…'); readFile(f,rows=>{ pending.mov=rows; updateDropStatus(); ingest(); }); }
+});
+$('#fileAlertas').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Processando alertas (arquivo grande, aguarde)…'); setTimeout(()=>loadAlertas(e.target.files[0]),30); } });
+$('#fileTms').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo TMS…'); readFile(e.target.files[0],rows=>ingestTMS(rows)); } });
+$('#fileAbast').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo abastecimento (arquivo grande, aguarde)…'); setTimeout(()=>loadAbastecimento(e.target.files[0]),30); } });
+$('#fileMetas').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo metas…'); loadMetas(e.target.files[0]); } });
+$('#fileBoletim').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Processando Boletim (arquivo grande, aguarde)…'); setTimeout(()=>loadBoletim(e.target.files[0]),30); } });
+$('#filePedidos').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Processando Pedidos (arquivo grande, aguarde)…'); setTimeout(()=>loadPedidos(e.target.files[0]),30); } });
+$('#fileSaude').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo saúde das câmeras…'); loadSaude(e.target.files[0]); } });
+$('#fileBdv').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Processando Boletim do Veículo (arquivo grande, aguarde)…'); setTimeout(()=>loadBoletimVeiculo(e.target.files[0]),30); } });
+$('#fileMotoristas').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo Relatório de Motoristas…'); setTimeout(()=>loadMotoristas(e.target.files[0]),30); } });
 $('#recalc').onclick=()=>{ ingest(); };
 $('#resetDemo').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Voltou à demonstração'); };
 $('#clearData').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Bases removidas'); };
@@ -3508,7 +3270,7 @@ if(RAW&&RAW.bdv){ BDV=RAW.bdv; BDV_N=Object.keys(BDV).length; }
 if(RAW&&RAW.admissao){ ADMISSAO=RAW.admissao.n||null; ADMISSAO_CPF=RAW.admissao.c||null; ADMISSAO_N=ADMISSAO?Object.keys(ADMISSAO).length:0; }
 build(); fillFilters(); renderAll(); updateDropStatus();
 // se o link traz um snapshot compartilhado (#k=...), carrega os dados cifrados por cima
-(function(){ const h=location.hash||''; const mk=h.match(/[#&]k=([A-Za-z0-9\-_]+)/); const mf=h.match(/[#&]f=([A-Za-z0-9._-]+)/); if(mk) setTimeout(()=>carregarSnapshotDoLink(mk[1], mf?mf[1]:''),50); })();
+(function(){ const m=(location.hash||'').match(/[#&]k=([A-Za-z0-9\-_]+)/); if(m) setTimeout(()=>carregarSnapshotDoLink(m[1]),50); })();
 </script>
 </body>
 </html>
