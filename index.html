@@ -477,7 +477,7 @@
       <button class="ficha-back" id="fichaBack">← Voltar ao resumo</button>
       <button class="btn-pdf" id="btnTratativa" title="Registrar uma tratativa (conversa/ação) com o motorista">🗣️ Registrar tratativa</button>
       <button class="ficha-back" id="btnTratSyncFicha" title="Entrar no Microsoft 365 e atualizar o histórico compartilhado">☁️ Sincronizar histórico</button>
-      <button class="btn-pdf" id="fichaPdf" title="Gerar relatório visual em PDF para anexar no e-mail">📄 Exportar PDF do motorista</button>
+      <button class="btn-pdf" id="fichaPdf" title="Gerar relatório visual em PDF para anexar no e-mail">🧾 Exportar PDF do motorista</button>
     </div>
     <div id="fichaBox"></div>
   </section>
@@ -3266,7 +3266,13 @@ function tratLocalLoad(){ try{ return JSON.parse(localStorage.getItem('integ360_
 function tratLocalSave(m){ try{ localStorage.setItem('integ360_tratativas', JSON.stringify(m)); }catch(e){} }
 function tratKey(nome){ const nn=norm(nome); const cpf=(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[nn])||''; return cpf?('cpf:'+cpf):('nome:'+nn); }
 function tratUid(t){ return String((t&&t.uid)||((t&&t.ts)||'')+'_'+norm((t&&t.gestor)||'')+'_'+norm((t&&t.obs)||'').slice(0,40)); }
-function tratMergeArr(a,b){ const m=new Map(); [...(a||[]),...(b||[])].forEach(t=>{ const u=tratUid(t); if(u&&!m.has(u))m.set(u,t); }); return [...m.values()]; }
+// assinatura estável: reconhece a MESMA tratativa mesmo em registros legados onde local e SharePoint ficaram com UIDs diferentes
+function tratStableSig(t){ if(!t)return ''; const ts=Number(t.ts||0); return [
+  ts?String(ts):'', String(t.data||''), norm(t.nome||''), cpfKey(t.cpf||''), norm(t.gestor||''),
+  String(t.gestorEmail||'').trim().toLowerCase(), norm(t.tipo||''), norm(t.obs||''), norm(t.op||''), norm(t.placa||'')
+].join('|'); }
+function tratSame(a,b){ if(!a||!b)return false; const ua=tratUid(a),ub=tratUid(b); if(ua&&ub&&ua===ub)return true; const sa=tratStableSig(a),sb=tratStableSig(b); return !!sa&&sa===sb; }
+function tratMergeArr(a,b){ const out=[],uids=new Set(),sigs=new Set(); [...(a||[]),...(b||[])].forEach(t=>{ const u=tratUid(t),s=tratStableSig(t); if((u&&uids.has(u))||(s&&sigs.has(s)))return; out.push(t); if(u)uids.add(u); if(s)sigs.add(s); }); return out; }
 function tratList(nome){ const key=tratKey(nome), local=tratLocalLoad(), shared=TRAT_CACHE||{}; return tratMergeArr(shared[key],local[key]).sort((a,b)=>(+b.ts||0)-(+a.ts||0)||String(b.data||'').localeCompare(String(a.data||''))); }
 function spSignedIn(){ try{ return !!(typeof msal!=='undefined' && _msal && _msal.getAllAccounts && _msal.getAllAccounts()[0]); }catch(e){ return false; } }
 function spGestor(){ try{ const a=_msal.getAllAccounts()[0]; return a?{nome:a.name||a.username||'', email:a.username||''}:{nome:'',email:''}; }catch(e){ return {nome:'',email:''}; } }
@@ -3281,33 +3287,35 @@ async function spSiteId(token){ if(SP_SITE_ID) return SP_SITE_ID; const x=await 
 async function spEnsureTratFolder(token){ if(SP_TRAT_FOLDER_ID)return SP_TRAT_FOLDER_ID; const site=await spSiteId(token); const root=await gget('/sites/'+site+'/drive/root:/'+encodeURIComponent(SP_CFG.folder),token); SP_TRAT_FOLDER_ID=await spEnsureFolder(site,root.id,SP_CFG.tratFolder,token); return SP_TRAT_FOLDER_ID; }
 function tratFileName(t){ const d=String(t.data||'').replace(/\D/g,'')||'semdata'; const uid=String(t.uid||Date.now()).replace(/[^A-Za-z0-9_-]/g,'').slice(-40); return 'trat_'+d+'_'+uid+'.json'; }
 async function tratUpload(token,nome,key,t){ const site=await spSiteId(token), folder=await spEnsureTratFolder(token); const payload=Object.assign({},t,{nome,key,uid:t.uid||('t'+Date.now()),_pending:false}); const item=await gputContent('/sites/'+site+'/drive/items/'+folder+':/'+encodeURIComponent(tratFileName(payload))+':/content',token,JSON.stringify(payload)); return Object.assign(payload,{_spItemId:(item&&item.id)||'',_spFileName:(item&&item.name)||tratFileName(payload)}); }
-function tratMarkSynced(uid){ const local=tratLocalLoad(); let changed=false; for(const k in local)(local[k]||[]).forEach(t=>{if(tratUid(t)===uid){t._pending=false;changed=true;}}); if(changed)tratLocalSave(local); }
+function tratMarkSynced(uid,meta){ const local=tratLocalLoad(); let changed=false; for(const k in local)(local[k]||[]).forEach(t=>{if(tratUid(t)===uid){t._pending=false;if(meta){t.uid=meta.uid||t.uid;t._spItemId=meta._spItemId||t._spItemId||'';t._spFileName=meta._spFileName||t._spFileName||'';}changed=true;}}); if(changed)tratLocalSave(local); }
 async function tratSyncFromSP(interactive){ let token; try{ token=await spToken(!!interactive); }catch(e){ if(interactive)toast('Microsoft 365: '+(e.message||'falha no login')); return false; } if(!token)return false;
   try{ const site=await spSiteId(token),folder=await spEnsureTratFolder(token); let url='/sites/'+site+'/drive/items/'+folder+'/children?$top=200', files=[]; while(url){const j=await gget(url.replace('https://graph.microsoft.com/v1.0',''),token);files.push(...(j.value||[]).filter(x=>x.file&&/\.json$/i.test(x.name||'')));url=j['@odata.nextLink']||'';}
-    const map={},remoteUid=new Set(); for(const f of files){ try{ let obj=null; if(f['@microsoft.graph.downloadUrl'])obj=await fetch(f['@microsoft.graph.downloadUrl'],{cache:'no-store'}).then(r=>r.ok?r.json():null); if(!obj)continue; obj._spItemId=f.id||obj._spItemId||''; obj._spFileName=f.name||obj._spFileName||''; const key=obj.key||tratKey(obj.nome||''); if(!key)continue; const u=tratUid(obj); remoteUid.add(u); (map[key]=map[key]||[]).push(obj); }catch(e){} }
-    const local=tratLocalLoad(); let enviados=0; for(const key in local){ for(const t of (local[key]||[])){ const u=tratUid(t); if(!u||remoteUid.has(u)||t._pending===false)continue; try{ const nome=t.nome||''; const up=await tratUpload(token,nome,key,t); (map[key]=map[key]||[]).push(up); remoteUid.add(u); t._pending=false; enviados++; }catch(e){} } } tratLocalSave(local); TRAT_CACHE=map; _tratSyncTried=true; if(interactive)toast('Tratativas sincronizadas ✓ '+files.length+' compartilhada(s)'+(enviados?' · '+enviados+' pendente(s) enviado(s)':'') ); return true;
+    const map={},remoteUid=new Set(),remoteSig=new Set(),remoteBySig=new Map(); for(const f of files){ try{ let obj=null; if(f['@microsoft.graph.downloadUrl'])obj=await fetch(f['@microsoft.graph.downloadUrl'],{cache:'no-store'}).then(r=>r.ok?r.json():null); if(!obj)continue; obj._spItemId=f.id||obj._spItemId||''; obj._spFileName=f.name||obj._spFileName||''; const key=obj.key||tratKey(obj.nome||''); if(!key)continue; const u=tratUid(obj),sg=tratStableSig(obj); if(u)remoteUid.add(u); if(sg){remoteSig.add(sg);if(!remoteBySig.has(sg))remoteBySig.set(sg,obj);} (map[key]=map[key]||[]).push(obj); }catch(e){} }
+    const local=tratLocalLoad(); let enviados=0; for(const key in local){ local[key]=tratMergeArr([],local[key]); for(const t of (local[key]||[])){ const u=tratUid(t),sg=tratStableSig(t),equiv=sg?remoteBySig.get(sg):null; if(equiv){t._pending=false;t.uid=equiv.uid||t.uid;t._spItemId=equiv._spItemId||t._spItemId||'';t._spFileName=equiv._spFileName||t._spFileName||'';continue;} if(!u||remoteUid.has(u)||t._pending===false)continue; try{ const nome=t.nome||''; const up=await tratUpload(token,nome,key,t); (map[key]=map[key]||[]).push(up); if(tratUid(up))remoteUid.add(tratUid(up)); const us=tratStableSig(up); if(us){remoteSig.add(us);remoteBySig.set(us,up);} t.uid=up.uid||t.uid;t._spItemId=up._spItemId||'';t._spFileName=up._spFileName||'';t._pending=false; enviados++; }catch(e){} } } tratLocalSave(local); TRAT_CACHE=map; _tratSyncTried=true; if(interactive)toast('Tratativas sincronizadas ✓ '+files.length+' arquivo(s) compartilhado(s)'+(enviados?' · '+enviados+' pendente(s) enviado(s)':'') ); return true;
   }catch(e){ if(interactive)toast('Tratativas (SharePoint): '+(e.message||e)); return false; }
 }
-async function tratAdd(nome,t){ const key=tratKey(nome); t=Object.assign({},t,{nome,uid:t.uid||('t'+Date.now()+'_'+Math.random().toString(36).slice(2,10)),_pending:true}); const local=tratLocalLoad(); (local[key]=local[key]||[]).unshift(t); tratLocalSave(local);
-  let token=null; try{token=await spToken(true);}catch(e){} if(!token)return {ok:true,sp:false,err:'login Microsoft não concluído'}; try{const up=await tratUpload(token,nome,key,t);tratMarkSynced(tratUid(t));TRAT_CACHE=TRAT_CACHE||{};(TRAT_CACHE[key]=TRAT_CACHE[key]||[]).unshift(up);return {ok:true,sp:true};}catch(e){return {ok:true,sp:false,err:e.message};}
+async function tratAdd(nome,t){ const key=tratKey(nome); t=Object.assign({},t,{nome,uid:t.uid||('t'+Date.now()+'_'+Math.random().toString(36).slice(2,10)),_pending:true}); const local=tratLocalLoad(); (local[key]=local[key]||[]).unshift(t); local[key]=tratMergeArr([],local[key]); tratLocalSave(local);
+  let token=null; try{token=await spToken(true);}catch(e){} if(!token)return {ok:true,sp:false,err:'login Microsoft não concluído'}; try{const up=await tratUpload(token,nome,key,t);tratMarkSynced(tratUid(t),up);TRAT_CACHE=TRAT_CACHE||{};(TRAT_CACHE[key]=TRAT_CACHE[key]||[]).unshift(up);return {ok:true,sp:true};}catch(e){return {ok:true,sp:false,err:e.message};}
 }
 function tratRemoveUidFromMap(map,uid){ let changed=false; if(!map)return false; for(const k of Object.keys(map)){ const before=(map[k]||[]).length; map[k]=(map[k]||[]).filter(t=>tratUid(t)!==uid); if(map[k].length!==before)changed=true; if(!map[k].length)delete map[k]; } return changed; }
+function tratRemoveEquivalentFromMap(map,target){ let changed=false; if(!map||!target)return false; for(const k of Object.keys(map)){ const before=(map[k]||[]).length; map[k]=(map[k]||[]).filter(t=>!tratSame(t,target)); if(map[k].length!==before)changed=true; if(!map[k].length)delete map[k]; } return changed; }
 async function excluirTratativa(nome,uid){
   if(!nome||!uid)return;
   if(!isAdmin()){ toast('Somente o administrador pode excluir tratativas'); return; }
   let t=tratList(nome).find(x=>tratUid(x)===uid); if(!t){ toast('Tratativa não encontrada'); return; }
-  if(!confirm('Excluir esta tratativa?\n\nA exclusão será aplicada ao histórico compartilhado e não poderá ser desfeita.')) return;
-  const compartilhada=(t._pending===false)||!!(TRAT_CACHE&&Object.values(TRAT_CACHE).some(a=>(a||[]).some(x=>tratUid(x)===uid)));
-  if(compartilhada){
-    let token=null; try{ token=await spToken(true); }catch(e){ toast('Entre no Microsoft 365 para excluir a tratativa compartilhada'); return; }
-    if(!token){ toast('Login Microsoft necessário para excluir'); return; }
-    if(!t._spItemId){ const ok=await tratSyncFromSP(false); if(ok)t=tratList(nome).find(x=>tratUid(x)===uid)||t; }
-    if(!t._spItemId){ toast('Não foi possível localizar o arquivo da tratativa no SharePoint'); return; }
-    try{ const site=await spSiteId(token); await gdelete('/sites/'+site+'/drive/items/'+encodeURIComponent(t._spItemId),token); }
+  if(!confirm('Excluir esta tratativa?\n\nSe houver cópias duplicadas da mesma tratativa, todas serão removidas do histórico compartilhado.')) return;
+  // Sincroniza antes de excluir para localizar TODAS as cópias equivalentes no SharePoint (inclusive duplicatas legadas).
+  let token=null; try{ token=await spToken(true); }catch(e){}
+  if(token){ await tratSyncFromSP(false); t=tratList(nome).find(x=>tratSame(x,t))||t; }
+  const remotos=[]; if(TRAT_CACHE){ for(const k in TRAT_CACHE) for(const x of (TRAT_CACHE[k]||[])) if(tratSame(x,t)&&x._spItemId) remotos.push(x); }
+  const ids=[...new Set(remotos.map(x=>x._spItemId).filter(Boolean))];
+  if(ids.length){
+    if(!token){ toast('Entre no Microsoft 365 para excluir a tratativa compartilhada'); return; }
+    try{ const site=await spSiteId(token); for(const id of ids) await gdelete('/sites/'+site+'/drive/items/'+encodeURIComponent(id),token); }
     catch(e){ toast('Falha ao excluir no SharePoint: '+(e.message||e)); return; }
   }
-  const local=tratLocalLoad(); tratRemoveUidFromMap(local,uid); tratLocalSave(local); tratRemoveUidFromMap(TRAT_CACHE,uid);
-  toast(compartilhada?'Tratativa excluída do histórico compartilhado ✓':'Tratativa local excluída ✓');
+  const local=tratLocalLoad(); tratRemoveEquivalentFromMap(local,t); tratLocalSave(local); tratRemoveEquivalentFromMap(TRAT_CACHE,t);
+  toast(ids.length?('Tratativa excluída do histórico compartilhado ✓'+(ids.length>1?' · '+ids.length+' cópias removidas':'')):'Tratativa local excluída ✓');
   renderFicha();
 }
 function openTratModal(){ const nome=fichaAtual; if(!nome)return; $('#tratNome').textContent=nome; $('#tratData').value=new Date().toISOString().slice(0,10); let g=''; if(spSignedIn())g=spGestor().nome; if(!g){try{g=localStorage.getItem('integ360_gestor')||'';}catch(e){}} $('#tratGestor').value=g;$('#tratTipo').value='Conversa de orientação';$('#tratObs').value='';$('#tratModal').style.display='flex';setTimeout(()=>$('#tratObs').focus(),50); }
