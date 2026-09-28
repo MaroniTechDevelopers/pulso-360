@@ -191,7 +191,13 @@
   .wtl-ruler{position:relative;height:15px;margin:0 0 3px 84px}
   .wtl-ruler .tick{position:absolute;top:0;transform:translateX(-50%);font-size:9.5px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
   .wtl-ruler .tick.day{color:var(--ink-2);font-weight:600}
+  .wtl-ruler .tick.feriado{color:var(--critical);font-weight:700}
   .wtl-ruler .tick i{position:absolute;top:13px;left:50%;width:1px;height:6px;background:var(--baseline)}
+  /* rótulo do dia (fixo, centralizado sobre as horas) — aparece ao dar zoom num dia */
+  .wtl-day{position:relative;height:0;display:none}
+  .wtl-day.on{display:block;height:22px}
+  .wtl-day span{position:absolute;left:calc(50% + 42px);transform:translateX(-50%);top:0;font-size:12px;font-weight:700;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:2px 12px;white-space:nowrap;z-index:6;box-shadow:0 1px 3px rgba(0,0,0,.10)}
+  .wtl-day span.feriado{color:var(--critical);border-color:color-mix(in srgb,var(--critical) 40%,var(--border))}
   .wtl .lane .gl.day{background:var(--baseline);width:2px}
   /* marcadores de alerta no horário exato (linha do tempo) — ícone por tipo + haste por severidade */
   .lane.lane-al{height:24px;background:var(--surface-2);overflow:visible}
@@ -559,22 +565,22 @@
       <div class="drop" id="drop-ponto">
         <h3><span class="num">1</span> Jornada (ponto)</h3>
         <p>Espelho de ponto. Colunas: <code>Nome do funcionário</code>, <code>Nome do departamento</code> (operação), <code>Dia</code>, <code>Entrada 1…6</code> / <code>Saída 1…6</code>.</p>
-        <input type="file" id="filePonto" accept=".csv,.xlsx,.xls,.txt" hidden>
-        <button class="btn solid" onclick="document.getElementById('filePonto').click()">Selecionar arquivo</button>
+        <input type="file" id="filePonto" accept=".csv,.xlsx,.xls,.txt" multiple hidden>
+        <button class="btn solid" onclick="document.getElementById('filePonto').click()">Selecionar arquivos (vários dias)</button>
         <div class="status-line" id="stPonto">nenhum arquivo — usando demonstração</div>
       </div>
       <div class="drop" id="drop-mov">
         <h3><span class="num">2</span> Movimentação + Identificação (Trimble)</h3>
         <p>Histórico do veículo com o condutor identificado. Colunas: <code>Veículo</code>, <code>Ocorrência</code>, <code>Data/Hora inicial</code> / <code>final</code>, <code>Motorista</code>, <code>Distância</code>, <code>Consumo</code>. Aceita <code>.zip</code> com vários CSVs diários (grande) — carregue a jornada antes.</p>
-        <input type="file" id="fileMov" accept=".zip,.csv,.xlsx,.xls,.txt" hidden>
-        <button class="btn solid" onclick="document.getElementById('fileMov').click()">Selecionar arquivo</button>
+        <input type="file" id="fileMov" accept=".zip,.csv,.xlsx,.xls,.txt" multiple hidden>
+        <button class="btn solid" onclick="document.getElementById('fileMov').click()">Selecionar arquivos (vários dias)</button>
         <div class="status-line" id="stMov">nenhum arquivo — usando demonstração</div>
       </div>
       <div class="drop" id="drop-alertas">
         <h3><span class="num">3</span> Alertas (Trimble) <span style="font-size:11px;color:var(--muted);font-weight:400">opcional</span></h3>
         <p>Histórico de alertas. Colunas: <code>Motorista</code>, <code>Tipo</code>, <code>Nível</code>, <code>UO</code>, <code>Data</code>. Aceita <code>.zip</code> ou <code>.csv</code> — só conta (não guarda as linhas).</p>
-        <input type="file" id="fileAlertas" accept=".zip,.csv,.txt" hidden>
-        <button class="btn solid" onclick="document.getElementById('fileAlertas').click()">Selecionar arquivo</button>
+        <input type="file" id="fileAlertas" accept=".zip,.csv,.txt" multiple hidden>
+        <button class="btn solid" onclick="document.getElementById('fileAlertas').click()">Selecionar arquivos (vários dias)</button>
         <div class="status-line" id="stAlertas">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-tms">
@@ -601,15 +607,15 @@
       <div class="drop" id="drop-boletim">
         <h3><span class="num">7</span> Boletim do Motorista <span style="font-size:11px;color:var(--muted);font-weight:400">ocorrências · alertas por tipo</span></h3>
         <p>Boletim do Motorista (Trimble), 1 linha por <b>motorista + dia</b>. Traz os alertas por tipo em colunas: <code>Uso de Celular</code>, <code>Fadiga</code>, <code>Distração</code>, <code>Sem Cinto</code>, <code>Freada</code>, <code>Excesso Velocidade</code>, <code>Parado Ligado</code>… Alimenta os <b>blocos por tipo</b> da ficha. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
-        <input type="file" id="fileBoletim" accept=".zip,.csv,.txt" hidden>
-        <button class="btn solid" onclick="document.getElementById('fileBoletim').click()">Selecionar arquivo</button>
+        <input type="file" id="fileBoletim" accept=".zip,.csv,.txt" multiple hidden>
+        <button class="btn solid" onclick="document.getElementById('fileBoletim').click()">Selecionar arquivos (vários dias)</button>
         <div class="status-line" id="stBoletim">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-pedidos">
         <h3><span class="num">8</span> Relatório de Pedidos <span style="font-size:11px;color:var(--muted);font-weight:400">viagens · operação por viagem</span></h3>
         <p>Pedidos/viagens do TMS. Colunas: <code>CPF Motoristas</code>, <code>Veículos</code>, <code>Centro Resultado</code>, <code>Data Carregamento</code>. <b>Opcional</b> (a operação já vem da UO da Trimble) — serve p/ a divergência <b>condutor não vinculado à placa</b> e operação por viagem. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
-        <input type="file" id="filePedidos" accept=".zip,.csv,.txt" hidden>
-        <button class="btn solid" onclick="document.getElementById('filePedidos').click()">Selecionar arquivo</button>
+        <input type="file" id="filePedidos" accept=".zip,.csv,.txt" multiple hidden>
+        <button class="btn solid" onclick="document.getElementById('filePedidos').click()">Selecionar arquivos (vários dias)</button>
         <div class="status-line" id="stPedidos">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-saude">
@@ -622,8 +628,8 @@
       <div class="drop" id="drop-bdv">
         <h3><span class="num">10</span> Boletim do Veículo <span style="font-size:11px;color:var(--muted);font-weight:400">identificação · UO · câmera</span></h3>
         <p>Boletim do Veículo (Trimble), 1 linha por <b>placa + dia</b>. Colunas: <code>PLACA</code>, <code>UO</code> (operação), <code>MOTORISTAS</code> (vazio = não identificado), <code>DISTÂNCIA PERCORRIDA</code>, <code>SEM MOTORISTA</code>, <code>CÂMERA OBSTRUÍDA</code>, <code>DESCONEXÃO DA CÂMERA</code>. É a fonte da <b>aderência de identificação</b> (dias identificados ÷ dias que moveu), da <b>operação pela UO</b> e da <b>saúde da câmera</b> p/ o plano de ação. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
-        <input type="file" id="fileBdv" accept=".zip,.csv,.txt" hidden>
-        <button class="btn solid" onclick="document.getElementById('fileBdv').click()">Selecionar arquivo</button>
+        <input type="file" id="fileBdv" accept=".zip,.csv,.txt" multiple hidden>
+        <button class="btn solid" onclick="document.getElementById('fileBdv').click()">Selecionar arquivos (vários dias)</button>
         <div class="status-line" id="stBdv">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-motoristas">
@@ -768,6 +774,12 @@ function weekInfo(iso){
            mesKey:thu.getUTCFullYear()+'-'+String(thu.getUTCMonth()+1).padStart(2,'0'),
            mesLabel:MESES[thu.getUTCMonth()]+'/'+String(thu.getUTCFullYear()).slice(2) };
 }
+// domingos e FERIADOS NACIONAIS (fixos + Sexta-feira Santa) → dia em vermelho
+function _pascoa(y){ const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,mm=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*mm+114)/31),da=((h+l-7*mm+114)%31)+1; return new Date(Date.UTC(y,mo-1,da)); }
+const FERIADOS_NAC=['01-01','04-21','05-01','09-07','10-12','11-02','11-15','11-20','12-25']; // + Sexta-feira Santa (móvel)
+function isFeriado(iso){ const m=String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m) return false; const md=m[2]+'-'+m[3]; if(FERIADOS_NAC.includes(md)) return true; const gf=new Date(_pascoa(+m[1]).getTime()-2*86400000); return md===String(gf.getUTCMonth()+1).padStart(2,'0')+'-'+String(gf.getUTCDate()).padStart(2,'0'); }
+function isDomingo(iso){ const m=String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); if(!m) return false; return new Date(Date.UTC(+m[1],+m[2]-1,+m[3])).getUTCDay()===0; }
+function diaVermelho(iso){ return isDomingo(iso)||isFeriado(iso); }
 // faixa de farol agrupada por mês (cada mês com suas semanas)
 function farolStripHTML(semanas, weeks, opts){
   opts=opts||{}; const meses=[], byMes={};
@@ -1364,6 +1376,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
       : `<div class="tl-head"><div class="who"><b>${g.label}</b><small>${[...placas].join(', ')||'—'}</small></div>${meta}</div>`;
     return `<div class="card wtl-card">${head}
       <div class="wtl" id="${id}">
+        <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
         <div class="track"><span class="tlab">Ponto</span><div class="lane lane-pt" data-k="ponto"></div></div>
         <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
@@ -1416,6 +1429,7 @@ function buildPlacaCards(placaQ, prefix, cap){
       <div class="m"><span>Km</span><b>${km?Math.round(km).toLocaleString('pt-BR'):'—'}</b></div></div>`;
     return `<div class="card wtl-card"><div class="tl-head"><div class="who"><b>🚚 ${g.placa}</b><small>${[...drivers].map(firstName).join(', ')||'⚠ sem condutor identificado'}</small></div>${meta}</div>
       <div class="wtl" id="${id}">
+        <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
         <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
         <div class="track"><span class="tlab">Identificação</span><div class="lane" data-k="ident"></div></div>
@@ -1456,9 +1470,20 @@ function renderZoom(id){
   let step, dayMode; if(span>16*1440){step=2*1440;dayMode=true;} else if(span>3*1440){step=1440;dayMode=true;} else if(span>12*60){step=360;} else if(span>3*60){step=60;} else {step=30;}
   let ruler='', gl=''; const start=Math.ceil(st.t0/step)*step;
   for(let t=start;t<=st.t1+1;t+=step){ const p=pos(t); if(p<-2||p>102) continue; const dIdx=Math.floor(t/1440), mod=((t%1440)+1440)%1440, day=mod===0;
+    const mostraData=dayMode||day; const diso=new Date(Date.parse(st.weekStart)+dIdx*86400000).toISOString().slice(0,10); const vermelho=mostraData&&diaVermelho(diso);
     const lab = dayMode? fmtDay(st.weekStart,dIdx) : ((day?fmtDay(st.weekStart,dIdx)+' ':'')+hm(mod));
-    ruler+=`<span class="tick ${day?'day':''}" style="left:${p}%">${lab}<i></i></span>`;
+    ruler+=`<span class="tick ${day?'day':''} ${vermelho?'feriado':''}" style="left:${p}%"${vermelho?' title="'+(isDomingo(diso)?'Domingo':'Feriado nacional')+'"':''}>${lab}<i></i></span>`;
     gl+=`<div class="gl ${t%1440===0?'day':''}" style="left:${p}%"></div>`; }
+  // rótulo do dia fixo/centralizado quando o zoom está em ~1 dia (a data some da régua entre meia-noites)
+  const diaHdr=el.querySelector('.wtl-day');
+  if(diaHdr){
+    if(span<=1440*1.5){
+      const mid=(st.t0+st.t1)/2, dI=Math.floor(mid/1440);
+      const dd=new Date(Date.parse(st.weekStart)+dI*86400000).toISOString().slice(0,10); const verm=diaVermelho(dd);
+      diaHdr.innerHTML=`<span class="${verm?'feriado':''}">${brDate(dd)}${verm?(isDomingo(dd)?' · Domingo':' · Feriado'):''}</span>`;
+      diaHdr.classList.add('on');
+    } else { diaHdr.innerHTML=''; diaHdr.classList.remove('on'); }
+  }
   const seg=(cls,a,b,lab,extra,ttl)=>{ const l=pos(a),r=pos(b); if(r<0||l>100) return ''; const L=Math.max(l,0),W=Math.max(Math.min(r,100)-L,0.3); return `<div class="seg ${cls} ${extra||''}" style="left:${L}%;width:${W}%" title="${ttl||lab||''}">${(r-l)>4?(lab||''):''}</div>`; };
   el.querySelector('.wtl-ruler').innerHTML=ruler;
   const laneP=el.querySelector('.lane[data-k="ponto"]');
@@ -2532,6 +2557,54 @@ function loadAlertas(file){
   } else { rd.onload=e=>done(decodeText(e.target.result)); rd.readAsArrayBuffer(file); }
 }
 
+/* ===== IMPORTAÇÃO MANUAL de VÁRIOS arquivos (período completo) ===== */
+// csv/txt → texto; zip → concatena os CSVs de dentro (cabeçalho só 1x)
+async function fileToText(file){
+  const ext=(file.name.split('.').pop()||'').toLowerCase(); const buf=await file.arrayBuffer();
+  if(ext==='zip'){ if(typeof JSZip==='undefined') throw new Error('sem JSZip'); const zip=await JSZip.loadAsync(buf);
+    const names=Object.keys(zip.files).filter(n=>/\.csv$/i.test(n)&&!zip.files[n].dir).sort(); let out='',first=true;
+    for(const nm of names){ let t=decodeText(await zip.files[nm].async('arraybuffer')).replace(/^﻿/,''); if(first){out=t;first=false;} else { const nl=t.indexOf('\n'); out+='\n'+(nl>=0?t.slice(nl+1):t); } } return out; }
+  return decodeText(buf).replace(/^﻿/,'');
+}
+// vários arquivos → 1 texto (cabeçalho só 1x), ordenado por nome (= data)
+async function combinarFilesTexto(files){
+  const arr=[...files].sort((a,b)=>String(a.name).localeCompare(b.name)); let out='',first=true;
+  for(const f of arr){ let t=''; try{ t=await fileToText(f); }catch(_){ } if(!t) continue; if(first){out=t;first=false;} else { const nl=t.indexOf('\n'); out+='\n'+(nl>=0?t.slice(nl+1):t); } }
+  return out;
+}
+// soma alertas de VÁRIOS dias (compatível com o aggAlertas da versão de sexta)
+function mergeAlertas(dst, src){ dst.n=(dst.n||0)+(src.n||0);
+  for(const nn in src.A){ const s=src.A[nn]; const d=(dst.A[nn]=dst.A[nn]||{nome:s.nome,total:0,niveis:{},tipos:{},semanas:{}});
+    d.total+=s.total; for(const k in s.niveis)d.niveis[k]=(d.niveis[k]||0)+s.niveis[k]; for(const k in s.tipos)d.tipos[k]=(d.tipos[k]||0)+s.tipos[k]; for(const k in s.semanas)d.semanas[k]=(d.semanas[k]||0)+s.semanas[k]; }
+  dst.placaUO=dst.placaUO||{}; const sp=src.placaUO||{}; for(const pk in sp){ const cur=dst.placaUO[pk]; if(!cur||(sp[pk].n||0)>(cur.n||0)) dst.placaUO[pk]=sp[pk]; }
+  dst.tl=dst.tl||{}; const st=src.tl||{}; for(const nn in st){ const arr=(dst.tl[nn]=dst.tl[nn]||[]); for(const e of st[nn]){ if(arr.length<5000) arr.push(e); } } }
+// MOVIMENTAÇÃO local (vários csv/zip) — streaming (1 arquivo por vez), soma os dias
+async function loadMovLocais(files){
+  if(!(pending.ponto&&pending.ponto.length)){ toast('Carregue primeiro a jornada (ponto)'); return; }
+  MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={};
+  const jor=parseJornada(pending.ponto); const movRaw={}; let movRows=0, done=0;
+  const arr=[...files].sort((a,b)=>String(a.name).localeCompare(b.name));
+  for(const f of arr){ try{ const ext=(f.name.split('.').pop()||'').toLowerCase();
+      if(ext==='zip'){ const zip=await JSZip.loadAsync(await f.arrayBuffer()); const names=Object.keys(zip.files).filter(n=>/\.csv$/i.test(n)&&!zip.files[n].dir).sort(); for(const nm of names){ movRows+=accMov(parseCSV(decodeText(await zip.files[nm].async('arraybuffer'))), movRaw, jor.roster); } }
+      else { movRows+=accMov(parseCSV(await fileToText(f)), movRaw, jor.roster); } }catch(_){}
+    done++; toast('Movimentação: '+done+'/'+arr.length+'…'); }
+  finalizeRecords(jor, movRaw, movRows, pending.ponto.length);
+  toast('Movimentação ✓ '+arr.length+' arquivo(s) · '+movRows.toLocaleString('pt-BR')+' movimentos · '+(typeof RECORDS!=='undefined'&&RECORDS?RECORDS.length:0)+' motorista-dias');
+}
+// ALERTAS local (vários csv/zip) — streaming + merge, soma os dias
+async function loadAlertasLocais(files){
+  const acc={A:{},n:0,placaUO:{},tl:{}}; const keep=namesOfInterest(); const arr=[...files].sort((a,b)=>String(a.name).localeCompare(b.name)); let done=0,fail=0;
+  for(const f of arr){ try{ const ext=(f.name.split('.').pop()||'').toLowerCase();
+      if(ext==='zip'){ const zip=await JSZip.loadAsync(await f.arrayBuffer()); const names=Object.keys(zip.files).filter(n=>/\.csv$/i.test(n)&&!zip.files[n].dir).sort(); for(const nm of names){ mergeAlertas(acc, aggAlertas(decodeText(await zip.files[nm].async('arraybuffer')), keep)); } }
+      else { mergeAlertas(acc, aggAlertas(await fileToText(f), keep)); } }catch(_){ fail++; }
+    done++; toast('Alertas: '+done+'/'+arr.length+(fail?(' · '+fail+' falha(s)'):'')+'…'); }
+  ALERTS=acc.A; ALERTS_N=acc.n; if(acc.placaUO&&Object.keys(acc.placaUO).length) PLACA_UO=acc.placaUO; AL_TL=acc.tl;
+  if(REAL&&RAW){ RAW.alertas=ALERTS; RAW.placaUO=PLACA_UO; RAW.counts=RAW.counts||{}; RAW.counts.alertas=acc.n; saveData(); }
+  build(); fillFilters(); updateDropStatus(); renderAll();
+  if(fail) toast('⚠ Alertas: '+fail+' arquivo(s) falharam — total pode estar incompleto');
+  toast('Alertas ✓ '+acc.n.toLocaleString('pt-BR')+' eventos · '+Object.keys(acc.A).length+' motoristas');
+}
+
 /* ===== BOLETIM DO MOTORISTA (ocorrências): 1 linha por motorista+dia, alertas por tipo em COLUNAS ===== */
 const BOL_TIPOS=[
   {c:'USO DE CELULAR', l:'Uso de Celular', k:'n'},
@@ -3242,22 +3315,22 @@ $('#expSemId').onclick=exportSemId;
 function bindCfg(id,key){ const el=$(id); el.value=CFG[key]; el.addEventListener('input',()=>{ CFG[key]=parseFloat(el.value)||0; saveCfg(); build(); fillFilters(); renderAll(); }); }
 bindCfg('#cfgTol','tol'); bindCfg('#cfgSem','sem'); bindCfg('#cfgFora','fora'); bindCfg('#cfgMovMin','movMin'); bindCfg('#cfgFarol','farolAmareloMax'); bindCfg('#cfgMeta','meta'); bindCfg('#cfgPreco','precoLitro'); bindCfg('#cfgAlmoco','almocoMin'); bindCfg('#cfgJornada','jornadaMaxH'); bindCfg('#cfgJornadaMin','jornadaMin'); bindCfg('#cfgInterjornada','interjornadaMin');
 // import
-$('#filePonto').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo jornada…'); readFile(e.target.files[0],rows=>{ pending.ponto=rows; updateDropStatus(); if(pending.mov) ingest(); }); } });
-$('#fileMov').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return;
-  const ext=(f.name.split('.').pop()||'').toLowerCase();
+// import — os relatórios diários aceitam VÁRIOS arquivos (período completo); somam os dias
+$('#filePonto').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length) return;
+  if(fs.length===1 && !/\.(csv|txt)$/i.test(fs[0].name)){ toast('Lendo jornada…'); readFile(fs[0],rows=>{ pending.ponto=rows; updateDropStatus(); if(pending.mov) ingest(); }); return; }
+  toast('Lendo jornada ('+fs.length+' arq)…'); try{ pending.ponto=parseCSV(await combinarFilesTexto(fs)); updateDropStatus(); if(pending.mov) ingest(); toast('Jornada ✓ '+pending.ponto.length.toLocaleString('pt-BR')+' linhas · '+fs.length+' arquivo(s)'); }catch(err){ toast('Erro ao ler a jornada'); } });
+$('#fileMov').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return;
   if(!pending.ponto){ toast('Carregue primeiro a jornada (ponto)'); return; }
-  if(ext==='zip'){ toast('Lendo movimentação (zip de vários dias, aguarde)…'); setTimeout(()=>ingestMovZip(f),30); }
-  else { toast('Lendo movimentação…'); readFile(f,rows=>{ pending.mov=rows; updateDropStatus(); ingest(); }); }
-});
-$('#fileAlertas').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Processando alertas (arquivo grande, aguarde)…'); setTimeout(()=>loadAlertas(e.target.files[0]),30); } });
-$('#fileTms').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo TMS…'); readFile(e.target.files[0],rows=>ingestTMS(rows)); } });
-$('#fileAbast').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo abastecimento (arquivo grande, aguarde)…'); setTimeout(()=>loadAbastecimento(e.target.files[0]),30); } });
-$('#fileMetas').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo metas…'); loadMetas(e.target.files[0]); } });
-$('#fileBoletim').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Processando Boletim (arquivo grande, aguarde)…'); setTimeout(()=>loadBoletim(e.target.files[0]),30); } });
-$('#filePedidos').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Processando Pedidos (arquivo grande, aguarde)…'); setTimeout(()=>loadPedidos(e.target.files[0]),30); } });
-$('#fileSaude').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo saúde das câmeras…'); loadSaude(e.target.files[0]); } });
-$('#fileBdv').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Processando Boletim do Veículo (arquivo grande, aguarde)…'); setTimeout(()=>loadBoletimVeiculo(e.target.files[0]),30); } });
-$('#fileMotoristas').addEventListener('change',e=>{ if(e.target.files[0]){ toast('Lendo Relatório de Motoristas…'); setTimeout(()=>loadMotoristas(e.target.files[0]),30); } });
+  toast('Lendo movimentação ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadMovLocais(fs),30); });
+$('#fileAlertas').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Processando alertas ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadAlertasLocais(fs),30); });
+$('#fileTms').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo TMS…'); readFile(fs[fs.length-1],rows=>ingestTMS(rows)); });
+$('#fileAbast').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo abastecimento (aguarde)…'); setTimeout(()=>loadAbastecimento(fs[fs.length-1]),30); });
+$('#fileMetas').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo metas…'); loadMetas(fs[fs.length-1]); });
+$('#fileBoletim').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length) return; toast('Processando Boletim ('+fs.length+' arq, aguarde)…'); try{ const txt=await combinarFilesTexto(fs); setTimeout(()=>loadBoletim(new File([txt],'boletim.csv')),30); }catch(err){ toast('Erro no Boletim'); } });
+$('#filePedidos').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length) return; toast('Processando Pedidos ('+fs.length+' arq, aguarde)…'); try{ const txt=await combinarFilesTexto(fs); setTimeout(()=>loadPedidos(new File([txt],'pedidos.csv')),30); }catch(err){ toast('Erro nos Pedidos'); } });
+$('#fileSaude').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo saúde das câmeras…'); loadSaude(fs[fs.length-1]); });
+$('#fileBdv').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length) return; toast('Processando Boletim do Veículo ('+fs.length+' arq, aguarde)…'); try{ const txt=await combinarFilesTexto(fs); setTimeout(()=>loadBoletimVeiculo(new File([txt],'bdv.csv')),30); }catch(err){ toast('Erro no Boletim do Veículo'); } });
+$('#fileMotoristas').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Lendo Relatório de Motoristas…'); setTimeout(()=>loadMotoristas(fs[fs.length-1]),30); });
 $('#recalc').onclick=()=>{ ingest(); };
 $('#resetDemo').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Voltou à demonstração'); };
 $('#clearData').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Bases removidas'); };
