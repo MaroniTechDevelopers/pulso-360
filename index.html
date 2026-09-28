@@ -2997,6 +2997,19 @@ function detectTipo(name, header, ext){
 }
 function spGrab(f){ return fetch(f['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()).then(ab=>new File([ab], f.name)); }
 function readFileP(file){ return new Promise(res=>readFile(file,res)); }
+// baixa e concatena o texto de vários arquivos (cabeçalho só 1x) — p/ tipos pequenos (jornada/boletins/pedidos)
+async function spCombinar(items){ let out='',first=true; for(const it of items){ const ab=await fetch(it['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()); let txt=decodeText(ab).replace(/^﻿/,''); if(first){ out=txt; first=false; } else { const nl=txt.indexOf('\n'); out+='\n'+(nl>=0?txt.slice(nl+1):txt); } } return out; }
+// soma alertas de VÁRIOS dias (streaming + merge) — não guarda o texto todo
+function mergeAlertas(dst, src){ dst.n=(dst.n||0)+(src.n||0);
+  for(const nn in src.A){ const s=src.A[nn]; const d=(dst.A[nn]=dst.A[nn]||{nome:s.nome,total:0,niveis:{},tipos:{},semanas:{}});
+    d.total+=s.total; for(const k in s.niveis)d.niveis[k]=(d.niveis[k]||0)+s.niveis[k]; for(const k in s.tipos)d.tipos[k]=(d.tipos[k]||0)+s.tipos[k]; for(const k in s.semanas)d.semanas[k]=(d.semanas[k]||0)+s.semanas[k]; }
+  const sp=src.placaUO||{}; for(const pk in sp){ const cur=dst.placaUO[pk]; if(!cur||(sp[pk].n||0)>(cur.n||0)) dst.placaUO[pk]=sp[pk]; }
+  const st=src.tl||{}; for(const nn in st){ const arr=(dst.tl[nn]=dst.tl[nn]||[]); for(const e of st[nn]){ if(arr.length<5000) arr.push(e); } } }
+// movimentação de VÁRIOS dias (streaming — 1 arquivo por vez, como o zip)
+async function ingestMovFiles(items){ MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={};
+  const jor=parseJornada(pending.ponto); const movRaw={}; let movRows=0,k=0;
+  for(const it of items){ try{ const ab=await fetch(it['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()); movRows+=accMov(parseCSV(decodeText(ab)), movRaw, jor.roster); k++; if(k%5===0||k===items.length) toast('Movimentação: '+k+'/'+items.length+'…'); }catch(_){} }
+  finalizeRecords(jor, movRaw, movRows, pending.ponto.length); }
 // varre uma pasta e TODAS as subpastas (tipo→ano→mês→dia), juntando os arquivos
 // cada arquivo guarda em _top o nome da pasta de 1º nível (o "tipo") p/ identificar sem baixar
 async function spWalk(siteId, folderId, token, acc, depth, top){
@@ -3049,34 +3062,45 @@ async function spLoadAll(interactive){
     files=await spWalk(site.id, rootItem.id, token, [], 0, '');   // varre a pasta + subpastas (tipo/ano/mês/dia)
   }catch(e){ toast('Erro no SharePoint — '+e.message); setPill('erro no SharePoint'); return false; }
   if(!files.length){ toast('Nenhum arquivo encontrado na pasta/subpastas'); return false; }
-  files.sort((a,b)=> String(b.lastModifiedDateTime||'').localeCompare(String(a.lastModifiedDateTime||'')));  // mais novo primeiro
-  const byType={};
+  // agrupa TODOS os arquivos por tipo (SOMA todos os dias)
+  const byTypeAll={};
   for(const f of files){
     let t=SP_TOP2TIPO[f._top]||'';                 // pela pasta de tipo (sem baixar)
     if(!t){ const ext=(f.name.split('.').pop()||'').toLowerCase(); let header=''; if(ext==='csv'||ext==='txt') header=await spHead(f['@microsoft.graph.downloadUrl']); t=detectTipo(f.name, header, ext); }
-    if(!t) continue; if(!byType[t]) byType[t]=f;   // ordenado por data → o 1º de cada tipo é o mais recente
+    if(!t) continue; (byTypeAll[t]=byTypeAll[t]||[]).push(f);
   }
-  const achou=Object.keys(byType);
-  if(!achou.length){ toast('Nenhum relatório reconhecido na pasta ('+files.length+' arquivo(s))'); return false; }
-  toast('Baixando '+achou.length+' relatório(s)…');
-  const blob={}; for(const t of achou){ try{ blob[t]=await spGrab(byType[t]); }catch(e){} }
-  // enriquecimentos (cada loader se reconstrói ao terminar)
-  if(blob.motoristas) loadMotoristas(blob.motoristas);
-  if(blob.alertas) loadAlertas(blob.alertas);
-  if(blob.tms) readFile(blob.tms, rows=>ingestTMS(rows));
-  if(blob.bdv) loadBoletimVeiculo(blob.bdv);
-  if(blob.boletim) loadBoletim(blob.boletim);
-  if(blob.pedidos) loadPedidos(blob.pedidos);
-  if(blob.saude) loadSaude(blob.saude);
-  if(blob.abast) loadAbastecimento(blob.abast);
-  if(blob.metas) loadMetas(blob.metas);
-  // núcleo: jornada (define o roster) + movimentação
-  if(blob.jornada){ pending.ponto=await readFileP(blob.jornada); }
-  if(blob.mov){ if(/\.zip$/i.test(blob.mov.name)) ingestMovZip(blob.mov); else { pending.mov=await readFileP(blob.mov); ingest(); } }
-  else if(blob.jornada && pending.ponto){ ingest(); }
-  setPill('dados reais · SharePoint');
+  const tipos=Object.keys(byTypeAll);
+  if(!tipos.length){ toast('Nenhum relatório reconhecido na pasta ('+files.length+' arquivo(s))'); return false; }
+  tipos.forEach(t=>byTypeAll[t].sort((a,b)=>String(a.name).localeCompare(String(b.name))));   // por dia (o nome tem a data)
+  const ultimo=items=>items[items.length-1];   // cadastro = o mais recente
+  toast('Somando os dias de '+tipos.length+' tipo(s)…'); setPill('somando os dias…');
+  // 1) JORNADA (soma os dias) → define o roster
+  if(byTypeAll.jornada){ pending.ponto=parseCSV(await spCombinar(byTypeAll.jornada)); }
+  // 2) MOVIMENTAÇÃO (soma os dias, streaming)
+  if(byTypeAll.mov && pending.ponto){ const zips=byTypeAll.mov.filter(f=>/\.zip$/i.test(f.name));
+    if(zips.length && byTypeAll.mov.length===zips.length){ ingestMovZip(await spGrab(zips[0])); }
+    else { await ingestMovFiles(byTypeAll.mov.filter(f=>!/\.zip$/i.test(f.name))); } }
+  else if(byTypeAll.jornada && pending.ponto){ ingest(); }
+  // 3) enriquecimentos (cadastro = último; diários = combinados)
+  if(byTypeAll.motoristas) loadMotoristas(await spGrab(ultimo(byTypeAll.motoristas)));
+  if(byTypeAll.tms) readFile(await spGrab(ultimo(byTypeAll.tms)), rows=>ingestTMS(rows));
+  if(byTypeAll.saude) loadSaude(await spGrab(ultimo(byTypeAll.saude)));
+  if(byTypeAll.abast) loadAbastecimento(await spGrab(ultimo(byTypeAll.abast)));
+  if(byTypeAll.metas) loadMetas(await spGrab(ultimo(byTypeAll.metas)));
+  if(byTypeAll.bdv) loadBoletimVeiculo(new File([await spCombinar(byTypeAll.bdv)],'boletim_veiculo.csv'));
+  if(byTypeAll.boletim) loadBoletim(new File([await spCombinar(byTypeAll.boletim)],'boletim_motorista.csv'));
+  if(byTypeAll.pedidos) loadPedidos(new File([await spCombinar(byTypeAll.pedidos)],'pedidos.csv'));
+  // 4) ALERTAS (soma os dias, streaming + merge — não guarda o texto todo)
+  if(byTypeAll.alertas){ const acc={A:{},n:0,placaUO:{},tl:{}}; const keep=namesOfInterest(); let k=0;
+    for(const it of byTypeAll.alertas){ try{ const ab=await fetch(it['@microsoft.graph.downloadUrl']).then(r=>r.arrayBuffer()); mergeAlertas(acc, aggAlertas(decodeText(ab), keep)); k++; if(k%5===0||k===byTypeAll.alertas.length) toast('Alertas: '+k+'/'+byTypeAll.alertas.length+'…'); }catch(_){} }
+    ALERTS=acc.A; ALERTS_N=acc.n; if(acc.placaUO&&Object.keys(acc.placaUO).length) PLACA_UO=acc.placaUO; AL_TL=acc.tl;
+    if(REAL&&RAW){ RAW.alertas=ALERTS; RAW.placaUO=PLACA_UO; RAW.counts=RAW.counts||{}; RAW.counts.alertas=acc.n; saveData(); }
+  }
+  build(); fillFilters(); updateDropStatus(); renderAll();
+  const resumo=tipos.map(t=>t+(byTypeAll[t].length>1?' ×'+byTypeAll[t].length:'')).join(', ');
+  setPill('dados reais · SharePoint ('+files.length+' arquivos)');
   try{ localStorage.setItem('sp_auto','1'); }catch(e){}
-  toast('SharePoint ✓ '+achou.length+' relatório(s): '+achou.join(', '));
+  toast('SharePoint ✓ '+files.length+' arquivo(s) · '+resumo);
   return true;
 }
 
@@ -3281,10 +3305,13 @@ applyDadosGate();
   const setPill=t=>{ const p=$('#dataModeTxt'); if(p)p.textContent=t; };
   let temCache=0; try{ temCache=await cacheRestaurar(); }catch(e){}
   if(temCache){ setPill('dados locais · '+new Date(temCache).toLocaleString('pt-BR')); }
-  try{ if(localStorage.getItem('sp_auto')==='1' && typeof msal!=='undefined' && spSignedIn()){
-      if(temCache) setPill('dados locais · atualizando do SharePoint…');
-      spLoadAll(false).then(ok=>{ if(ok) agendarCache(); });
-  } }catch(e){}
+  // AUTO-CONECTAR ao abrir: se há sessão M365, atualiza do SharePoint em 2º plano (sem apertar botão)
+  try{ if(typeof msal!=='undefined'){ const pca=spMsal(); if(pca.initialize) await pca.initialize();
+      if(pca.getAllAccounts && pca.getAllAccounts()[0]){
+        setPill(temCache?'dados locais · atualizando do SharePoint…':'conectando ao SharePoint…');
+        spLoadAll(false).then(ok=>{ if(ok) agendarCache(); });
+      } }
+  }catch(e){}
 })();
 // filtros
 ['#fFecha','#fDia','#fDe','#fAte','#fStatus'].forEach(s=>$(s).addEventListener('change',renderAll));
