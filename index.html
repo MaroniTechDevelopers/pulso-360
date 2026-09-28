@@ -126,6 +126,17 @@
   :root[data-theme="dark"] .filterbar input[type=date]{color-scheme:dark}
   .filterbar select:hover,.filterbar input[type=text]:hover,.filterbar input[type=date]:hover{border-color:var(--gold)}
   .filterbar select:focus,.filterbar input[type=text]:focus,.filterbar input[type=date]:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--ring)}
+  .combo-filter{position:relative;min-width:210px}
+  .combo-filter>input{width:100%;padding-right:34px!important}
+  .combo-arrow{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;background:transparent;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;border-radius:7px}
+  .combo-arrow:hover{background:var(--surface-2);color:var(--ink)}
+  .combo-menu{display:none;position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:45;max-height:290px;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:11px;box-shadow:var(--shadow-lg);padding:5px}
+  .combo-filter.open .combo-menu{display:block}
+  .combo-opt{display:flex;width:100%;border:0;background:transparent;color:var(--ink);font:inherit;font-size:12.5px;text-align:left;padding:8px 10px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .combo-opt:hover,.combo-opt.active{background:var(--surface-2)}
+  .combo-opt.match{font-weight:650}
+  .combo-opt mark{background:color-mix(in srgb,var(--gold) 35%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+  .combo-empty{padding:9px 10px;color:var(--muted);font-size:12px}
 
   /* ============ KPI ============ */
   .kpis{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
@@ -369,6 +380,9 @@
   .tratlist .tt-g{color:var(--muted)}
   .tratlist .tt-o{font-size:12.5px;color:var(--ink-2);margin-top:5px;white-space:pre-wrap}
   .tratlist .tt-s{font-size:11px;color:var(--muted);margin-top:4px}
+  .tratlist .tt-h{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .trat-del{margin-left:auto;border:1px solid color-mix(in srgb,var(--critical) 35%,var(--border));background:var(--surface);color:var(--crit-ink);border-radius:8px;padding:4px 8px;font:inherit;font-size:11px;font-weight:650;cursor:pointer}
+  .trat-del:hover{background:color-mix(in srgb,var(--critical) 10%,var(--surface))}
 
   /* toast */
   #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;transition:.25s;background:var(--navy);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.3);z-index:50;pointer-events:none;border-left:3px solid var(--gold)}
@@ -415,7 +429,13 @@
     <div class="f"><label>Dia</label><select id="fDia"><option value="">Todos</option></select></div>
     <div class="f"><label>De (data)</label><input type="date" id="fDe"></div>
     <div class="f"><label>Até (data)</label><input type="date" id="fAte"></div>
-    <div class="f"><label>Motorista</label><select id="fMot"><option value="">Todos</option></select></div>
+    <div class="f"><label>Motorista</label>
+      <div class="combo-filter" id="fMotCombo">
+        <input type="text" id="fMot" placeholder="Todos" autocomplete="off" aria-autocomplete="list" aria-controls="fMotMenu" aria-expanded="false">
+        <button type="button" class="combo-arrow" id="fMotArrow" tabindex="-1" aria-label="Abrir lista de motoristas">⌄</button>
+        <div class="combo-menu" id="fMotMenu" role="listbox"></div>
+      </div>
+    </div>
     <div class="f"><label>Situação</label><select id="fStatus">
       <option value="">Todas</option>
       <option value="critico">Prioridade</option>
@@ -693,7 +713,7 @@
         <li>Identificação: o <b>Relatório de Identificação</b> da Trimble (facial) — traz motorista reconhecido e % de semelhança.</li>
         <li>Datas aceitam <code>dd/mm/aaaa</code> ou <code>aaaa-mm-dd</code>; horas <code>HH:MM</code> ou <code>dd/mm/aaaa HH:MM</code>.</li>
       </ul>
-      <p style="color:var(--muted)">A importação é manual e funciona como rascunho local. Para disponibilizar a mesma fotografia de dados a todos, use <b>Gerar dados para publicação</b> e publique o arquivo <code>dados-pulso360.json</code> junto do GitHub Pages. As tratativas são sincronizadas separadamente no SharePoint.</p>
+      <p style="color:var(--muted)">A importação é manual e funciona como rascunho local. Para disponibilizar a mesma fotografia de dados a todos, use <b>Gerar dados para publicação</b>. O painel baixa um pacote ZIP com a pasta <code>dados</code>; extraia essa pasta ao lado do <code>index.html</code> e publique no GitHub Pages. As tratativas são sincronizadas separadamente no SharePoint.</p>
     </div>
     </div><!-- /#dadosContent -->
   </section>
@@ -1163,17 +1183,44 @@ function filtered(){
     if(ate && r.data>ate) return false;
     if(op && r.operacao!==op) return false;
     if(dia && r.data!==dia) return false;
-    if(mot && r.motoristaEscala!==mot) return false;
+    if(mot && !norm(r.motoristaEscala).includes(norm(mot))) return false;
     if(st && r.sev!==st) return false;
     if(q && !(norm(r.motoristaEscala).includes(q)||norm(r.placa).includes(q)||norm(r.trimbleMot).includes(q))) return false;
     return true;
   });
 }
+let MOT_FILTER_LIST=[];
+function motScore(nome,q){
+  const n=norm(nome), z=norm(q); if(!z) return 4;
+  if(n===z) return 0;
+  if(n.startsWith(z)) return 1;
+  if(n.split(' ').some(w=>w.startsWith(z))) return 2;
+  if(n.includes(z)) return 3;
+  return 4;
+}
+function motMark(nome,q){
+  const safe=String(nome).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const z=String(q||'').trim(); if(!z) return safe;
+  const i=norm(nome).indexOf(norm(z)); if(i<0) return safe;
+  // nomes podem conter acentos; para evitar cortar caracteres pelo indice normalizado, realca o primeiro trecho textual compativel quando possivel
+  const re=new RegExp('('+z.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','i');
+  return safe.replace(re,'<mark>$1</mark>');
+}
+function renderMotMenu(){
+  const input=$('#fMot'), menu=$('#fMotMenu'); if(!input||!menu) return;
+  const q=input.value.trim();
+  const arr=MOT_FILTER_LIST.slice().sort((a,b)=>motScore(a,q)-motScore(b,q)||a.localeCompare(b,'pt-BR'));
+  menu.innerHTML=arr.length ? arr.map((m,i)=>`<button type="button" class="combo-opt ${motScore(m,q)<4?'match':''}" role="option" data-mot="${encodeURIComponent(m)}">${motMark(m,q)}</button>`).join('') : '<div class="combo-empty">Nenhum motorista disponível</div>';
+  menu.querySelectorAll('.combo-opt').forEach(b=>b.addEventListener('mousedown',e=>{ e.preventDefault(); input.value=decodeURIComponent(b.dataset.mot); closeMotMenu(); renderAll(); }));
+}
+function openMotMenu(){ const c=$('#fMotCombo'); if(!c)return; c.classList.add('open'); $('#fMot').setAttribute('aria-expanded','true'); renderMotMenu(); }
+function closeMotMenu(){ const c=$('#fMotCombo'); if(!c)return; c.classList.remove('open'); $('#fMot').setAttribute('aria-expanded','false'); }
 function fillFilters(){
   const ops=[...new Set(RECORDS.map(r=>r.operacao))].sort();
   const dias=[...new Set(RECORDS.map(r=>r.data))].sort().reverse();
-  const mots=[...new Set(RECORDS.map(r=>r.motoristaEscala))].sort();
-  fillSel('#fOp',ops); fillSel('#fMot',mots);
+  const mots=[...new Set(RECORDS.map(r=>r.motoristaEscala))].filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  MOT_FILTER_LIST=mots;
+  fillSel('#fOp',ops); renderMotMenu();
   fillSel('#fDia',dias,brDate);
   // fechamentos presentes (mais recente primeiro)
   const fmap=new Map(); RECORDS.forEach(r=>{ const f=fechamento(r.data); if(f&&!fmap.has(f.key)) fmap.set(f.key,f); });
@@ -1751,7 +1798,7 @@ function renderFicha(){
 
     <div class="sec-title"><h2>Tratativas com o motorista</h2><span>${trats.length} registro(s) · ${TRAT_CACHE?'histórico compartilhado sincronizado':'histórico local · sincronize para ver nas outras máquinas'}</span></div>
     <div class="card">${ trats.length
-      ? '<ul class="tratlist">'+trats.map(t=>`<li><div class="tt-h"><span class="tt-tipo">${pdfEsc(t.tipo||'—')}</span><b>${brDate(t.data)}</b>${t.gestor?' · <span class="tt-g">'+pdfEsc(t.gestor)+'</span>':''}</div>${t.obs?'<div class="tt-o">'+pdfEsc(t.obs)+'</div>':''}${t.sinais?'<div class="tt-s">sinais na época: '+pdfEsc(t.sinais)+'</div>':''}</li>`).join('')+'</ul>'
+      ? '<ul class="tratlist">'+trats.map(t=>`<li data-trat-uid="${encodeURIComponent(tratUid(t))}"><div class="tt-h"><span class="tt-tipo">${pdfEsc(t.tipo||'—')}</span><b>${brDate(t.data)}</b>${t.gestor?' · <span class="tt-g">'+pdfEsc(t.gestor)+'</span>':''}${isAdmin()?`<button class="trat-del" type="button" data-uid="${encodeURIComponent(tratUid(t))}" title="Excluir esta tratativa do histórico compartilhado">🗑️ Excluir</button>`:''}</div>${t.obs?'<div class="tt-o">'+pdfEsc(t.obs)+'</div>':''}${t.sinais?'<div class="tt-s">sinais na época: '+pdfEsc(t.sinais)+'</div>':''}</li>`).join('')+'</ul>'
       : '<div class="empty" style="padding:22px">Nenhuma tratativa registrada ainda. Use o botão <b>🗣️ Registrar tratativa</b> (acima) para iniciar o acompanhamento com o motorista.</div>' }</div>
 
     <div class="sec-title"><h2>Pontos de atenção × pontos fortes</h2><span>${periodoLabel()} · resumo executivo (o mesmo do PDF)</span></div>
@@ -1791,6 +1838,7 @@ function renderFicha(){
   `;
   wk.ids.forEach(setupZoom); wireZtlDrag();
   const verTodas=$('#fichaVerTodas'); if(verTodas) verTodas.onclick=(ev)=>{ ev.preventDefault(); $('#fOp').value=''; renderAll(); };
+  $$('.trat-del').forEach(btn=>{ btn.onclick=async()=>{ const uid=decodeURIComponent(btn.dataset.uid||''); if(uid) await excluirTratativa(nome,uid); }; });
 }
 
 /* ============================================================
@@ -3228,29 +3276,50 @@ async function spLoginId(){ try{ const pca=spMsal(); if(pca.initialize) await pc
 function applyDadosGate(){ const gate=$('#dadosGate'), content=$('#dadosContent'); if(!gate||!content) return; const ok=isAdmin(); gate.style.display=ok?'none':'block'; content.style.display=ok?'block':'none'; const who=$('#dadosWho'); if(who) who.textContent=ok?('conectado como '+spEmail()):''; }
 async function gpost(path, token, body){ const r=await fetch('https://graph.microsoft.com/v1.0'+path,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)}); if(!r.ok){ const t=await r.text().catch(()=>''); throw new Error('Graph '+r.status+(t?': '+t.slice(0,180):'')); } return r.json(); }
 async function gputContent(path, token, body){ const r=await fetch('https://graph.microsoft.com/v1.0'+path,{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json;charset=utf-8'},body:body}); if(!r.ok){ const t=await r.text().catch(()=>''); throw new Error('Graph '+r.status+(t?': '+t.slice(0,180):'')); } return r.json(); }
+async function gdelete(path, token){ const r=await fetch('https://graph.microsoft.com/v1.0'+path,{method:'DELETE',headers:{Authorization:'Bearer '+token}}); if(!r.ok && r.status!==404){ const t=await r.text().catch(()=>''); throw new Error('Graph '+r.status+(t?': '+t.slice(0,180):'')); } return true; }
 async function spSiteId(token){ if(SP_SITE_ID) return SP_SITE_ID; const x=await gget('/sites/'+SP_CFG.siteHost+':'+SP_CFG.sitePath,token); SP_SITE_ID=x.id; return x.id; }
 async function spEnsureTratFolder(token){ if(SP_TRAT_FOLDER_ID)return SP_TRAT_FOLDER_ID; const site=await spSiteId(token); const root=await gget('/sites/'+site+'/drive/root:/'+encodeURIComponent(SP_CFG.folder),token); SP_TRAT_FOLDER_ID=await spEnsureFolder(site,root.id,SP_CFG.tratFolder,token); return SP_TRAT_FOLDER_ID; }
 function tratFileName(t){ const d=String(t.data||'').replace(/\D/g,'')||'semdata'; const uid=String(t.uid||Date.now()).replace(/[^A-Za-z0-9_-]/g,'').slice(-40); return 'trat_'+d+'_'+uid+'.json'; }
-async function tratUpload(token,nome,key,t){ const site=await spSiteId(token), folder=await spEnsureTratFolder(token); const payload=Object.assign({},t,{nome,key,uid:t.uid||('t'+Date.now()),_pending:false}); await gputContent('/sites/'+site+'/drive/items/'+folder+':/'+encodeURIComponent(tratFileName(payload))+':/content',token,JSON.stringify(payload)); return payload; }
+async function tratUpload(token,nome,key,t){ const site=await spSiteId(token), folder=await spEnsureTratFolder(token); const payload=Object.assign({},t,{nome,key,uid:t.uid||('t'+Date.now()),_pending:false}); const item=await gputContent('/sites/'+site+'/drive/items/'+folder+':/'+encodeURIComponent(tratFileName(payload))+':/content',token,JSON.stringify(payload)); return Object.assign(payload,{_spItemId:(item&&item.id)||'',_spFileName:(item&&item.name)||tratFileName(payload)}); }
 function tratMarkSynced(uid){ const local=tratLocalLoad(); let changed=false; for(const k in local)(local[k]||[]).forEach(t=>{if(tratUid(t)===uid){t._pending=false;changed=true;}}); if(changed)tratLocalSave(local); }
 async function tratSyncFromSP(interactive){ let token; try{ token=await spToken(!!interactive); }catch(e){ if(interactive)toast('Microsoft 365: '+(e.message||'falha no login')); return false; } if(!token)return false;
   try{ const site=await spSiteId(token),folder=await spEnsureTratFolder(token); let url='/sites/'+site+'/drive/items/'+folder+'/children?$top=200', files=[]; while(url){const j=await gget(url.replace('https://graph.microsoft.com/v1.0',''),token);files.push(...(j.value||[]).filter(x=>x.file&&/\.json$/i.test(x.name||'')));url=j['@odata.nextLink']||'';}
-    const map={},remoteUid=new Set(); for(const f of files){ try{ let obj=null; if(f['@microsoft.graph.downloadUrl'])obj=await fetch(f['@microsoft.graph.downloadUrl'],{cache:'no-store'}).then(r=>r.ok?r.json():null); if(!obj)continue; const key=obj.key||tratKey(obj.nome||''); if(!key)continue; const u=tratUid(obj); remoteUid.add(u); (map[key]=map[key]||[]).push(obj); }catch(e){} }
+    const map={},remoteUid=new Set(); for(const f of files){ try{ let obj=null; if(f['@microsoft.graph.downloadUrl'])obj=await fetch(f['@microsoft.graph.downloadUrl'],{cache:'no-store'}).then(r=>r.ok?r.json():null); if(!obj)continue; obj._spItemId=f.id||obj._spItemId||''; obj._spFileName=f.name||obj._spFileName||''; const key=obj.key||tratKey(obj.nome||''); if(!key)continue; const u=tratUid(obj); remoteUid.add(u); (map[key]=map[key]||[]).push(obj); }catch(e){} }
     const local=tratLocalLoad(); let enviados=0; for(const key in local){ for(const t of (local[key]||[])){ const u=tratUid(t); if(!u||remoteUid.has(u)||t._pending===false)continue; try{ const nome=t.nome||''; const up=await tratUpload(token,nome,key,t); (map[key]=map[key]||[]).push(up); remoteUid.add(u); t._pending=false; enviados++; }catch(e){} } } tratLocalSave(local); TRAT_CACHE=map; _tratSyncTried=true; if(interactive)toast('Tratativas sincronizadas ✓ '+files.length+' compartilhada(s)'+(enviados?' · '+enviados+' pendente(s) enviado(s)':'') ); return true;
   }catch(e){ if(interactive)toast('Tratativas (SharePoint): '+(e.message||e)); return false; }
 }
 async function tratAdd(nome,t){ const key=tratKey(nome); t=Object.assign({},t,{nome,uid:t.uid||('t'+Date.now()+'_'+Math.random().toString(36).slice(2,10)),_pending:true}); const local=tratLocalLoad(); (local[key]=local[key]||[]).unshift(t); tratLocalSave(local);
   let token=null; try{token=await spToken(true);}catch(e){} if(!token)return {ok:true,sp:false,err:'login Microsoft não concluído'}; try{const up=await tratUpload(token,nome,key,t);tratMarkSynced(tratUid(t));TRAT_CACHE=TRAT_CACHE||{};(TRAT_CACHE[key]=TRAT_CACHE[key]||[]).unshift(up);return {ok:true,sp:true};}catch(e){return {ok:true,sp:false,err:e.message};}
 }
+function tratRemoveUidFromMap(map,uid){ let changed=false; if(!map)return false; for(const k of Object.keys(map)){ const before=(map[k]||[]).length; map[k]=(map[k]||[]).filter(t=>tratUid(t)!==uid); if(map[k].length!==before)changed=true; if(!map[k].length)delete map[k]; } return changed; }
+async function excluirTratativa(nome,uid){
+  if(!nome||!uid)return;
+  if(!isAdmin()){ toast('Somente o administrador pode excluir tratativas'); return; }
+  let t=tratList(nome).find(x=>tratUid(x)===uid); if(!t){ toast('Tratativa não encontrada'); return; }
+  if(!confirm('Excluir esta tratativa?\n\nA exclusão será aplicada ao histórico compartilhado e não poderá ser desfeita.')) return;
+  const compartilhada=(t._pending===false)||!!(TRAT_CACHE&&Object.values(TRAT_CACHE).some(a=>(a||[]).some(x=>tratUid(x)===uid)));
+  if(compartilhada){
+    let token=null; try{ token=await spToken(true); }catch(e){ toast('Entre no Microsoft 365 para excluir a tratativa compartilhada'); return; }
+    if(!token){ toast('Login Microsoft necessário para excluir'); return; }
+    if(!t._spItemId){ const ok=await tratSyncFromSP(false); if(ok)t=tratList(nome).find(x=>tratUid(x)===uid)||t; }
+    if(!t._spItemId){ toast('Não foi possível localizar o arquivo da tratativa no SharePoint'); return; }
+    try{ const site=await spSiteId(token); await gdelete('/sites/'+site+'/drive/items/'+encodeURIComponent(t._spItemId),token); }
+    catch(e){ toast('Falha ao excluir no SharePoint: '+(e.message||e)); return; }
+  }
+  const local=tratLocalLoad(); tratRemoveUidFromMap(local,uid); tratLocalSave(local); tratRemoveUidFromMap(TRAT_CACHE,uid);
+  toast(compartilhada?'Tratativa excluída do histórico compartilhado ✓':'Tratativa local excluída ✓');
+  renderFicha();
+}
 function openTratModal(){ const nome=fichaAtual; if(!nome)return; $('#tratNome').textContent=nome; $('#tratData').value=new Date().toISOString().slice(0,10); let g=''; if(spSignedIn())g=spGestor().nome; if(!g){try{g=localStorage.getItem('integ360_gestor')||'';}catch(e){}} $('#tratGestor').value=g;$('#tratTipo').value='Conversa de orientação';$('#tratObs').value='';$('#tratModal').style.display='flex';setTimeout(()=>$('#tratObs').focus(),50); }
 async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,obs=$('#tratObs').value.trim();if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,obs,op:M.op||'',placa:M.placas||'',cpf:(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[norm(nome)])||'',sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); }
 
 /* ============================================================
    PUBLICAÇÃO DE DADOS — GitHub Pages
-   dados-pulso360.json fica ao lado do index.html; o link principal carrega automaticamente
+   Publicação multipart: dados/manifesto.json + partes binárias comprimidas.
+   O endereço principal reconstrói a fotografia automaticamente.
    ============================================================ */
 async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz:false,b:bytes}; const cs=new CompressionStream('gzip'); const w=cs.writable.getWriter(); w.write(bytes); w.close(); return {gz:true,b:new Uint8Array(await new Response(cs.readable).arrayBuffer())}; }
-async function _gunz(bytes){ const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
+async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
 function snapshotState(){ return {v:3,ts:Date.now(),CFG:Object.assign({},CFG),REAL:!!REAL,RAW,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgAlmoco:'almocoMin',cfgJornada:'jornadaMaxH',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
 function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
@@ -3258,9 +3327,57 @@ function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('i
 async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();}catch(e){}}
 async function idbGet(k){try{const db=await idbOpen();const v=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly'),rq=tx.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});db.close();return v;}catch(e){return null;}}
 let _cacheTimer=null;function agendarCache(){clearTimeout(_cacheTimer);_cacheTimer=setTimeout(cacheSalvar,2500);} async function cacheSalvar(){try{if(!REAL||!RAW)return;const raw=new TextEncoder().encode(JSON.stringify(snapshotState())),g=await _gz(raw);await idbSet('estado',{gz:g.gz,b:g.b,ts:Date.now()});}catch(e){}} async function cacheRestaurar(){try{const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);const S=JSON.parse(new TextDecoder().decode(bytes));if(!restoreState(S))return 0;return c.ts||1;}catch(e){return 0;}}
-async function gerarDadosPublicacao(){ if(!REAL||!RAW){toast('Importe os relatórios antes de gerar os dados');return;} try{const S=snapshotState();S.publishedAt=Date.now();const txt=JSON.stringify(S),blob=new Blob([txt],{type:'application/json;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='dados-pulso360.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);mostrarPublicacao((txt.length/1048576).toFixed(1),S.publishedAt);}catch(e){toast('Erro ao gerar dados: '+(e.message||e));} }
-async function carregarDadosPublicados(){ try{const r=await fetch('dados-pulso360.json?_='+Date.now(),{cache:'no-store'});if(!r.ok)return false;const S=await r.json();if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3)return false;const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}restoreState(S);const p=$('#dataModeTxt');if(p)p.textContent='dados publicados · '+(pub?new Date(pub).toLocaleString('pt-BR'):'GitHub');const pill=$('#dataModePill');if(pill)pill.classList.add('real');return true;}catch(e){return false;} }
-function mostrarPublicacao(mb,ts){let bg=document.getElementById('snapModal');if(bg)bg.remove();const link=SP_CFG.redirectUri,cmd='git add dados-pulso360.json && git commit -m "Atualiza dados Pulso 360" && git push origin main';bg=document.createElement('div');bg.id='snapModal';bg.className='modal-bg';bg.style.display='flex';bg.innerHTML='<div class="modal" style="max-width:660px"><h3>📦 Dados prontos para publicação</h3><p class="modal-sub">O arquivo <b>dados-pulso360.json</b> ('+mb+' MB) foi baixado. Coloque/substitua esse arquivo na mesma pasta do <b>index.html</b> e publique no Git. Depois, qualquer pessoa que abrir o endereço principal verá esta fotografia dos dados.</p><label>Comando CMD<input type="text" id="pubCmd" readonly value="'+cmd.replace(/"/g,'&quot;')+'"></label><label>Link do painel<input type="text" id="pubLink" readonly value="'+link+'"></label><div class="modal-actions"><button class="btn" id="pubClose" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Fechar</button><button class="btn solid" id="pubCopy">Copiar comando</button></div></div>';document.body.appendChild(bg);bg.addEventListener('click',e=>{if(e.target===bg)bg.remove();});$('#pubClose').onclick=()=>bg.remove();$('#pubCopy').onclick=()=>{const v=$('#pubCmd').value;try{navigator.clipboard.writeText(v);}catch(e){$('#pubCmd').select();document.execCommand('copy');}toast('Comando copiado ✓');};}
+function _baixarBlob(blob,nome){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
+async function gerarDadosPublicacao(){
+  if(!REAL||!RAW){toast('Importe os relatórios antes de gerar os dados');return;}
+  const btn=$('#btnSnapshot'), old=btn?btn.textContent:''; if(btn){btn.disabled=true;btn.textContent='⏳ Preparando pacote…';}
+  try{
+    if(typeof JSZip==='undefined') throw new Error('Biblioteca ZIP não carregou. Verifique a conexão e tente novamente.');
+    const S=snapshotState(); S.publishedAt=Date.now();
+    const raw=new TextEncoder().encode(JSON.stringify(S));
+    if(btn)btn.textContent='⏳ Compactando dados…';
+    const packed=await _gz(raw), bytes=packed.b;
+    const PART_SIZE=32*1024*1024; // cada arquivo publicado fica bem abaixo do limite de 100 MB do GitHub
+    const zip=new JSZip(), folder=zip.folder('dados'), parts=[];
+    for(let off=0,i=1;off<bytes.length;off+=PART_SIZE,i++){
+      const end=Math.min(off+PART_SIZE,bytes.length), part=bytes.slice(off,end), name='parte-'+String(i).padStart(3,'0')+'.bin';
+      folder.file(name,part,{binary:true,compression:'STORE'}); parts.push({file:name,bytes:part.byteLength});
+    }
+    const manifest={v:1,snapshotVersion:3,publishedAt:S.publishedAt,compression:packed.gz?'gzip':'none',rawBytes:raw.byteLength,packedBytes:bytes.byteLength,parts};
+    folder.file('manifesto.json',JSON.stringify(manifest,null,2));
+    if(btn)btn.textContent='⏳ Montando ZIP…';
+    const blob=await zip.generateAsync({type:'blob',compression:'STORE'});
+    _baixarBlob(blob,'pulso360-dados-publicacao.zip');
+    mostrarPublicacao((raw.byteLength/1048576).toFixed(1),(bytes.byteLength/1048576).toFixed(1),parts.length,S.publishedAt);
+  }catch(e){toast('Erro ao gerar dados: '+(e.message||e));}
+  finally{if(btn){btn.disabled=false;btn.textContent=old||'📦 Gerar dados para publicação';}}
+}
+async function _lerSnapshotMultipart(){
+  const mr=await fetch('dados/manifesto.json?_='+Date.now(),{cache:'no-store'}); if(!mr.ok)return null;
+  const M=await mr.json(); if(!M||M.v!==1||!Array.isArray(M.parts)||!M.parts.length)throw new Error('Manifesto de dados inválido');
+  const arr=await Promise.all(M.parts.map(async p=>{const r=await fetch('dados/'+encodeURIComponent(p.file)+'?_='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error('Parte não encontrada: '+p.file);const b=new Uint8Array(await r.arrayBuffer());if(p.bytes&&b.byteLength!==p.bytes)throw new Error('Parte incompleta: '+p.file);return b;}));
+  const total=arr.reduce((n,b)=>n+b.byteLength,0), joined=new Uint8Array(total); let off=0;arr.forEach(b=>{joined.set(b,off);off+=b.byteLength;});
+  const raw=M.compression==='gzip'?await _gunz(joined):joined, S=JSON.parse(new TextDecoder().decode(raw));
+  if(!S.publishedAt&&M.publishedAt)S.publishedAt=M.publishedAt; return S;
+}
+async function _lerSnapshotLegado(){ try{const r=await fetch('dados-pulso360.json?_='+Date.now(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
+async function carregarDadosPublicados(){
+  try{
+    let S=null; try{S=await _lerSnapshotMultipart();}catch(e){console.warn('Pulso 360: falha na publicação multipart',e);}
+    if(!S)S=await _lerSnapshotLegado();
+    if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3)return false;
+    const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);
+    if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}
+    restoreState(S);const p=$('#dataModeTxt');if(p)p.textContent='dados publicados · '+(pub?new Date(pub).toLocaleString('pt-BR'):'GitHub');const pill=$('#dataModePill');if(pill)pill.classList.add('real');return true;
+  }catch(e){console.warn('Pulso 360: erro ao carregar dados publicados',e);return false;}
+}
+function mostrarPublicacao(rawMb,packedMb,nParts,ts){
+  let bg=document.getElementById('snapModal');if(bg)bg.remove();const link=SP_CFG.redirectUri;
+  const cmd='git add dados && git commit -m "Atualiza dados Pulso 360" && git push origin main';
+  bg=document.createElement('div');bg.id='snapModal';bg.className='modal-bg';bg.style.display='flex';
+  bg.innerHTML='<div class="modal" style="max-width:700px"><h3>📦 Pacote de dados pronto</h3><p class="modal-sub">Foi baixado <b>pulso360-dados-publicacao.zip</b>. A base tinha '+rawMb+' MB e ficou com '+packedMb+' MB compactados em <b>'+nParts+' parte(s)</b>. Extraia o ZIP na pasta do projeto: ele criará/substituirá a pasta <code>dados</code> ao lado do <code>index.html</code>.</p><p class="modal-sub"><b>Importante:</b> o antigo <code>dados-pulso360.json</code> de 143 MB não deve ser publicado.</p><label>Comando CMD<input type="text" id="pubCmd" readonly value="'+cmd.replace(/"/g,'&quot;')+'"></label><label>Link do painel<input type="text" id="pubLink" readonly value="'+link+'"></label><div class="modal-actions"><button class="btn" id="pubClose" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Fechar</button><button class="btn solid" id="pubCopy">Copiar comando</button></div></div>';
+  document.body.appendChild(bg);bg.addEventListener('click',e=>{if(e.target===bg)bg.remove();});$('#pubClose').onclick=()=>bg.remove();$('#pubCopy').onclick=()=>{const v=$('#pubCmd').value;try{navigator.clipboard.writeText(v);}catch(e){$('#pubCmd').select();document.execCommand('copy');}toast('Comando copiado ✓');};
+}
 
 /* ============================================================
    EVENTOS / INIT
@@ -3321,7 +3438,13 @@ applyDadosGate();
   if(!pub && temCache){ const p=$('#dataModeTxt'); if(p && !(RAW&&RAW._savedAt)) p.textContent='dados locais · '+new Date(temCache).toLocaleString('pt-BR'); }
 })();
 // filtros
-['#fFecha','#fOp','#fDia','#fDe','#fAte','#fMot','#fStatus'].forEach(s=>$(s).addEventListener('change',renderAll));
+['#fFecha','#fOp','#fDia','#fDe','#fAte','#fStatus'].forEach(s=>$(s).addEventListener('change',renderAll));
+$('#fMot').addEventListener('focus',openMotMenu);
+$('#fMot').addEventListener('click',openMotMenu);
+$('#fMot').addEventListener('input',()=>{ openMotMenu(); renderMotMenu(); renderAll(); });
+$('#fMotArrow').addEventListener('mousedown',e=>{ e.preventDefault(); const c=$('#fMotCombo'); c.classList.contains('open')?closeMotMenu():(openMotMenu(),$('#fMot').focus()); });
+$('#fMot').addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeMotMenu(); $('#fMot').blur(); } else if(e.key==='Enter'){ const b=$('#fMotMenu .combo-opt.match')||$('#fMotMenu .combo-opt'); if(b){ e.preventDefault(); $('#fMot').value=decodeURIComponent(b.dataset.mot); closeMotMenu(); renderAll(); } } });
+document.addEventListener('mousedown',e=>{ const c=$('#fMotCombo'); if(c&&!c.contains(e.target)) closeMotMenu(); });
 $('#fBusca').addEventListener('input',renderAll);
 $('#clearFilters').onclick=()=>{ ['#fFecha','#fOp','#fDia','#fDe','#fAte','#fMot','#fStatus','#fTipoDiv'].forEach(s=>{const el=$(s); if(el)el.value='';}); $('#fBusca').value=''; renderAll(); };
 // ordenação tabela
@@ -3379,7 +3502,7 @@ if(RAW&&RAW.movUnseg) MOV_UNSEG_STORE=RAW.movUnseg;
 if(RAW&&RAW.bdv){ BDV=RAW.bdv; BDV_N=Object.keys(BDV).length; }
 if(RAW&&RAW.admissao){ ADMISSAO=RAW.admissao.n||null; ADMISSAO_CPF=RAW.admissao.c||null; ADMISSAO_N=ADMISSAO?Object.keys(ADMISSAO).length:0; }
 build(); fillFilters(); renderAll(); updateDropStatus();
-// dados compartilhados são carregados automaticamente de dados-pulso360.json pelo endereço principal.
+// dados compartilhados são carregados automaticamente de dados/manifesto.json + partes pelo endereço principal.
 </script>
 </body>
 </html>
