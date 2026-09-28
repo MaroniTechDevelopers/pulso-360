@@ -3023,7 +3023,7 @@ async function spWalk(siteId, folderId, token, acc, depth, top){
   acc=acc||[]; if(depth>8) return acc;
   // $expand=children: traz os arquivos das subpastas (1 nível abaixo) já nesta listagem,
   // eliminando a listagem separada de cada pasta de DIA (evita o limite 429 do Graph).
-  let url='/sites/'+siteId+'/drive/items/'+folderId+'/children?$top=200&$expand=children($top=999)';
+  let url='/sites/'+siteId+'/drive/items/'+folderId+'/children?$top=200&$expand=children';
   while(url){
     const j=await gget(url.replace('https://graph.microsoft.com/v1.0',''), token);
     for(const it of (j.value||[])){
