@@ -195,7 +195,7 @@
   .lane .imark i{position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:13px;font-style:normal;line-height:1;pointer-events:none;filter:drop-shadow(0 0 3px var(--critical))}
   .lane-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--muted);font-style:italic;letter-spacing:.02em}
   /* ===== linha do tempo SEMANAL com zoom ===== */
-  .wtl-card{padding:14px 16px 10px}
+  .wtl-card{padding:14px 16px 10px;content-visibility:auto;contain-intrinsic-size:auto 260px}
   .wtl{position:relative;margin-top:8px;cursor:grab;user-select:none;overscroll-behavior:contain}
   .wtl.grabbing{cursor:grabbing}
   .wtl-ruler{position:relative;height:15px;margin:0 0 3px 84px}
@@ -248,7 +248,7 @@
   .pendcell{color:var(--pend-ink);font-style:italic}
 
   /* ============ RESUMO SEMANAL (por operação + farol) ============ */
-  .op-block{padding:0;overflow:hidden;margin-bottom:14px}
+  .op-block{padding:0;overflow:hidden;margin-bottom:14px;content-visibility:auto;contain-intrinsic-size:auto 360px}
   .op-block .op-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)}
   .op-block .op-head h3{font-size:14.5px}
   .op-block .op-kpi{font-size:12.5px;color:var(--muted)}
@@ -1059,20 +1059,23 @@ function alertasReais(nome){ const nn=norm(nome); const b=BOL&&BOL[nn], a=ALERTS
 // resumo de alertas de um motorista — usa o relatório real se carregado; senão o cadastro demo
 function alertasResumo(nome, range){
   const nn=norm(nome);
+  const ck=DATA_REV+'|'+nn+'|'+(range?(range.de+'|'+range.ate):'*');
+  if(ALERT_SUM_CACHE.has(ck)) return ALERT_SUM_CACHE.get(ck);
+  const done=v=>{ ALERT_SUM_CACHE.set(ck,v); return v; };
   // com filtro de data: conta por dia (Boletim) ou por evento (Alertas/AL_TL)
   if(range){
-    if(BOL_DAY){ let total=0; const tipos={}; const dm=BOL_DAY[nn]||{}; for(const d in dm){ if(d>=range.de && d<=range.ate){ total+=dm[d].t; const tp=dm[d].tipos; for(const k in tp) tipos[k]=(tipos[k]||0)+tp[k]; } } return {total, badges:[], real:true, niveis:{}, tipos}; }
-    if(AL_TL){ let total=0; const tipos={}, niveis={}; (AL_TL[nn]||[]).forEach(e=>{ if(e[0]>=range.de && e[0]<=range.ate){ total++; const tp=e[3]||'ALERTA'; tipos[tp]=(tipos[tp]||0)+1; const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':''; if(nv)niveis[nv]=(niveis[nv]||0)+1; } }); const badges=NIVEL_DEF.filter(d=>niveis[d.k]).map(d=>({lab:d.lab,ic:d.ic,n:niveis[d.k],hot:d.k==='ALTO'})); return {total, badges, real:true, niveis, tipos}; }
+    if(BOL_DAY){ let total=0; const tipos={}; const dm=BOL_DAY[nn]||{}; for(const d in dm){ if(d>=range.de && d<=range.ate){ total+=dm[d].t; const tp=dm[d].tipos; for(const k in tp) tipos[k]=(tipos[k]||0)+tp[k]; } } return done({total, badges:[], real:true, niveis:{}, tipos}); }
+    if(AL_TL){ let total=0; const tipos={}, niveis={}; (AL_TL[nn]||[]).forEach(e=>{ if(e[0]>=range.de && e[0]<=range.ate){ total++; const tp=e[3]||'ALERTA'; tipos[tp]=(tipos[tp]||0)+1; const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':''; if(nv)niveis[nv]=(niveis[nv]||0)+1; } }); const badges=NIVEL_DEF.filter(d=>niveis[d.k]).map(d=>({lab:d.lab,ic:d.ic,n:niveis[d.k],hot:d.k==='ALTO'})); return done({total, badges, real:true, niveis, tipos}); }
   }
   const real=alertasReais(nome);
   if(real){
     const badges=NIVEL_DEF.filter(d=>real.niveis[d.k]).map(d=>({lab:d.lab,ic:d.ic,n:real.niveis[d.k],hot:d.k==='ALTO'}));
-    return {total:real.total, badges, real:true, niveis:real.niveis, tipos:real.tipos};
+    return done({total:real.total, badges, real:true, niveis:real.niveis, tipos:real.tipos});
   }
-  if(ALERTS||BOL) return {total:0, badges:[], real:true, niveis:{}, tipos:{}};   // relatório real carregado, motorista sem alertas
+  if(ALERTS||BOL) return done({total:0, badges:[], real:true, niveis:{}, tipos:{}});   // relatório real carregado, motorista sem alertas
   const al=drv(nome).alertas||{};
   const badges=ALERTA_DEF.filter(d=>(al[d.k]||0)>0).map(d=>({lab:d.lab,ic:d.ic,n:al[d.k],hot:(al[d.k]||0)>=5}));
-  return {total:totAlertas(al), badges, real:false};
+  return done({total:totAlertas(al), badges, real:false});
 }
 function iniciais(nome){ return String(nome||'?').trim().split(/\s+/).map(p=>p[0]).slice(0,2).join('').toUpperCase(); }
 function tempoDeCasa(admissao){
@@ -1289,38 +1292,63 @@ function build(){
     }
   }
   // Campos normalizados usados pelos filtros. Evita milhares de chamadas a norm() a cada clique/tecla.
+  RECORDS_BY_DRIVER_N=Object.create(null); RECORDS_BY_PLATE_N=Object.create(null); RECORD_DRIVER_NAMES_N=new Set(); RECORD_PLATE_KEYS_N=new Set(); PLATE_RECORD_SUMMARY=Object.create(null); HAS_MOVEMENT_RECORDS=false; GLOBAL_DIV_COUNT=0; PONTO_STATS_GLOBAL={all:Object.create(null),byCpf:Object.create(null),byName:Object.create(null),byCanon:Object.create(null),canonCount:Object.create(null)};
   RECORDS.forEach(r=>{
     r._nMot=norm(r.motoristaEscala);
     r._nPlacas=norm(((r.placas&&r.placas.length)?r.placas:[r.placa||'']).join(' '));
     r._nTrimble=norm(r.trimbleMot);
     r._nBusca=(r._nMot+' '+r._nPlacas+' '+r._nTrimble).trim();
+    const f=fechamento(r.data); r._fechaKey=f?f.key:'';
+    if(r._nMot){ (RECORDS_BY_DRIVER_N[r._nMot]=RECORDS_BY_DRIVER_N[r._nMot]||[]).push(r); RECORD_DRIVER_NAMES_N.add(r._nMot); }
+    if(r._nMot&&r.punches&&r.punches.length){ const _cpf=(NOME2CPF&&NOME2CPF[r._nMot])||'', _cn=nomeCanon(r.motoristaEscala), _pk=_cpf?('C:'+_cpf):('N:'+r._nMot); const _g=(PONTO_STATS_GLOBAL.all[_pk]=PONTO_STATS_GLOBAL.all[_pk]||{key:_pk,nome:r.motoristaEscala,nn:r._nMot,cpf:_cpf,cn:_cn,dias:new Set(),ultimo:'',ops:new Set()}); _g.dias.add(r.data); if(r.data>_g.ultimo)_g.ultimo=r.data; if(r.operacao&&r.operacao!=='—')_g.ops.add(r.operacao); }
+    const _pls=((r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]));
+    _pls.forEach(p=>{ const pk=placaKey(p); if(!pk)return; RECORD_PLATE_KEYS_N.add(pk); (RECORDS_BY_PLATE_N[pk]=RECORDS_BY_PLATE_N[pk]||[]).push(r); const g=(PLATE_RECORD_SUMMARY[pk]=PLATE_RECORD_SUMMARY[pk]||{dias:new Set(),aderSum:0,aderN:0}); g.dias.add(r.data); if(r.aderencia!=null){g.aderSum+=r.aderencia;g.aderN++;} });
+    if(r.movimento&&r.movimento.length) HAS_MOVEMENT_RECORDS=true;
+    if(r.sev!=='conforme') GLOBAL_DIV_COUNT++;
   });
+  Object.values(PONTO_STATS_GLOBAL.all).forEach(g=>{ if(g.cpf)PONTO_STATS_GLOBAL.byCpf[g.cpf]=g; if(g.nn)PONTO_STATS_GLOBAL.byName[g.nn]=g; if(g.cn){PONTO_STATS_GLOBAL.canonCount[g.cn]=(PONTO_STATS_GLOBAL.canonCount[g.cn]||0)+1;PONTO_STATS_GLOBAL.byCanon[g.cn]=g;} });
   RECORDS.sort((a,b)=> a.data<b.data?1:a.data>b.data?-1:(a.operacao.localeCompare(b.operacao)) );
-  DATA_REV++; FILTER_CACHE_KEY=''; FILTER_CACHE_ROWS=null;
+  DATA_REV++; FILTER_CACHE_KEY=''; FILTER_CACHE_ROWS=null; FILTER_CACHE_DIV_COUNT=0;
+  ALERT_SUM_CACHE.clear(); FICHA_METRICS_CACHE.clear(); SEMANA_AGG_CACHE_KEY=''; SEMANA_AGG_CACHE=null; MOTOR_COMPARE_CACHE_KEY=''; MOTOR_COMPARE_CACHE=null; BATIMENTO_CACHE_REV=-1; BATIMENTO_CACHE=null; VIEW_RENDER_KEYS=Object.create(null);
 }
 
 /* ============================================================
    FILTROS
    ============================================================ */
-let DATA_REV=0, FILTER_CACHE_KEY='', FILTER_CACHE_ROWS=null;
+let DATA_REV=0, FILTER_CACHE_KEY='', FILTER_CACHE_ROWS=null, FILTER_CACHE_DIV_COUNT=0;
+let GLOBAL_DIV_COUNT=0;
+let RECORDS_BY_DRIVER_N=Object.create(null), RECORDS_BY_PLATE_N=Object.create(null), RECORD_DRIVER_NAMES_N=new Set(), RECORD_PLATE_KEYS_N=new Set();
+let ALERT_SUM_CACHE=new Map(), FICHA_METRICS_CACHE=new Map();
+let SEMANA_AGG_CACHE_KEY='', SEMANA_AGG_CACHE=null;
+let MOTOR_COMPARE_CACHE_KEY='', MOTOR_COMPARE_CACHE=null;
+let PLATE_RECORD_SUMMARY=Object.create(null), HAS_MOVEMENT_RECORDS=false;
+let BATIMENTO_CACHE_REV=-1, BATIMENTO_CACHE=null;
+let PONTO_STATS_GLOBAL=null;
+let VIEW_RENDER_KEYS=Object.create(null);
 function filterStateKey(){
   return [DATA_REV,$('#fFecha').value,$('#fOp').value,$('#fDia').value,$('#fDe').value,$('#fAte').value,norm($('#fMot').value),$('#fStatus').value,norm($('#fBusca').value)].join('\u0001');
 }
 function filtered(){
   const key=filterStateKey(); if(FILTER_CACHE_ROWS&&key===FILTER_CACHE_KEY) return FILTER_CACHE_ROWS;
   const fe=$('#fFecha').value, op=$('#fOp').value, dia=$('#fDia').value, de=$('#fDe').value, ate=$('#fAte').value, mot=norm($('#fMot').value), st=$('#fStatus').value, q=norm($('#fBusca').value);
-  const out=RECORDS.filter(r=>{
-    if(fe){ const f=fechamento(r.data); if(!f||f.key!==fe) return false; }
-    if(de && r.data<de) return false;
-    if(ate && r.data>ate) return false;
-    if(op && r.operacao!==op) return false;
-    if(dia && r.data!==dia) return false;
-    if(mot && !(r._nMot||norm(r.motoristaEscala)).includes(mot)) return false;
-    if(st && r.sev!==st) return false;
-    if(q && !(r._nBusca||((r._nMot||norm(r.motoristaEscala))+' '+norm(r.placa)+' '+norm(r.trimbleMot))).includes(q)) return false;
-    return true;
-  });
-  FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=out; return out;
+  // Sem filtro: devolve a própria base, sem copiar/percorrer ~87 mil registros.
+  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q){
+    FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=RECORDS; FILTER_CACHE_DIV_COUNT=GLOBAL_DIV_COUNT; return RECORDS;
+  }
+  const out=[]; let div=0;
+  for(let i=0;i<RECORDS.length;i++){
+    const r=RECORDS[i];
+    if(fe && r._fechaKey!==fe) continue;
+    if(de && r.data<de) continue;
+    if(ate && r.data>ate) continue;
+    if(op && r.operacao!==op) continue;
+    if(dia && r.data!==dia) continue;
+    if(mot && !(r._nMot||'').includes(mot)) continue;
+    if(st && r.sev!==st) continue;
+    if(q && !(r._nBusca||'').includes(q)) continue;
+    out.push(r); if(r.sev!=='conforme') div++;
+  }
+  FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=out; FILTER_CACHE_DIV_COUNT=div; return out;
 }
 function debounce(fn,ms){ let t; return function(...a){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,a),ms); }; }
 const renderAllDebounced=debounce(()=>renderAll(),220);
@@ -1368,35 +1396,30 @@ function fillSel(sel,arr,fmt){ const el=$(sel), cur=el.value; el.innerHTML='<opt
    RENDER — KPIs
    ============================================================ */
 function renderKpis(rows){
-  const total=rows.length;
-  const conf=rows.filter(r=>r.sev==='conforme').length;
-  const div=rows.filter(r=>r.sev!=='conforme').length;
-  const dedo=rows.reduce((a,r)=>a+(r.ddReal||0),0);   // horas fora da jornada (com ponto)
-  const ajFrota=aderJornada(rows);                    // aderência de jornada (score positivo)
-  const motsDedo=new Set(rows.filter(r=>(r.ddReal||0)>0).map(r=>r.motoristaEscala)).size;
-  const hex=rows.reduce((a,r)=>a+(r.horaExtra||0),0);
-  const motsHex=new Set(rows.filter(r=>r.horaExtra>0).map(r=>r.motoristaEscala)).size;
-  const movSemPonto=rows.filter(r=>r.movimento.length>0 && r.punches.length===0).length;
-  const pontoSemMov=rows.filter(r=>r.punches.length>0 && r.movimento.length===0).length;
-  const interj=rows.filter(r=>r.interjornada!=null && r.interjornada<CFG.interjornadaMin).length;   // descanso < 11h
-  const motsInterj=new Set(rows.filter(r=>r.interjornada!=null && r.interjornada<CFG.interjornadaMin).map(r=>r.motoristaEscala)).size;
-  // cobertura de ponto: dos dias com movimento, quantos têm ponto
-  const movDays=rows.filter(r=>r.movimento.length>0).length;
+  let conf=0,div=0,dedo=0,hex=0,movSemPonto=0,pontoSemMov=0,interj=0,movDays=0,jCond=0,jFora=0;
+  const motsDedoS=new Set(), motsHexS=new Set(), motsInterjS=new Set(), motSetS=new Set();
+  let kmTot=0,litTot=0;
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i], hasMov=!!(r.movimento&&r.movimento.length), hasP=!!(r.punches&&r.punches.length);
+    if(r.sev==='conforme')conf++;else div++;
+    const dd=r.ddReal||0, he=r.horaExtra||0; dedo+=dd; hex+=he;
+    if(dd>0)motsDedoS.add(r.motoristaEscala); if(he>0)motsHexS.add(r.motoristaEscala);
+    if(hasMov){movDays++; if(!hasP)movSemPonto++;} if(hasP&&!hasMov)pontoSemMov++;
+    if(r.interjornada!=null&&r.interjornada<CFG.interjornadaMin){interj++;motsInterjS.add(r.motoristaEscala);}
+    if(hasP){jCond+=(r.horasMov||0);jFora+=dd;}
+    motSetS.add(r.motoristaEscala); if(!MEDIA_OFF){kmTot+=r.km||0;litTot+=r.litros||0;}
+  }
+  const total=rows.length, motsDedo=motsDedoS.size, motsHex=motsHexS.size, motsInterj=motsInterjS.size;
+  const ajFrota=jCond>0?Math.max(0,Math.round((jCond-jFora)/jCond*100)):null;
   const cobPonto=movDays?Math.round((movDays-movSemPonto)/movDays*100):null;
-  const motSet=[...new Set(rows.map(r=>r.motoristaEscala))];
-  const medFrota=(function(){ if(MEDIA_OFF) return null; if(ABAST){ let km=0,l=0; motSet.forEach(m=>{ const a=ABAST[norm(m)]; if(a){km+=a.km;l+=a.litros;} }); if(l>0) return km/l; }
-    let km=0,l=0; rows.forEach(r=>{km+=r.km||0;l+=r.litros||0;}); if(l>0) return km/l;
-    const a=motSet.map(m=>drv(m).media).filter(v=>v!=null); return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; })();
+  const motSet=[...motSetS];
+  const medFrota=(function(){ if(MEDIA_OFF)return null; if(ABAST){let km=0,l=0;motSet.forEach(m=>{const a=ABAST[norm(m)];if(a){km+=a.km;l+=a.litros;}});if(l>0)return km/l;} if(litTot>0)return kmTot/litTot; const a=motSet.map(m=>drv(m).media).filter(v=>v!=null); return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; })();
   let alertKpi=null;
-  if(ALERTS||BOL){ const rng=activeRange(); let tot=0,alto=0,nmot=0; motSet.forEach(m=>{ const a=alertasResumo(m, rng); if(a&&a.total){ tot+=a.total; nmot++; if(a.niveis&&a.niveis.ALTO)alto++; } }); alertKpi={tot,alto,nmot}; }
-  // ① Identificação (aderência da câmera) da seleção atual — ponderada pelas horas de condução
-  const identSel = aderRecs(rows);   // aderência ponderada pelo tempo (min identificados ÷ min total)
-  // Placas OK × placas p/ ação (equipamento) — pela identificação (PLACA_MOV); respeita o filtro de operação
-  let placOk=null, placAcao=null, placZero=null;
-  if(typeof PLACA_MOV!=='undefined' && PLACA_MOV){ const opF=$('#fOp').value; placOk=0; placAcao=0; placZero=0;
-    for(const pk in PLACA_MOV){ const g=PLACA_MOV[pk]; if(!g.tot) continue; if(opF && operacaoDaPlaca(pk)!==opF) continue;
-      const ader=g.idn/g.tot*100; if(g.idn===0){ placAcao++; placZero++; } else if(ader<CFG.sem){ placAcao++; } else placOk++; } }
-  const opSel = $('#fOp').value;
+  if(ALERTS||BOL){ const rng=activeRange(); let tot=0,alto=0,nmot=0; motSet.forEach(m=>{ const a=alertasResumo(m,rng); if(a&&a.total){tot+=a.total;nmot++;if(a.niveis&&a.niveis.ALTO)alto++;} }); alertKpi={tot,alto,nmot}; }
+  const identSel=aderRecs(rows);
+  let placOk=null,placAcao=null,placZero=null;
+  if(typeof PLACA_MOV!=='undefined'&&PLACA_MOV){ const opF=$('#fOp').value; placOk=0;placAcao=0;placZero=0; for(const pk in PLACA_MOV){const g=PLACA_MOV[pk];if(!g.tot)continue;if(opF&&operacaoDaPlaca(pk)!==opF)continue;const ader=g.idn/g.tot*100;if(g.idn===0){placAcao++;placZero++;}else if(ader<CFG.sem)placAcao++;else placOk++;} }
+  const opSel=$('#fOp').value;
   const K=[
     {lab:'① Identificação'+(opSel?' — '+opSel:''),val:(identSel==null?'—':identSel+'<small>%</small>'),sub:(identSel==null?'sem dado de identificação':'aderência da câmera'+(opSel?' na operação':' (frota)')),ac:(identSel==null?'var(--muted)':(identSel>=CFG.sem?'var(--good)':'var(--critical)')),tab:'semid'},
     {lab:'③ Aderência de jornada',val:(ajFrota==null?'—':ajFrota+'<small>%</small>'),sub:hDec(dedo)+' fora da jornada · '+motsDedo+' motorista(s)',ac:ajColor(ajFrota),tab:'diverg'},
@@ -1404,19 +1427,16 @@ function renderKpis(rows){
     {lab:'Movimento sem ponto',val:movSemPonto,sub:'dirigiu e não bateu ponto (pendência)',ac:'var(--critical)',tab:'diverg'},
     {lab:'Ponto sem movimento',val:pontoSemMov,sub:'bateu ponto e não dirigiu',ac:'var(--warning)',tab:'tabela'},
     {lab:'Interjornada < 11h',val:interj,sub:motsInterj+' motorista(s) · descanso insuficiente',ac:interj>0?'var(--critical)':'var(--good)',tab:'diverg'},
-    alertKpi
-      ? {lab:'⚠ Alertas (câmera/telemetria)',val:alertKpi.tot.toLocaleString('pt-BR'),sub:(alertKpi.alto?alertKpi.alto+' motorista(s) c/ nível alto':alertKpi.nmot+' motorista(s) c/ alerta'),ac:'var(--s7)',tab:'linha'}
-      : {lab:'④ Média da frota',val:(medFrota==null?'—':medFrota.toFixed(2).replace('.',',')),sub:(medFrota==null?'plugar Marcante':'meta '+CFG.meta.toFixed(2).replace('.',',')),ac:(medFrota!=null&&medFrota>=CFG.meta)?'var(--good)':'var(--muted)',tab:'media'},
+    alertKpi?{lab:'⚠ Alertas (câmera/telemetria)',val:alertKpi.tot.toLocaleString('pt-BR'),sub:(alertKpi.alto?alertKpi.alto+' motorista(s) c/ nível alto':alertKpi.nmot+' motorista(s) c/ alerta'),ac:'var(--s7)',tab:'linha'}:{lab:'④ Média da frota',val:(medFrota==null?'—':medFrota.toFixed(2).replace('.',',')),sub:(medFrota==null?'plugar Marcante':'meta '+CFG.meta.toFixed(2).replace('.',',')),ac:(medFrota!=null&&medFrota>=CFG.meta)?'var(--good)':'var(--muted)',tab:'media'},
     {lab:'Horas extras (&gt;7h20)',val:hDec(hex),sub:motsHex+' motorista(s) acima da jornada',ac:hex>0?'var(--warning)':'var(--muted)',tab:'tabela'},
   ];
-  if(MEDIA_OFF){ const i=K.findIndex(k=>k&&k.tab==='media'); if(i>=0) K.splice(i,1); }
-  if(placOk!=null){ const placTot=placOk+placAcao; K.splice(1,0,
+  if(MEDIA_OFF){const i=K.findIndex(k=>k&&k.tab==='media');if(i>=0)K.splice(i,1);}
+  if(placOk!=null){const placTot=placOk+placAcao;K.splice(1,0,
     {lab:'Placas (total)'+(opSel?' — '+opSel:''),val:placTot,sub:'veículos c/ movimento'+(opSel?' na operação':' na frota'),ac:'var(--s2)',tab:'semid'},
     {lab:'Placas OK (câmera)',val:placOk,sub:'identificando dentro do mínimo',ac:'var(--good)',tab:'semid'},
     {lab:'Placas p/ ação',val:placAcao,sub:(placZero?placZero+' sem NENHUMA ID · ':'')+'equipamento/sistêmico',ac:placAcao?'var(--critical)':'var(--good)',tab:'semid'}
-  ); }
-  $('#kpis').innerHTML=K.map(k=>`<div class="card kpi" ${k.tab?`data-tab="${k.tab}" title="ver na aba"`:''}><div class="accent" style="background:${k.ac}"></div>
-     <div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+  );}
+  $('#kpis').innerHTML=K.map(k=>`<div class="card kpi" ${k.tab?`data-tab="${k.tab}" title="ver na aba"`:''}><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
 }
 
 /* ============================================================
@@ -1436,30 +1456,30 @@ function riscoComposto(m, alR){
    RENDER — RESUMO SEMANAL (Capivara: por operação + farol)
    ============================================================ */
 function semanaAgg(rows){
-  // catálogo de semanas presentes (objeto {key,label,mesKey,mesLabel}), ordenado pela data
-  const wkMap={}; rows.forEach(r=>{ if(r.semKey && !wkMap[r.semKey]) wkMap[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel}; });
-  const weeks=Object.values(wkMap).sort((a,b)=>a.key<b.key?-1:1);
-  const ultima=weeks.length?weeks[weeks.length-1].key:null;
-  const ops=[...new Set(rows.map(r=>r.operacao))].sort();
-  const data=ops.map(op=>{
-    const opRows=rows.filter(r=>r.operacao===op);
-    const mots={};
-    opRows.forEach(r=>{ const m=(mots[r.motoristaEscala]=mots[r.motoristaEscala]||{nome:r.motoristaEscala,placa:'',dd:0,ddReal:0,dias:0,mov:0,ponto:0,km:0,litros:0,semanas:{},semelSum:0,semelN:0,recs:[],idDiv:0,pend:0});
-      m.dd+=r.horasDedoDuro; m.ddReal+=(r.ddReal||0); if(r.horasDedoDuro>0)m.dias++; m.mov+=r.horasMov; m.ponto+=r.horasPonto; m.km+=r.km||0; m.litros+=r.litros||0; if(r.placa)m.placa=r.placa;
-      m.semanas[r.semKey]=(m.semanas[r.semKey]||0)+(r.ddReal||0);   // farol semanal = fora da jornada REAL (com ponto)
-      if(r.semelhanca!=null){ m.semelSum+=r.semelhanca; m.semelN++; }
-      m.recs.push(r);
-      if(r.idDivergente) m.idDiv++; if(r.sev==='pendente') m.pend++; });
-    const rng=activeRange();
-    Object.values(mots).forEach(m=>{ const d=drv(m.nome); const ab=ABAST&&ABAST[norm(m.nome)]; m.media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(m.litros>0?(m.km/m.litros):d.media)); m.op=op; m.meta=metaVeic(m.placa,op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
-      m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs);   // ponderado pelo tempo (min identificados ÷ total)
-      m.aj=aderJornada(m.recs);   // aderência de jornada (score positivo)
-      m.risco=riscoComposto(m, alertasResumo(m.nome, rng)); m.farolUlt=m.risco.cls; });
-    return { op, list:Object.values(mots).sort((a,b)=>{ const rk={vermelho:0,amarelo:1,verde:2}; return (rk[a.risco.cls]-rk[b.risco.cls]) || b.ddReal-a.ddReal; }),
-             dd:opRows.reduce((a,r)=>a+(r.ddReal||0),0), aj:aderJornada(opRows),
-             motsDedo:Object.values(mots).filter(m=>m.ddReal>0).length };
+  const cacheKey=(rows===FILTER_CACHE_ROWS?FILTER_CACHE_KEY:('rows:'+rows.length+':'+DATA_REV))+'|semana';
+  if(SEMANA_AGG_CACHE&&SEMANA_AGG_CACHE_KEY===cacheKey) return SEMANA_AGG_CACHE;
+  const wkMap=Object.create(null), opMap=Object.create(null);
+  rows.forEach(r=>{
+    if(r.semKey && !wkMap[r.semKey]) wkMap[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};
+    const op=r.operacao||'—'; const og=(opMap[op]=opMap[op]||{op,dd:0,motsDedo:new Set(),mots:Object.create(null),opRows:[]});
+    og.opRows.push(r); og.dd+=(r.ddReal||0); if((r.ddReal||0)>0)og.motsDedo.add(r.motoristaEscala);
+    const mn=r.motoristaEscala||'—'; const m=(og.mots[mn]=og.mots[mn]||{nome:mn,placa:'',dd:0,ddReal:0,dias:0,mov:0,ponto:0,km:0,litros:0,semanas:{},semelSum:0,semelN:0,recs:[],idDiv:0,pend:0});
+    m.dd+=r.horasDedoDuro; m.ddReal+=(r.ddReal||0); if(r.horasDedoDuro>0)m.dias++; m.mov+=r.horasMov; m.ponto+=r.horasPonto; m.km+=r.km||0; m.litros+=r.litros||0; if(r.placa)m.placa=r.placa;
+    m.semanas[r.semKey]=(m.semanas[r.semKey]||0)+(r.ddReal||0);
+    if(r.semelhanca!=null){m.semelSum+=r.semelhanca;m.semelN++;}
+    m.recs.push(r); if(r.idDivergente)m.idDiv++; if(r.sev==='pendente')m.pend++;
   });
-  return { weeks, ultima, data };
+  const weeks=Object.values(wkMap).sort((a,b)=>a.key<b.key?-1:1);
+  const ultima=weeks.length?weeks[weeks.length-1].key:null, rng=activeRange();
+  const data=Object.values(opMap).sort((a,b)=>a.op.localeCompare(b.op,'pt-BR')).map(og=>{
+    const list=Object.values(og.mots);
+    list.forEach(m=>{ const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)]; m.media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(m.litros>0?(m.km/m.litros):d.media)); m.op=og.op; m.meta=metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
+      m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs); m.aj=aderJornada(m.recs);
+      m._alR=alertasResumo(m.nome,rng); m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls; });
+    list.sort((a,b)=>{const rk={vermelho:0,amarelo:1,verde:2};return (rk[a.risco.cls]-rk[b.risco.cls])||b.ddReal-a.ddReal;});
+    return {op:og.op,list,dd:og.dd,aj:aderJornada(og.opRows),motsDedo:og.motsDedo.size};
+  });
+  const out={weeks,ultima,data}; SEMANA_AGG_CACHE_KEY=cacheKey; SEMANA_AGG_CACHE=out; return out;
 }
 function renderSemana(rows){
   const box=$('#semanaBox');
@@ -1477,7 +1497,7 @@ function capinha(m,weeks){
   const strip=farolStripHTML(m.semanas, weeks, {size:'sm'});
   const medaOk = m.media!=null && m.media>=(m.meta!=null?m.meta:CFG.meta);
   const medaTxt = m.media!=null ? m.media.toFixed(2).replace('.',',') : '—';
-  const alR = alertasResumo(m.nome); const totAl = alR.total;
+  const alR = m._alR || alertasResumo(m.nome,activeRange()); const totAl = alR.total;
   const alBadges = alR.badges.slice(0,3).map(b=>`<span class="abadge ${b.hot?'hot':''}" title="${b.lab}">${b.ic}${b.n}</span>`).join('') || '<span class="abadge ok">sem alertas</span>';
   return `<button class="capinha" data-mot="${encodeURIComponent(m.nome)}">
     <div class="cap-top">
@@ -1598,11 +1618,12 @@ function buildPlacaCards(placaQ, prefix, cap){
   const passDia=d=>{ if(fe){const f=fechamento(d); if(!f||f.key!==fe) return false;} if(dia&&d!==dia) return false; if(de&&d<de) return false; if(ate&&d>ate) return false; return true; };
   // PLACA|DIA → {placa,data,id:[{ini,fim,km,drv}], un:[[ini,fim]]}
   const PD={}; const getPD=(pl,d)=>{ const k=pl+'|'+d; return (PD[k]=PD[k]||{placa:pl,data:d,id:[],un:[]}); };
-  // identificado (dos registros — mostra a movimentação da placa mesmo que o motorista não bata com a busca)
-  RECORDS.forEach(r=>{ const pl=rP(r).map(placaKey).find(p=>p.includes(pk0)); if(!pl) return; if(!passDia(r.data)) return; if(op && r.operacao!==op) return;
-    const g=getPD(pl,r.data); const idDiv=!!r.idDivergente; const idWho=r.idDivergente?(r.trimbleMot||'') : '';
-    r.mov.forEach(s=> g.id.push({ini:s.ini,fim:s.fim,km:s.km||0,drv:r.motoristaEscala,div:idDiv,who:idWho}) );
-    if(!MOV_UNSEG_STORE && r.movUnid) r.movUnid.forEach(s=> g.un.push([s.ini,s.fim]) ); });
+  // identificado: usa índice por placa; não percorre todos os registros para abrir uma única placa.
+  const plateKeys=Object.keys(RECORDS_BY_PLATE_N).filter(pk=>pk.includes(pk0)); const seenRec=new Set();
+  plateKeys.forEach(pl=>{ (RECORDS_BY_PLATE_N[pl]||[]).forEach(r=>{ if(seenRec.has(r))return; seenRec.add(r); if(!passDia(r.data))return; if(op&&r.operacao!==op)return;
+    const actual=rP(r).map(placaKey).find(p=>p.includes(pk0))||pl, g=getPD(actual,r.data), idDiv=!!r.idDivergente, idWho=r.idDivergente?(r.trimbleMot||''):'';
+    r.mov.forEach(s=>g.id.push({ini:s.ini,fim:s.fim,km:s.km||0,drv:r.motoristaEscala,div:idDiv,who:idWho}));
+    if(!MOV_UNSEG_STORE&&r.movUnid)r.movUnid.forEach(s=>g.un.push([s.ini,s.fim])); }); });
   // sem identificação (do store por placa|dia — inclui placas sem NENHUM condutor identificado)
   if(MOV_UNSEG_STORE){ for(const key in MOV_UNSEG_STORE){ const i=key.indexOf('|'), pk=key.slice(0,i), d=key.slice(i+1); if(!pk.includes(pk0)) continue; if(!passDia(d)) continue; if(op){ const o=operacaoDaPlaca(pk); if(o && o!==op) continue; } const g=getPD(pk,d); MOV_UNSEG_STORE[key].forEach(s=>g.un.push(s)); } }
   // agrupa por placa+fechamento (ou por placa+dia quando um dia está filtrado)
@@ -1651,9 +1672,9 @@ function renderTimelines(rows){
   const box=$('#timelines');
   // modo placa: se a busca casa com uma placa (e não com um nome), mostra a movimentação da placa
   const q=$('#fBusca').value.trim(); const qn=norm(q), qk=placaKey(q); const dayF=dayFilter();
-  const isName = qn && RECORDS.some(r=>norm(r.motoristaEscala).includes(qn));
-  const inRecs = RECORDS.some(r=>((r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[])).some(p=>placaKey(p).includes(qk)));
-  const inPlacaMov = PLACA_MOV && Object.keys(PLACA_MOV).some(p=>p.includes(qk));
+  const isName = qn && [...RECORD_DRIVER_NAMES_N].some(n=>n.includes(qn));
+  const inRecs = qk && [...RECORD_PLATE_KEYS_N].some(p=>p.includes(qk));
+  const inPlacaMov = qk && PLACA_MOV && Object.keys(PLACA_MOV).some(p=>p.includes(qk));
   const isPlaca = qk.length>=4 && !isName && (inRecs||inPlacaMov);
   if(isPlaca){
     const {html,ids}=buildPlacaCards(q,'ztl',60);
@@ -1661,6 +1682,9 @@ function renderTimelines(rows){
     ids.forEach(setupZoom); wireZtlDrag(); return;
   }
   if(!rows.length){ box.innerHTML='<div class="empty">Nenhum registro para o filtro atual.</div>'; for(const k in ZTL) if(k.indexOf('ztl')===0) delete ZTL[k]; return; }
+  // Linha do tempo é a visualização mais cara. Sem foco, evita criar milhares de segmentos no DOM.
+  const motF=$('#fMot').value.trim(), hasFocus=!!(motF||q||dayF||$('#fDe').value||$('#fAte').value||$('#fFecha').value||$('#fOp').value);
+  if(rows.length>2500 && !hasFocus){ box.innerHTML='<div class="empty"><b>Linha do tempo otimizada.</b><br>Há '+rows.length.toLocaleString('pt-BR')+' registros no período. Selecione motorista, operação, fechamento, dia ou placa para abrir a evidência sem travar o navegador.</div>'; for(const k in ZTL) if(k.indexOf('ztl')===0) delete ZTL[k]; return; }
   const {html,ids}=buildWeekCards(rows,'ztl',60,true, dayF?'dia':'fecha');
   box.innerHTML=(dayF?'<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">📅 <b>Dia '+brDate(dayF)+'</b>: linha do tempo só desse dia (00:00–24:00)</div>':'')+html;
   ids.forEach(setupZoom); wireZtlDrag();
@@ -1773,10 +1797,11 @@ function timelinesHTML(rows){
 let fichaAtual=null;
 function openFicha(nome){
   fichaAtual=nome;
-  renderFicha();
   $$('#tabs button').forEach(x=>x.classList.remove('active'));
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-ficha'));
+  const fb=$('#fichaBox'); if(fb) fb.innerHTML='<div class="empty">Carregando motorista…</div>';
   window.scrollTo({top:0,behavior:'smooth'});
+  requestAnimationFrame(()=>renderFicha());
 }
 function voltarResumo(){
   fichaAtual=null;
@@ -1804,8 +1829,10 @@ function periodoLabel(){
 }
 // métricas da ficha (fonte única — usada pela ficha na tela e pelo PDF)
 function fichaMetrics(nome){
+  const cacheKey=DATA_REV+'|'+filterStateKey()+'|'+norm(nome); if(FICHA_METRICS_CACHE.has(cacheKey)) return FICHA_METRICS_CACHE.get(cacheKey);
   const _fe=$('#fFecha').value, _op=$('#fOp').value, _diaF=$('#fDia').value, _de=$('#fDe').value, _ate=$('#fAte').value, _stt=$('#fStatus').value;
-  const recs=RECORDS.filter(r=>{ if(r.motoristaEscala!==nome) return false;
+  const src=RECORDS_BY_DRIVER_N[norm(nome)]||[];
+  const recs=src.filter(r=>{
     if(_fe){ const f=fechamento(r.data); if(!f||f.key!==_fe) return false; }
     if(_op && r.operacao!==_op) return false;
     if(_diaF && r.data!==_diaF) return false;
@@ -1836,7 +1863,7 @@ function fichaMetrics(nome){
   const diasComMov=recs.filter(r=>r.primMov!=null).length;
   const interjViol=recs.filter(r=>r.interjornada!=null && r.interjornada<CFG.interjornadaMin).length;
   const restMinF=recs.reduce((m,r)=>(r.interjornada!=null?(m==null?r.interjornada:Math.min(m,r.interjornada)):m),null);
-  return {nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,risco,condDiv,diasComMov,interjViol,restMinF};
+  const out={nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,risco,condDiv,diasComMov,interjViol,restMinF}; FICHA_METRICS_CACHE.set(cacheKey,out); return out;
 }
 // pontos críticos e positivos p/ o relatório executivo
 function fichaPontos(M){
@@ -1897,7 +1924,7 @@ function renderFicha(){
   if(TRAT_CACHE===null && !_tratSyncTried){ _tratSyncTried=true; tratSyncFromSP(false).then(ok=>{ if(ok && fichaAtual===nome) renderFicha(); }); }
   // este motorista rodou em outras operações fora do filtro atual? (evita o "só apareceu 1 dia")
   const _opFilter=$('#fOp').value;
-  const allDrvRecs=RECORDS.filter(r=>r.motoristaEscala===nome);
+  const allDrvRecs=RECORDS_BY_DRIVER_N[norm(nome)]||[];
   const allOps=[...new Set(allDrvRecs.map(r=>r.operacao).filter(o=>o&&o!=='—'))];
   const outrasOps = _opFilter ? allOps.filter(o=>o!==_opFilter) : [];
   const diasOutras = _opFilter ? allDrvRecs.filter(r=>r.operacao&&r.operacao!=='—'&&r.operacao!==_opFilter).length : 0;
@@ -2232,7 +2259,7 @@ function renderTable(rows){
 function cpfCurto(cpf){ const c=cpfKey(cpf); return c?('CPF ••••'+c.slice(-4)):'—'; }
 function motStatusHtml(st){ const s=st||'SEM STATUS', cls=s==='ATIVO'?'ativo':s==='INATIVO'?'inativo':s==='CONFLITO'?'conflito':'semstatus'; const lab=s==='SEM STATUS'?'Sem status':(s==='CONFLITO'?'Conflito':s.charAt(0)+s.slice(1).toLowerCase()); return '<span class="mot-status '+cls+'">'+lab+'</span>'; }
 function pontoStatsMotoristas(){
-  const rng=activeRange(), op=$('#fOp').value; const byCpf={},byName={},byCanon={},canonCount={};
+  const rng=activeRange(), op=$('#fOp').value; if(!rng&&!op&&PONTO_STATS_GLOBAL) return PONTO_STATS_GLOBAL; const byCpf={},byName={},byCanon={},canonCount={};
   const all={};
   RECORDS.forEach(r=>{ if(!(r.punches&&r.punches.length)) return; if(rng&&(r.data<rng.de||r.data>rng.ate))return; if(op&&r.operacao!==op)return;
     const nome=r.motoristaEscala||'',nn=norm(nome),cpf=(NOME2CPF&&NOME2CPF[nn])||'',cn=nomeCanon(nome),key=cpf?('C:'+cpf):('N:'+nn);
@@ -2246,10 +2273,12 @@ function classMotCad(status,temPonto,soPonto){ if(soPonto)return 'SO_PONTO'; if(
 function classMotLabel(k){ return {ATIVO_PONTO:'Ativo + ponto',ATIVO_SEM_PONTO:'Ativo sem ponto',INATIVO_PONTO:'Inativo + ponto',INATIVO_SEM_PONTO:'Inativo sem ponto',SEMSTATUS_PONTO:'Sem status + ponto',SEMSTATUS_SEM_PONTO:'Sem status e sem ponto',SO_PONTO:'Só no Ponto / não localizado no TMS',CONFLITO:'Conflito de status no TMS'}[k]||k; }
 function classMotCls(k){ if(k==='INATIVO_PONTO'||k==='CONFLITO'||k==='SO_PONTO')return 'bad'; if(k==='ATIVO_SEM_PONTO'||k.startsWith('SEMSTATUS'))return 'warn'; if(k==='ATIVO_PONTO')return 'ok'; return 'muted'; }
 function motoristasComparados(){
+  const rng=activeRange(), op=$('#fOp').value, ck=DATA_REV+'|'+op+'|'+(rng?(rng.de+'|'+rng.ate):'*');
+  if(MOTOR_COMPARE_CACHE&&MOTOR_COMPARE_CACHE_KEY===ck) return MOTOR_COMPARE_CACHE;
   const ps=pontoStatsMotoristas(), used=new Set(), rows=[];
   Object.values(MOTORISTAS_TMS||{}).forEach(c=>{ const pt=matchPontoCad(c,ps); if(pt)used.add(pt.key); const st=c.status||'SEM STATUS', tem=!!pt, k=classMotCad(st,tem,false); rows.push({nome:c.nome||(pt&&pt.nome)||'—',cpf:c.cpf||'',status:st,ponto:tem,ultimo:pt?pt.ultimo:'',dias:pt?pt.dias.size:0,admissao:c.admissao||admissaoRealDe(c.nome)||'',centro:c.centro||'',cargo:c.cargo||'',classif:k,soPonto:false}); });
   Object.values(ps.all).forEach(pt=>{ if(used.has(pt.key))return; rows.push({nome:pt.nome,cpf:pt.cpf||'',status:'NÃO LOCALIZADO',ponto:true,ultimo:pt.ultimo,dias:pt.dias.size,admissao:admissaoRealDe(pt.nome)||'',centro:[...pt.ops].join(', '),cargo:'',classif:'SO_PONTO',soPonto:true}); });
-  return rows;
+  MOTOR_COMPARE_CACHE_KEY=ck; MOTOR_COMPARE_CACHE=rows; return rows;
 }
 let MOTORISTAS_ROWS=[];
 function motCadPassClass(r,f){ if(!f)return true; if(f==='ATIVOS')return r.status==='ATIVO'; if(f==='INATIVOS')return r.status==='INATIVO'; if(f==='COM_PONTO')return r.ponto; if(f==='SEM_PONTO')return !r.ponto; if(f==='SEM_STATUS')return r.status==='SEM STATUS'; return r.classif===f; }
@@ -2286,8 +2315,18 @@ function atualizaDataMode(){
   }else{ pill.classList.remove('real'); txt.textContent='dados de demonstração'; }
 }
 function renderAll(){
-  const rows=filtered(), view=activeViewName();
-  // Atualiza apenas o que está visível. As abas pesadas passam a ser calculadas sob demanda.
+  const view=activeViewName(), fkey=filterStateKey();
+  const rowViews=new Set(['semana','aderencia','linha','diverg','media','tabela']);
+  let rows=null; if(rowViews.has(view)) rows=filtered();
+  const rng=activeRange();
+  let viewKey;
+  if(rowViews.has(view)) viewKey=DATA_REV+'|'+fkey+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'');
+  else if(view==='motoristas') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+(rng?(rng.de+'|'+rng.ate):'*');
+  else if(view==='semid') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+CFG.sem;
+  else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view;
+  else viewKey=DATA_REV+'|'+view;
+  // Se a aba já foi desenhada para o mesmo estado, preserva o DOM e evita recálculo ao alternar abas.
+  if(view!=='ficha'&&VIEW_RENDER_KEYS[view]===viewKey){ const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT;bd.textContent=n>999?'999+':n;} atualizaDataMode(); return; }
   if(view==='semana'){ renderKpis(rows); renderSemana(rows); }
   else if(view==='motoristas') renderMotoristas();
   else if(view==='aderencia') renderAderencia(rows);
@@ -2298,17 +2337,17 @@ function renderAll(){
   else if(view==='operacao') renderBatimento();
   else if(view==='saude') renderSaude();
   else if(view==='semid') renderPlacasSemId();
-  else if(view==='ficha' && fichaAtual) renderFicha();
-  const bd=$('#badgeDiv'); if(bd){ const n=rows.reduce((a,r)=>a+(r.sev!=='conforme'?1:0),0); bd.textContent=n>999?'999+':n; }
+  else if(view==='ficha'&&fichaAtual) renderFicha();
+  if(view!=='ficha') VIEW_RENDER_KEYS[view]=viewKey;
+  const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT;bd.textContent=n>999?'999+':n;}
   atualizaDataMode();
 }
 let SAUDE_ROWS=[];
 function renderSaude(){
   const kbox=$('#saudeKpis'), box=$('#saudeBox');
   if(!SAUDE){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Carregue o Excel de <b>Saúde das câmeras</b> na aba <b>Dados</b> (aba BASE: CAVALO, OP, STATUS, FUNCIONALDADE) para ver o plano de manutenção.</div>'; SAUDE_ROWS=[]; return; }
-  // identificação real por placa (dos registros carregados)
-  const idBy={};
-  RECORDS.forEach(r=>{ (r.placas&&r.placas.length?r.placas:(r.placa?[r.placa]:[])).forEach(p=>{ const pk=placaKey(p); const g=(idBy[pk]=idBy[pk]||{dias:new Set(),aderSum:0,aderN:0}); g.dias.add(r.data); if(r.aderencia!=null){g.aderSum+=r.aderencia;g.aderN++;} }); });
+  // resumo por placa já é pré-calculado no build; evita varrer todos os registros ao trocar de aba.
+  const idBy=PLATE_RECORD_SUMMARY||{};
   const temRecs=RECORDS.length>0;
   const rk={critico:0,atencao:1,pendente:2,conforme:3};
   const rows=Object.keys(SAUDE).map(pk=>{ const s=SAUDE[pk]; const f=camFarol(s.func,s.status); const id=idBy[pk];
@@ -2356,7 +2395,7 @@ function exportSaude(){
 function identCoverageWarning(){
   if(!REAL) return '';
   if(BDV && Object.keys(BDV).length) return '';   // Boletim do Veículo dá identificação real por placa/dia — sem caveat
-  if(!RECORDS.some(r=>r.movimento&&r.movimento.length)) return '';
+  if(!HAS_MOVEMENT_RECORDS) return '';
   if(MOV_UNSEG_STORE && Object.keys(MOV_UNSEG_STORE).length>0) return '';
   const bolSemMot = BOL && Object.values(BOL).some(a=>a.tipos && a.tipos['Sem Motorista']);
   return '<div class="card" style="grid-column:1/-1;margin-bottom:12px;padding:11px 14px;font-size:12.5px;border-color:color-mix(in srgb,var(--warning) 50%,var(--border))">'+
@@ -3359,18 +3398,12 @@ function ingestTMS(rows){
 // BATIMENTO de operação: placa → UO Trimble (alertas) × centro de resultado (TMS)
 function batimentoRows(){
   if(!PLACA_UO || !TMS) return null;
-  const rk={divergente:0,nao_op:1,sem_tms:2,ok:3}; const rows=[];
-  Object.keys(PLACA_UO).forEach(pl=>{
-    const t=PLACA_UO[pl]; const famT=opFamily(t.uoCurta); const m=TMS[pl];
-    let status,centro='',famM='';
-    if(!m || !m.centro){ status='sem_tms'; }
-    else { centro=m.centro; famM=m.fam;
-      if(famM==='(não-operacional)') status='nao_op';
-      else if(norm(famM)===norm(famT)) status='ok'; else status='divergente'; }
-    rows.push({placa:pl, uo:t.uoCurta, famT, centro, famM, status, tms:m});
-  });
-  rows.sort((a,b)=> (rk[a.status]-rk[b.status]) || a.placa.localeCompare(b.placa));
-  return rows;
+  if(BATIMENTO_CACHE_REV===DATA_REV&&BATIMENTO_CACHE) return BATIMENTO_CACHE;
+  const rk={divergente:0,nao_op:1,sem_tms:2,ok:3}, rows=[];
+  Object.keys(PLACA_UO).forEach(pl=>{ const t=PLACA_UO[pl],famT=opFamily(t.uoCurta),m=TMS[pl]; let status,centro='',famM='';
+    if(!m||!m.centro)status='sem_tms'; else{centro=m.centro;famM=m.fam;if(famM==='(não-operacional)')status='nao_op';else if(norm(famM)===norm(famT))status='ok';else status='divergente';}
+    rows.push({placa:pl,uo:t.uoCurta,famT,centro,famM,status,tms:m}); });
+  rows.sort((a,b)=>(rk[a.status]-rk[b.status])||a.placa.localeCompare(b.placa)); BATIMENTO_CACHE_REV=DATA_REV; BATIMENTO_CACHE=rows; return rows;
 }
 
 // ===== IMPORTAÇÃO MANUAL — múltiplos arquivos também para bases cadastrais/Excel =====
@@ -3735,17 +3768,17 @@ $('#tabs').addEventListener('click',e=>{ const b=e.target.closest('button'); if(
 // KPIs clicáveis → abrem a aba que detalha a informação
 $('#kpis').addEventListener('click',e=>{ const c=e.target.closest('.kpi[data-tab]'); if(!c)return; goTab(c.dataset.tab); });
 // foca um registro (motorista+dia) na Linha do tempo
-function focusRecord(mot, dia){ ['#fFecha','#fOp','#fStatus'].forEach(s=>$(s).value=''); $('#fBusca').value=''; $('#fDe').value=''; $('#fAte').value=''; $('#fMot').value=mot; $('#fDia').value=dia; renderAll(); goTab('linha'); }
+function focusRecord(mot, dia){ ['#fFecha','#fOp','#fStatus'].forEach(s=>$(s).value=''); $('#fBusca').value=''; $('#fDe').value=''; $('#fAte').value=''; $('#fMot').value=mot; $('#fDia').value=dia; goTab('linha'); }
 // clicar num apontamento das Divergências → linha do tempo daquele motorista+dia
 $('#divList').addEventListener('click',e=>{ const c=e.target.closest('.divcard'); if(!c)return; focusRecord(decodeURIComponent(c.dataset.mot), c.dataset.dia); });
 $('#fTipoDiv').addEventListener('change',()=>renderDiverg(filtered()));
 // clicar numa operação na aba Aderência → Resumo dessa operação
 $('#aderBox').addEventListener('click',e=>{
-  const gp=e.target.closest('[data-goplacas]'); if(gp){ $('#fOp').value=decodeURIComponent(gp.dataset.goplacas); $('#fBusca').value=''; renderAll(); goTab('semid'); return; }
-  const c=e.target.closest('.adercard'); if(!c)return; $('#fOp').value=decodeURIComponent(c.dataset.op); renderAll(); goTab('semana'); });
-$('#aderKpis').addEventListener('click',e=>{ if(e.target.closest('[data-goplacas-all]')){ $('#fBusca').value=''; renderAll(); goTab('semid'); } });
+  const gp=e.target.closest('[data-goplacas]'); if(gp){ $('#fOp').value=decodeURIComponent(gp.dataset.goplacas); $('#fBusca').value=''; goTab('semid'); return; }
+  const c=e.target.closest('.adercard'); if(!c)return; $('#fOp').value=decodeURIComponent(c.dataset.op); goTab('semana'); });
+$('#aderKpis').addEventListener('click',e=>{ if(e.target.closest('[data-goplacas-all]')){ $('#fBusca').value=''; goTab('semid'); } });
 // helper: focar uma placa na Linha do tempo (modo placa)
-function focusPlaca(placa){ $('#fBusca').value=placa; $('#fDia').value=''; $('#fDe').value=''; $('#fAte').value=''; renderAll(); goTab('linha'); }
+function focusPlaca(placa){ $('#fBusca').value=placa; $('#fDia').value=''; $('#fDe').value=''; $('#fAte').value=''; goTab('linha'); }
 // clicar numa placa em "Placas sem ID" / Saúde / Operação por placa → Linha do tempo daquela placa
 $('#semidBox').addEventListener('click',e=>{ const tr=e.target.closest('.semidrow'); if(tr) focusPlaca(tr.dataset.placa); });
 $('#saudeBox').addEventListener('click',e=>{ const tr=e.target.closest('.sauderow'); if(tr) focusPlaca(tr.dataset.placa); });
