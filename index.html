@@ -1101,6 +1101,7 @@ let SAUDE = null, SAUDE_N = 0;   // Saúde das câmeras: placa(key) → {op,stat
 let BDV = null, BDV_N = 0;       // Boletim do Veículo: placa(key) → {dias,diasId,semMot,camN,cam,uo,ult,km,litros} — identificação/UO/câmera por placa
 let PED_OP = null, PED_DRV = null, PED_N = 0;   // Pedidos: placa|dia → centro de resultado (operação) e CPF do condutor planejado
 let CPF2NOME = null, NOME2CPF = null;           // de-para CPF ↔ nome (do Boletim/jornada)
+let DATA_UPDATED_AT = (RAW&&RAW._savedAt)?+RAW._savedAt:0; // data/hora real da ultima atualizacao/publicacao da base
 function cpfKey(v){
   let d=String(v==null?'':v).replace(/\D+/g,'');
   // Excel pode entregar CPF numerico sem o zero inicial. CPF brasileiro tem 11 digitos.
@@ -1160,7 +1161,7 @@ function opDaViagem(placas, data){ if(typeof PED_OP==='undefined'||!PED_OP) retu
 function loadCfg(){ const d={tol:20,sem:80,fora:15,movMin:5,farolAmareloMax:60,meta:2.40,precoLitro:6.00,jornadaMin:440,interjornadaMin:660}; try{ return Object.assign(d, JSON.parse(localStorage.getItem(LS.cfg)||'{}')); }catch(e){ return d; } }
 function saveCfg(){ try{ localStorage.setItem(LS.cfg, JSON.stringify(CFG)); }catch(e){} }
 function loadData(){ try{ const d=JSON.parse(localStorage.getItem(LS.data)||'null'); return (d&&d.records&&d.schema===3)?d:null; }catch(e){ return null; } }
-function saveData(){ try{ if(RAW) RAW._savedAt=Date.now(); localStorage.setItem(LS.data, JSON.stringify(RAW)); }catch(e){} if(typeof agendarCache==='function') agendarCache(); }
+function saveData(){ try{ if(RAW){ RAW._savedAt=Date.now(); DATA_UPDATED_AT=RAW._savedAt; } localStorage.setItem(LS.data, JSON.stringify(RAW)); }catch(e){} if(typeof agendarCache==='function') agendarCache(); }
 
 /* ============================================================
    MOTOR DE CONFERÊNCIA
@@ -2270,6 +2271,20 @@ function exportMotoristas(){ const lines=[['Motorista','Status_TMS','Ponto_perio
 function activeViewName(){
   const v=document.querySelector('.view.active'); return v&&v.id?v.id.replace(/^view-/,''):'semana';
 }
+function fmtDataAtualizacao(ts){
+  if(!ts)return '';
+  try{return new Date(+ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',', '');}catch(e){return '';}
+}
+function atualizaDataMode(){
+  const pill=$('#dataModePill'),txt=$('#dataModeTxt'); if(!pill||!txt)return;
+  if(REAL){
+    pill.classList.add('real');
+    let t='dados reais · '+RECORDS.length.toLocaleString('pt-BR')+' registros';
+    const dh=fmtDataAtualizacao(DATA_UPDATED_AT||(RAW&&RAW._savedAt));
+    if(dh)t+=' · atualizado em '+dh;
+    txt.textContent=t;
+  }else{ pill.classList.remove('real'); txt.textContent='dados de demonstração'; }
+}
 function renderAll(){
   const rows=filtered(), view=activeViewName();
   // Atualiza apenas o que está visível. As abas pesadas passam a ser calculadas sob demanda.
@@ -2285,9 +2300,7 @@ function renderAll(){
   else if(view==='semid') renderPlacasSemId();
   else if(view==='ficha' && fichaAtual) renderFicha();
   const bd=$('#badgeDiv'); if(bd){ const n=rows.reduce((a,r)=>a+(r.sev!=='conforme'?1:0),0); bd.textContent=n>999?'999+':n; }
-  const pill=$('#dataModePill'), txt=$('#dataModeTxt');
-  if(REAL){ pill.classList.add('real'); txt.textContent='dados reais · '+(RECORDS.length)+' registros'; }
-  else { pill.classList.remove('real'); txt.textContent='dados de demonstração'; }
+  atualizaDataMode();
 }
 let SAUDE_ROWS=[];
 function renderSaude(){
@@ -3649,9 +3662,9 @@ async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const da
    ============================================================ */
 async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz:false,b:bytes}; const cs=new CompressionStream('gzip'); const w=cs.writable.getWriter(); w.write(bytes); w.close(); return {gz:true,b:new Uint8Array(await new Response(cs.readable).arrayBuffer())}; }
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
-function snapshotState(){ return {v:3,ts:Date.now(),CFG:Object.assign({},CFG),REAL:!!REAL,RAW,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N}; }
+function snapshotState(){ return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
-function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
+function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
 async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();}catch(e){}}
 async function idbGet(k){try{const db=await idbOpen();const v=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly'),rq=tx.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});db.close();return v;}catch(e){return null;}}
@@ -3697,7 +3710,7 @@ async function carregarDadosPublicados(){
     if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3)return false;
     const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);
     if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}
-    restoreState(S);const p=$('#dataModeTxt');if(p)p.textContent='dados publicados · '+(pub?new Date(pub).toLocaleString('pt-BR'):'GitHub');const pill=$('#dataModePill');if(pill)pill.classList.add('real');return true;
+    restoreState(S);DATA_UPDATED_AT=pub||DATA_UPDATED_AT;atualizaDataMode();return true;
   }catch(e){console.warn('Pulso 360: erro ao carregar dados publicados',e);return false;}
 }
 function mostrarPublicacao(rawMb,packedMb,nParts,ts){
@@ -3772,7 +3785,7 @@ applyDadosGate();
 (async function(){
   let temCache=0; try{ temCache=await cacheRestaurar(); }catch(e){}
   const pub=await carregarDadosPublicados();
-  if(!pub && temCache){ const p=$('#dataModeTxt'); if(p && !(RAW&&RAW._savedAt)) p.textContent='dados locais · '+new Date(temCache).toLocaleString('pt-BR'); }
+  if(!pub && temCache){ if(!DATA_UPDATED_AT)DATA_UPDATED_AT=+(RAW&&RAW._savedAt||temCache||0); atualizaDataMode(); }
 })();
 // filtros
 ['#fFecha','#fOp','#fDia','#fDe','#fAte','#fStatus'].forEach(s=>$(s).addEventListener('change',renderAll));
