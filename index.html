@@ -1292,7 +1292,7 @@ function build(){
     }
   }
   // Campos normalizados usados pelos filtros. Evita milhares de chamadas a norm() a cada clique/tecla.
-  RECORDS_BY_DRIVER_N=Object.create(null); RECORDS_BY_PLATE_N=Object.create(null); RECORDS_BY_TRIMBLE_N=Object.create(null); RECORDS_BY_OP=Object.create(null); RECORDS_BY_DATE=Object.create(null); RECORDS_BY_STATUS=Object.create(null); RECORDS_BY_FECHA=Object.create(null); RECORD_DRIVER_NAMES_N=new Set(); RECORD_PLATE_KEYS_N=new Set(); RECORD_TRIMBLE_NAMES_N=new Set(); RECORD_DATE_KEYS=[]; PLATE_RECORD_SUMMARY=Object.create(null); HAS_MOVEMENT_RECORDS=false; GLOBAL_DIV_COUNT=0; DIVERG_RECORDS=[]; PONTO_STATS_GLOBAL={all:Object.create(null),byCpf:Object.create(null),byName:Object.create(null),byCanon:Object.create(null),canonCount:Object.create(null)};
+  RECORDS_BY_DRIVER_N=Object.create(null); RECORDS_BY_PLATE_N=Object.create(null); RECORDS_BY_TRIMBLE_N=Object.create(null); RECORDS_BY_OP=Object.create(null); RECORDS_BY_DATE=Object.create(null); RECORDS_BY_STATUS=Object.create(null); RECORDS_BY_FECHA=Object.create(null); RECORD_DRIVER_NAMES_N=new Set(); RECORD_PLATE_KEYS_N=new Set(); RECORD_TRIMBLE_NAMES_N=new Set(); RECORD_DATE_KEYS=[]; PONTO_RECORDS_BY_OP=Object.create(null); PONTO_RECORDS_BY_DATE=Object.create(null); PLATE_RECORD_SUMMARY=Object.create(null); HAS_MOVEMENT_RECORDS=false; GLOBAL_DIV_COUNT=0; DIVERG_RECORDS=[]; PONTO_STATS_GLOBAL={all:Object.create(null),byCpf:Object.create(null),byName:Object.create(null),byCanon:Object.create(null),canonCount:Object.create(null)};
   RECORDS.forEach(r=>{
     r._nMot=norm(r.motoristaEscala);
     r._nPlacas=norm(((r.placas&&r.placas.length)?r.placas:[r.placa||'']).join(' '));
@@ -1305,7 +1305,7 @@ function build(){
     (RECORDS_BY_DATE[r.data]=RECORDS_BY_DATE[r.data]||[]).push(r);
     (RECORDS_BY_STATUS[r.sev]=RECORDS_BY_STATUS[r.sev]||[]).push(r);
     if(r._fechaKey)(RECORDS_BY_FECHA[r._fechaKey]=RECORDS_BY_FECHA[r._fechaKey]||[]).push(r);
-    if(r._nMot&&r.punches&&r.punches.length){ const _cpf=(NOME2CPF&&NOME2CPF[r._nMot])||'', _cn=nomeCanon(r.motoristaEscala), _pk=_cpf?('C:'+_cpf):('N:'+r._nMot); const _g=(PONTO_STATS_GLOBAL.all[_pk]=PONTO_STATS_GLOBAL.all[_pk]||{key:_pk,nome:r.motoristaEscala,nn:r._nMot,cpf:_cpf,cn:_cn,dias:new Set(),ultimo:'',ops:new Set()}); _g.dias.add(r.data); if(r.data>_g.ultimo)_g.ultimo=r.data; if(r.operacao&&r.operacao!=='—')_g.ops.add(r.operacao); }
+    if(r._nMot&&r.punches&&r.punches.length){ const _cpf=(NOME2CPF&&NOME2CPF[r._nMot])||'', _cn=nomeCanon(r.motoristaEscala), _pk=_cpf?('C:'+_cpf):('N:'+r._nMot); const _g=(PONTO_STATS_GLOBAL.all[_pk]=PONTO_STATS_GLOBAL.all[_pk]||{key:_pk,nome:r.motoristaEscala,nn:r._nMot,cpf:_cpf,cn:_cn,dias:new Set(),ultimo:'',ops:new Set()}); _g.dias.add(r.data); if(r.data>_g.ultimo)_g.ultimo=r.data; if(r.operacao&&r.operacao!=='—')_g.ops.add(r.operacao); (PONTO_RECORDS_BY_OP[r.operacao||'—']=PONTO_RECORDS_BY_OP[r.operacao||'—']||[]).push(r); (PONTO_RECORDS_BY_DATE[r.data]=PONTO_RECORDS_BY_DATE[r.data]||[]).push(r); }
     const _pls=((r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]));
     _pls.forEach(p=>{ const pk=placaKey(p); if(!pk)return; RECORD_PLATE_KEYS_N.add(pk); (RECORDS_BY_PLATE_N[pk]=RECORDS_BY_PLATE_N[pk]||[]).push(r); const g=(PLATE_RECORD_SUMMARY[pk]=PLATE_RECORD_SUMMARY[pk]||{dias:new Set(),aderSum:0,aderN:0}); g.dias.add(r.data); if(r.aderencia!=null){g.aderSum+=r.aderencia;g.aderN++;} });
     if(r.movimento&&r.movimento.length) HAS_MOVEMENT_RECORDS=true;
@@ -1315,7 +1315,7 @@ function build(){
   Object.values(PONTO_STATS_GLOBAL.all).forEach(g=>{ if(g.cpf)PONTO_STATS_GLOBAL.byCpf[g.cpf]=g; if(g.nn)PONTO_STATS_GLOBAL.byName[g.nn]=g; if(g.cn){PONTO_STATS_GLOBAL.canonCount[g.cn]=(PONTO_STATS_GLOBAL.canonCount[g.cn]||0)+1;PONTO_STATS_GLOBAL.byCanon[g.cn]=g;} });
   RECORDS.sort((a,b)=> a.data<b.data?1:a.data>b.data?-1:(a.operacao.localeCompare(b.operacao)) );
   DATA_REV++; FILTER_CACHE_KEY=''; FILTER_CACHE_ROWS=null; FILTER_CACHE_DIV_COUNT=0;
-  ALERT_SUM_CACHE.clear(); FICHA_METRICS_CACHE.clear(); SEMANA_AGG_CACHE_KEY=''; SEMANA_AGG_CACHE=null; MOTOR_COMPARE_CACHE_KEY=''; MOTOR_COMPARE_CACHE=null; BATIMENTO_CACHE_REV=-1; BATIMENTO_CACHE=null; TABLE_SORT_CACHE_KEY=''; TABLE_SORT_CACHE=null; VIEW_RENDER_KEYS=Object.create(null);
+  ALERT_SUM_CACHE.clear(); FICHA_METRICS_CACHE.clear(); SEMANA_AGG_CACHE_KEY=''; SEMANA_AGG_CACHE=null; MOTOR_COMPARE_CACHE_KEY=''; MOTOR_COMPARE_CACHE=null; MOTOR_COMPARE_SUMMARY=null; MOTOR_COMPARE_PROMISE_KEY=''; MOTOR_COMPARE_PROMISE=null; MOTOR_COMPARE_SEQ++; MOTOR_DOM_KEY=''; MOTOR_RENDER_JOB++; if(MOTOR_ACTIVE_WORKER){ try{MOTOR_ACTIVE_WORKER.terminate();}catch(e){} MOTOR_ACTIVE_WORKER=null; } if(MOTOR_TABLE_OBSERVER){ try{MOTOR_TABLE_OBSERVER.disconnect();}catch(e){} MOTOR_TABLE_OBSERVER=null; } BATIMENTO_CACHE_REV=-1; BATIMENTO_CACHE=null; TABLE_SORT_CACHE_KEY=''; TABLE_SORT_CACHE=null; VIEW_RENDER_KEYS=Object.create(null);
 }
 
 /* ============================================================
@@ -1327,7 +1327,10 @@ let RECORDS_BY_DRIVER_N=Object.create(null), RECORDS_BY_PLATE_N=Object.create(nu
 let DIVERG_RECORDS=[];
 let ALERT_SUM_CACHE=new Map(), FICHA_METRICS_CACHE=new Map();
 let SEMANA_AGG_CACHE_KEY='', SEMANA_AGG_CACHE=null;
-let MOTOR_COMPARE_CACHE_KEY='', MOTOR_COMPARE_CACHE=null;
+let MOTOR_COMPARE_CACHE_KEY='', MOTOR_COMPARE_CACHE=null, MOTOR_COMPARE_SUMMARY=null;
+let MOTOR_COMPARE_PROMISE_KEY='', MOTOR_COMPARE_PROMISE=null, MOTOR_ACTIVE_WORKER=null, MOTOR_COMPARE_SEQ=0;
+let MOTOR_RENDER_JOB=0, MOTOR_DOM_KEY='', MOTOR_TABLE_OBSERVER=null, MOTOR_TABLE_TOKEN=0;
+let PONTO_RECORDS_BY_OP=Object.create(null), PONTO_RECORDS_BY_DATE=Object.create(null);
 let PLATE_RECORD_SUMMARY=Object.create(null), HAS_MOVEMENT_RECORDS=false;
 let BATIMENTO_CACHE_REV=-1, BATIMENTO_CACHE=null;
 let TABLE_SORT_CACHE_KEY='', TABLE_SORT_CACHE=null;
@@ -2315,13 +2318,25 @@ function renderTable(rows){
 function cpfCurto(cpf){ const c=cpfKey(cpf); return c?('CPF ••••'+c.slice(-4)):'—'; }
 function motStatusHtml(st){ const s=st||'SEM STATUS', cls=s==='ATIVO'?'ativo':s==='INATIVO'?'inativo':s==='CONFLITO'?'conflito':'semstatus'; const lab=s==='SEM STATUS'?'Sem status':(s==='CONFLITO'?'Conflito':s.charAt(0)+s.slice(1).toLowerCase()); return '<span class="mot-status '+cls+'">'+lab+'</span>'; }
 function pontoStatsMotoristas(){
-  const rng=activeRange(), op=$('#fOp').value; if(!rng&&!op&&PONTO_STATS_GLOBAL) return PONTO_STATS_GLOBAL; const byCpf={},byName={},byCanon={},canonCount={};
-  const all={}; let src=op?(RECORDS_BY_OP[op]||[]):RECORDS;
-  if(rng&&!op){ const arr=[]; for(let i=0;i<RECORD_DATE_KEYS.length;i++){const d=RECORD_DATE_KEYS[i];if(d<rng.de)continue;if(d>rng.ate)break;const a=RECORDS_BY_DATE[d];if(a)arr.push(...a);} src=arr; }
-  src.forEach(r=>{ if(!(r.punches&&r.punches.length)) return; if(rng&&(r.data<rng.de||r.data>rng.ate))return; if(op&&r.operacao!==op)return;
-    const nome=r.motoristaEscala||'',nn=norm(nome),cpf=(NOME2CPF&&NOME2CPF[nn])||'',cn=nomeCanon(nome),key=cpf?('C:'+cpf):('N:'+nn);
-    const g=(all[key]=all[key]||{key,nome,nn,cpf,cn,dias:new Set(),ultimo:'',ops:new Set()}); g.dias.add(r.data); if(r.data>g.ultimo)g.ultimo=r.data; if(r.operacao&&r.operacao!=='—')g.ops.add(r.operacao);
-  });
+  const rng=activeRange(), op=$('#fOp').value;
+  if(!rng&&!op&&PONTO_STATS_GLOBAL) return PONTO_STATS_GLOBAL;
+  const byCpf=Object.create(null),byName=Object.create(null),byCanon=Object.create(null),canonCount=Object.create(null),all=Object.create(null);
+  const addRec=r=>{
+    if(!r||!(r.punches&&r.punches.length))return;
+    if(op&&r.operacao!==op)return;
+    const nome=r.motoristaEscala||'',nn=r._nMot||norm(nome),cpf=(NOME2CPF&&NOME2CPF[nn])||'',cn=nomeCanon(nome),key=cpf?('C:'+cpf):('N:'+nn);
+    const g=(all[key]=all[key]||{key,nome,nn,cpf,cn,dias:new Set(),ultimo:'',ops:new Set()});
+    g.dias.add(r.data); if(r.data>g.ultimo)g.ultimo=r.data; if(r.operacao&&r.operacao!=='—')g.ops.add(r.operacao);
+  };
+  // Usa somente registros com ponto. Evita percorrer RECORDS inteiros na aba Motoristas.
+  if(rng){
+    for(let i=0;i<RECORD_DATE_KEYS.length;i++){
+      const d=RECORD_DATE_KEYS[i]; if(d<rng.de)continue; if(d>rng.ate)break;
+      const a=PONTO_RECORDS_BY_DATE[d]||[]; for(let j=0;j<a.length;j++) addRec(a[j]);
+    }
+  }else if(op){
+    const a=PONTO_RECORDS_BY_OP[op]||[]; for(let i=0;i<a.length;i++) addRec(a[i]);
+  }
   Object.values(all).forEach(g=>{ if(g.cpf)byCpf[g.cpf]=g; if(g.nn)byName[g.nn]=g; if(g.cn){canonCount[g.cn]=(canonCount[g.cn]||0)+1;byCanon[g.cn]=g;} });
   return {all,byCpf,byName,byCanon,canonCount};
 }
@@ -2329,35 +2344,99 @@ function matchPontoCad(cad,ps){ if(!cad)return null; if(cad.cpf&&ps.byCpf[cad.cp
 function classMotCad(status,temPonto,soPonto){ if(soPonto)return 'SO_PONTO'; if(status==='CONFLITO')return 'CONFLITO'; if(status==='ATIVO')return temPonto?'ATIVO_PONTO':'ATIVO_SEM_PONTO'; if(status==='INATIVO')return temPonto?'INATIVO_PONTO':'INATIVO_SEM_PONTO'; return temPonto?'SEMSTATUS_PONTO':'SEMSTATUS_SEM_PONTO'; }
 function classMotLabel(k){ return {ATIVO_PONTO:'Ativo + ponto',ATIVO_SEM_PONTO:'Ativo sem ponto',INATIVO_PONTO:'Inativo + ponto',INATIVO_SEM_PONTO:'Inativo sem ponto',SEMSTATUS_PONTO:'Sem status + ponto',SEMSTATUS_SEM_PONTO:'Sem status e sem ponto',SO_PONTO:'Só no Ponto / não localizado no TMS',CONFLITO:'Conflito de status no TMS'}[k]||k; }
 function classMotCls(k){ if(k==='INATIVO_PONTO'||k==='CONFLITO'||k==='SO_PONTO')return 'bad'; if(k==='ATIVO_SEM_PONTO'||k.startsWith('SEMSTATUS'))return 'warn'; if(k==='ATIVO_PONTO')return 'ok'; return 'muted'; }
-function motoristasComparados(){
-  const rng=activeRange(), op=$('#fOp').value, ck=DATA_REV+'|'+op+'|'+(rng?(rng.de+'|'+rng.ate):'*');
-  if(MOTOR_COMPARE_CACHE&&MOTOR_COMPARE_CACHE_KEY===ck) return MOTOR_COMPARE_CACHE;
-  const ps=pontoStatsMotoristas(), used=new Set(), rows=[];
-  Object.values(MOTORISTAS_TMS||{}).forEach(c=>{ const pt=matchPontoCad(c,ps); if(pt)used.add(pt.key); const st=c.status||'SEM STATUS', tem=!!pt, k=classMotCad(st,tem,false); rows.push({nome:c.nome||(pt&&pt.nome)||'—',cpf:c.cpf||'',status:st,ponto:tem,ultimo:pt?pt.ultimo:'',dias:pt?pt.dias.size:0,admissao:c.admissao||admissaoRealDe(c.nome)||'',centro:c.centro||'',cargo:c.cargo||'',classif:k,soPonto:false}); });
-  Object.values(ps.all).forEach(pt=>{ if(used.has(pt.key))return; rows.push({nome:pt.nome,cpf:pt.cpf||'',status:'NÃO LOCALIZADO',ponto:true,ultimo:pt.ultimo,dias:pt.dias.size,admissao:admissaoRealDe(pt.nome)||'',centro:[...pt.ops].join(', '),cargo:'',classif:'SO_PONTO',soPonto:true}); });
-  for(let i=0;i<rows.length;i++){const r=rows[i];r._nSearch=norm((r.nome||'')+' '+(r.centro||'')+' '+(r.cargo||''));}
-  MOTOR_COMPARE_CACHE_KEY=ck; MOTOR_COMPARE_CACHE=rows; return rows;
+function _motorCompareKey(){ const rng=activeRange(),op=$('#fOp').value; return DATA_REV+'|'+op+'|'+(rng?(rng.de+'|'+rng.ate):'*'); }
+function _motorComparePayload(ps){
+  const cads=Object.values(MOTORISTAS_TMS||{}).map(c=>({nome:c.nome||'',cpf:c.cpf||'',status:c.status||'SEM STATUS',admissao:c.admissao||admissaoRealDe(c.nome)||'',centro:c.centro||'',cargo:c.cargo||'',nn:norm(c.nome),cn:nomeCanon(c.nome)}));
+  const pts=Object.values(ps.all||{}).map(pt=>({key:pt.key,nome:pt.nome||'',nn:pt.nn||norm(pt.nome),cpf:pt.cpf||'',cn:pt.cn||nomeCanon(pt.nome),ultimo:pt.ultimo||'',dias:pt.dias?pt.dias.size:(pt.dias||0),ops:pt.ops?[...pt.ops]:[],admissao:admissaoRealDe(pt.nome)||''}));
+  return {cads,pts};
+}
+function _motorWorkerCode(){ return `
+self.onmessage=function(ev){
+  const cads=ev.data.cads||[],pts=ev.data.pts||[];
+  const byCpf=Object.create(null),byName=Object.create(null),byCanon=Object.create(null),canonCount=Object.create(null),used=Object.create(null),rows=[];
+  for(const p of pts){ if(p.cpf)byCpf[p.cpf]=p; if(p.nn)byName[p.nn]=p; if(p.cn){canonCount[p.cn]=(canonCount[p.cn]||0)+1;byCanon[p.cn]=p;} }
+  const cls=(st,tem,so)=>so?'SO_PONTO':st==='CONFLITO'?'CONFLITO':st==='ATIVO'?(tem?'ATIVO_PONTO':'ATIVO_SEM_PONTO'):st==='INATIVO'?(tem?'INATIVO_PONTO':'INATIVO_SEM_PONTO'):(tem?'SEMSTATUS_PONTO':'SEMSTATUS_SEM_PONTO');
+  const rank={INATIVO_PONTO:0,CONFLITO:1,SO_PONTO:2,ATIVO_SEM_PONTO:3,SEMSTATUS_PONTO:4,SEMSTATUS_SEM_PONTO:5,ATIVO_PONTO:6,INATIVO_SEM_PONTO:7};
+  const norm=s=>{ let v=String(s||'').normalize('NFD').split('').filter(ch=>{const c=ch.charCodeAt(0);return c<768||c>879;}).join('').toUpperCase().replaceAll('\t',' ').replaceAll('\n',' '); while(v.includes('  '))v=v.replaceAll('  ',' '); return v.trim(); };
+  const summary={totalTms:0,ativos:0,inativos:0,comP:0,ativoSem:0,inativoP:0,soP:0};
+  for(const c of cads){
+    let pt=null; if(c.cpf&&byCpf[c.cpf])pt=byCpf[c.cpf]; else if(c.nn&&byName[c.nn])pt=byName[c.nn]; else if(c.cn&&canonCount[c.cn]===1)pt=byCanon[c.cn];
+    if(pt)used[pt.key]=1; const st=c.status||'SEM STATUS',tem=!!pt,k=cls(st,tem,false);
+    const r={nome:c.nome||(pt&&pt.nome)||'—',cpf:c.cpf||'',status:st,ponto:tem,ultimo:pt?pt.ultimo:'',dias:pt?pt.dias:0,admissao:c.admissao||'',centro:c.centro||'',cargo:c.cargo||'',classif:k,soPonto:false};
+    r._nSearch=norm((r.nome||'')+' '+(r.centro||'')+' '+(r.cargo||'')); rows.push(r);
+    summary.totalTms++; if(st==='ATIVO')summary.ativos++; if(st==='INATIVO')summary.inativos++; if(tem)summary.comP++; if(k==='ATIVO_SEM_PONTO')summary.ativoSem++; if(k==='INATIVO_PONTO')summary.inativoP++;
+  }
+  for(const pt of pts){ if(used[pt.key])continue; const r={nome:pt.nome,cpf:pt.cpf||'',status:'NÃO LOCALIZADO',ponto:true,ultimo:pt.ultimo,dias:pt.dias||0,admissao:pt.admissao||'',centro:(pt.ops||[]).join(', '),cargo:'',classif:'SO_PONTO',soPonto:true}; r._nSearch=norm((r.nome||'')+' '+(r.centro||'')); rows.push(r); summary.comP++; summary.soP++; }
+  rows.sort((a,b)=>(rank[a.classif]??9)-(rank[b.classif]??9)||String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+  self.postMessage({rows,summary});
+};` }
+function _motorCompareSync(ps){
+  const used=new Set(),rows=[],summary={totalTms:0,ativos:0,inativos:0,comP:0,ativoSem:0,inativoP:0,soP:0};
+  Object.values(MOTORISTAS_TMS||{}).forEach(c=>{ const pt=matchPontoCad(c,ps); if(pt)used.add(pt.key); const st=c.status||'SEM STATUS',tem=!!pt,k=classMotCad(st,tem,false); const r={nome:c.nome||(pt&&pt.nome)||'—',cpf:c.cpf||'',status:st,ponto:tem,ultimo:pt?pt.ultimo:'',dias:pt?pt.dias.size:0,admissao:c.admissao||admissaoRealDe(c.nome)||'',centro:c.centro||'',cargo:c.cargo||'',classif:k,soPonto:false}; r._nSearch=norm((r.nome||'')+' '+(r.centro||'')+' '+(r.cargo||'')); rows.push(r); summary.totalTms++; if(st==='ATIVO')summary.ativos++; if(st==='INATIVO')summary.inativos++; if(tem)summary.comP++; if(k==='ATIVO_SEM_PONTO')summary.ativoSem++; if(k==='INATIVO_PONTO')summary.inativoP++; });
+  Object.values(ps.all).forEach(pt=>{ if(used.has(pt.key))return; const r={nome:pt.nome,cpf:pt.cpf||'',status:'NÃO LOCALIZADO',ponto:true,ultimo:pt.ultimo,dias:pt.dias.size,admissao:admissaoRealDe(pt.nome)||'',centro:[...pt.ops].join(', '),cargo:'',classif:'SO_PONTO',soPonto:true}; r._nSearch=norm((r.nome||'')+' '+(r.centro||'')); rows.push(r); summary.comP++; summary.soP++; });
+  const rank={INATIVO_PONTO:0,CONFLITO:1,SO_PONTO:2,ATIVO_SEM_PONTO:3,SEMSTATUS_PONTO:4,SEMSTATUS_SEM_PONTO:5,ATIVO_PONTO:6,INATIVO_SEM_PONTO:7}; rows.sort((a,b)=>(rank[a.classif]??9)-(rank[b.classif]??9)||a.nome.localeCompare(b.nome,'pt-BR'));
+  return {rows,summary};
+}
+function motoristasComparadosAsync(){
+  const ck=_motorCompareKey();
+  if(MOTOR_COMPARE_CACHE&&MOTOR_COMPARE_CACHE_KEY===ck) return Promise.resolve({rows:MOTOR_COMPARE_CACHE,summary:MOTOR_COMPARE_SUMMARY});
+  if(MOTOR_COMPARE_PROMISE&&MOTOR_COMPARE_PROMISE_KEY===ck) return MOTOR_COMPARE_PROMISE;
+  // Se periodo/operacao mudou durante um cruzamento, cancela o worker antigo e invalida seu retorno.
+  const seq=++MOTOR_COMPARE_SEQ;
+  if(MOTOR_ACTIVE_WORKER){ try{MOTOR_ACTIVE_WORKER.terminate();}catch(e){} MOTOR_ACTIVE_WORKER=null; }
+  const ps=pontoStatsMotoristas(), payload=_motorComparePayload(ps);
+  MOTOR_COMPARE_PROMISE_KEY=ck;
+  MOTOR_COMPARE_PROMISE=new Promise(resolve=>{
+    const finish=res=>{ if(seq===MOTOR_COMPARE_SEQ&&_motorCompareKey()===ck){MOTOR_COMPARE_CACHE_KEY=ck;MOTOR_COMPARE_CACHE=res.rows;MOTOR_COMPARE_SUMMARY=res.summary;MOTOR_COMPARE_PROMISE=null;MOTOR_COMPARE_PROMISE_KEY='';} resolve(res); };
+    if(typeof Worker==='undefined'||typeof Blob==='undefined'||typeof URL==='undefined'||!URL.createObjectURL){ finish(_motorCompareSync(ps)); return; }
+    try{
+      const url=URL.createObjectURL(new Blob([_motorWorkerCode()],{type:'text/javascript'})), w=new Worker(url); MOTOR_ACTIVE_WORKER=w;
+      const timer=setTimeout(()=>{ try{w.terminate();URL.revokeObjectURL(url);}catch(e){} if(MOTOR_ACTIVE_WORKER===w)MOTOR_ACTIVE_WORKER=null; finish(_motorCompareSync(ps)); },8000);
+      w.onmessage=e=>{ clearTimeout(timer); try{w.terminate();URL.revokeObjectURL(url);}catch(x){} if(MOTOR_ACTIVE_WORKER===w)MOTOR_ACTIVE_WORKER=null; finish(e.data||_motorCompareSync(ps)); };
+      w.onerror=()=>{ clearTimeout(timer); try{w.terminate();URL.revokeObjectURL(url);}catch(x){} if(MOTOR_ACTIVE_WORKER===w)MOTOR_ACTIVE_WORKER=null; finish(_motorCompareSync(ps)); };
+      w.postMessage(payload);
+    }catch(e){ finish(_motorCompareSync(ps)); }
+  });
+  return MOTOR_COMPARE_PROMISE;
 }
 let MOTORISTAS_ROWS=[];
 function motCadPassClass(r,f){ if(!f)return true; if(f==='ATIVOS')return r.status==='ATIVO'; if(f==='INATIVOS')return r.status==='INATIVO'; if(f==='COM_PONTO')return r.ponto; if(f==='SEM_PONTO')return !r.ponto; if(f==='SEM_STATUS')return r.status==='SEM STATUS'; return r.classif===f; }
+function _motorRowHtml(r){ return '<tr><td><b>'+String(r.nome||'—').replace(/</g,'&lt;')+'</b></td><td>'+motStatusHtml(r.status==='NÃO LOCALIZADO'?'SEM STATUS':r.status)+'</td><td>'+(r.ponto?'<span style="color:var(--good-ink);font-weight:700">Sim</span>':'<span style="color:var(--muted)">Não</span>')+'</td><td class="tnum">'+(r.ultimo?brDate(r.ultimo):'—')+'</td><td class="tnum">'+r.dias+'</td><td class="tnum">'+(r.admissao?brDate(r.admissao):'—')+'</td><td>'+(r.admissao?tempoDeCasa(r.admissao):'—')+'</td><td>'+((r.centro||'—').replace(/</g,'&lt;'))+'</td><td>'+((r.cargo||'—').replace(/</g,'&lt;'))+'</td><td>'+cpfCurto(r.cpf)+'</td><td><span class="mot-cruz '+classMotCls(r.classif)+'">'+classMotLabel(r.classif)+'</span></td></tr>'; }
+function _renderMotoristasProgressivo(rows){
+  const body=$('#motCadBody'); if(!body)return;
+  if(MOTOR_TABLE_OBSERVER){try{MOTOR_TABLE_OBSERVER.disconnect();}catch(e){} MOTOR_TABLE_OBSERVER=null;}
+  const token=++MOTOR_TABLE_TOKEN,CHUNK=70; let pos=0; body.innerHTML='';
+  const appendChunk=()=>{
+    if(token!==MOTOR_TABLE_TOKEN)return;
+    const fim=Math.min(pos+CHUNK,rows.length); let html=''; for(let i=pos;i<fim;i++)html+=_motorRowHtml(rows[i]); pos=fim;
+    if(html)body.insertAdjacentHTML('beforeend',html);
+    const old=body.querySelector('tr[data-mot-sentinel]'); if(old)old.remove();
+    if(pos<rows.length){ const tr=document.createElement('tr'); tr.dataset.motSentinel='1'; tr.innerHTML='<td colspan="11" style="text-align:center;color:var(--muted);padding:12px">'+pos.toLocaleString('pt-BR')+' de '+rows.length.toLocaleString('pt-BR')+' carregados · role para continuar</td>'; body.appendChild(tr);
+      if('IntersectionObserver' in window){ MOTOR_TABLE_OBSERVER=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ MOTOR_TABLE_OBSERVER.disconnect(); MOTOR_TABLE_OBSERVER=null; appendChunk(); } },{rootMargin:'500px 0px'}); MOTOR_TABLE_OBSERVER.observe(tr); }
+      else setTimeout(appendChunk,0);
+    }else if(!rows.length) body.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:30px">Nenhum motorista para os filtros atuais.</td></tr>';
+  };
+  appendChunk();
+}
 function renderMotoristas(){
   const body=$('#motCadBody'),sum=$('#motCadSummary'); if(!body||!sum)return;
-  const base=motoristasComparados(), f=$('#motCadClass')?$('#motCadClass').value:'', q=norm($('#motCadBusca')?$('#motCadBusca').value:''); const op=$('#fOp').value;
-  let totalTms=0,ativos=0,inativos=0,comP=0,ativoSem=0,inativoP=0,soP=0; const rows=[];
-  for(let i=0;i<base.length;i++){
-    const r=base[i];
-    if(!r.soPonto)totalTms++; if(r.status==='ATIVO')ativos++; if(r.status==='INATIVO')inativos++; if(r.ponto)comP++; if(r.classif==='ATIVO_SEM_PONTO')ativoSem++; if(r.classif==='INATIVO_PONTO')inativoP++; if(r.classif==='SO_PONTO')soP++;
-    if(!motCadPassClass(r,f))continue;
-    if(q&&!(r._nSearch||'').includes(q))continue;
-    if(op&&!r.ponto&&r.centro&&opFamily(r.centro)!==op)continue;
-    rows.push(r);
-  }
-  const rank={INATIVO_PONTO:0,CONFLITO:1,SO_PONTO:2,ATIVO_SEM_PONTO:3,SEMSTATUS_PONTO:4,SEMSTATUS_SEM_PONTO:5,ATIVO_PONTO:6,INATIVO_SEM_PONTO:7}; rows.sort((a,b)=>(rank[a.classif]??9)-(rank[b.classif]??9)||a.nome.localeCompare(b.nome,'pt-BR')); MOTORISTAS_ROWS=rows;
-  sum.innerHTML=(!MOTORISTAS_TMS?'<span style="flex-basis:100%;color:var(--warning)"><b>⚠ Cadastro TMS não está no conjunto de dados atual.</b> Exibindo os motoristas encontrados no Ponto; importe/publice o Relatório de Motoristas para ver ativo/inativo.</span>':'')+'<span>TMS: <b>'+totalTms.toLocaleString('pt-BR')+'</b></span><span>Ativos: <b>'+ativos.toLocaleString('pt-BR')+'</b></span><span>Inativos: <b>'+inativos.toLocaleString('pt-BR')+'</b></span><span>Com ponto no período: <b>'+comP.toLocaleString('pt-BR')+'</b></span><span>Ativos sem ponto: <b>'+ativoSem.toLocaleString('pt-BR')+'</b></span><span style="color:var(--crit-ink)">Inativos com ponto: <b>'+inativoP.toLocaleString('pt-BR')+'</b></span><span>Só no Ponto: <b>'+soP.toLocaleString('pt-BR')+'</b></span><span>Exibindo: <b>'+rows.length.toLocaleString('pt-BR')+'</b></span>';
-  const CAP=500, shown=rows.slice(0,CAP);
-  body.innerHTML=shown.map(r=>'<tr><td><b>'+String(r.nome||'—').replace(/</g,'&lt;')+'</b></td><td>'+motStatusHtml(r.status==='NÃO LOCALIZADO'?'SEM STATUS':r.status)+'</td><td>'+(r.ponto?'<span style="color:var(--good-ink);font-weight:700">Sim</span>':'<span style="color:var(--muted)">Não</span>')+'</td><td class="tnum">'+(r.ultimo?brDate(r.ultimo):'—')+'</td><td class="tnum">'+r.dias+'</td><td class="tnum">'+(r.admissao?brDate(r.admissao):'—')+'</td><td>'+(r.admissao?tempoDeCasa(r.admissao):'—')+'</td><td>'+((r.centro||'—').replace(/</g,'&lt;'))+'</td><td>'+((r.cargo||'—').replace(/</g,'&lt;'))+'</td><td>'+cpfCurto(r.cpf)+'</td><td><span class="mot-cruz '+classMotCls(r.classif)+'">'+classMotLabel(r.classif)+'</span></td></tr>').join('')+(rows.length>CAP?'<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:14px">Mostrando '+CAP.toLocaleString('pt-BR')+' de '+rows.length.toLocaleString('pt-BR')+' motoristas. Use os filtros da aba para focar; o CSV continua considerando todos.</td></tr>':'') || '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:30px">Nenhum motorista para os filtros atuais.</td></tr>';
+  const job=++MOTOR_RENDER_JOB, f=$('#motCadClass')?$('#motCadClass').value:'', q=norm($('#motCadBusca')?$('#motCadBusca').value:''), op=$('#fOp').value;
+  const uiKey=_motorCompareKey()+'|'+f+'|'+q+'|'+op;
+  if(MOTOR_DOM_KEY===uiKey && body.dataset.ready==='1') return;
+  body.dataset.ready='0'; body.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:34px"><b>Preparando motoristas…</b><br><span style="font-size:12px">cruzando TMS × Ponto sem bloquear a navegação</span></td></tr>';
+  sum.innerHTML='<span style="color:var(--muted)">Processando cadastro sob demanda…</span>';
+  // permite ao navegador pintar a aba antes de iniciar o cruzamento
+  setTimeout(()=>motoristasComparadosAsync().then(res=>{
+    if(job!==MOTOR_RENDER_JOB||activeViewName()!=='motoristas')return;
+    const base=res.rows||[], sm=res.summary||{totalTms:0,ativos:0,inativos:0,comP:0,ativoSem:0,inativoP:0,soP:0}, rows=[];
+    for(let i=0;i<base.length;i++){ const r=base[i]; if(!motCadPassClass(r,f))continue; if(q&&!(r._nSearch||'').includes(q))continue; if(op&&!r.ponto&&r.centro&&opFamily(r.centro)!==op)continue; rows.push(r); }
+    MOTORISTAS_ROWS=rows;
+    sum.innerHTML=(!MOTORISTAS_TMS?'<span style="flex-basis:100%;color:var(--warning)"><b>⚠ Cadastro TMS não está no conjunto de dados atual.</b> Exibindo os motoristas encontrados no Ponto; importe/publice o Relatório de Motoristas para ver ativo/inativo.</span>':'')+'<span>TMS: <b>'+sm.totalTms.toLocaleString('pt-BR')+'</b></span><span>Ativos: <b>'+sm.ativos.toLocaleString('pt-BR')+'</b></span><span>Inativos: <b>'+sm.inativos.toLocaleString('pt-BR')+'</b></span><span>Com ponto no período: <b>'+sm.comP.toLocaleString('pt-BR')+'</b></span><span>Ativos sem ponto: <b>'+sm.ativoSem.toLocaleString('pt-BR')+'</b></span><span style="color:var(--crit-ink)">Inativos com ponto: <b>'+sm.inativoP.toLocaleString('pt-BR')+'</b></span><span>Só no Ponto: <b>'+sm.soP.toLocaleString('pt-BR')+'</b></span><span>Exibindo: <b>'+rows.length.toLocaleString('pt-BR')+'</b></span>';
+    _renderMotoristasProgressivo(rows); body.dataset.ready='1'; MOTOR_DOM_KEY=uiKey;
+  }).catch(e=>{ console.error(e); if(job!==MOTOR_RENDER_JOB)return; body.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--critical);padding:30px">Não foi possível processar a aba Motoristas.</td></tr>'; sum.innerHTML=''; }),0);
 }
 function exportMotoristas(){ const lines=[['Motorista','Status_TMS','Ponto_periodo','Ultimo_ponto','Dias_ponto','Admissao','Centro_resultado','Cargo','Classificacao'].join(';')]; MOTORISTAS_ROWS.forEach(r=>lines.push([r.nome,r.status,r.ponto?'SIM':'NAO',r.ultimo?brDate(r.ultimo):'',r.dias,r.admissao?brDate(r.admissao):'',r.centro,r.cargo,classMotLabel(r.classif)].map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';'))); baixarCsv(lines,'motoristas_tms_x_ponto.csv'); }
+
 
 /* ============================================================
    RENDER GERAL
@@ -2391,7 +2470,7 @@ function renderAll(){
   else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view;
   else viewKey=DATA_REV+'|'+view;
   // Se a aba já foi desenhada para o mesmo estado, preserva o DOM e evita recálculo ao alternar abas.
-  if(view!=='ficha'&&VIEW_RENDER_KEYS[view]===viewKey){ const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT;bd.textContent=n>999?'999+':n;} atualizaDataMode(); return; }
+  if(view!=='ficha'&&view!=='motoristas'&&VIEW_RENDER_KEYS[view]===viewKey){ const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT;bd.textContent=n>999?'999+':n;} atualizaDataMode(); return; }
   if(view==='semana'){ renderKpis(rows); renderSemana(rows); }
   else if(view==='motoristas') renderMotoristas();
   else if(view==='aderencia') renderAderencia(rows);
@@ -2403,7 +2482,7 @@ function renderAll(){
   else if(view==='saude') renderSaude();
   else if(view==='semid') renderPlacasSemId();
   else if(view==='ficha'&&fichaAtual) renderFicha();
-  if(view!=='ficha') VIEW_RENDER_KEYS[view]=viewKey;
+  if(view!=='ficha'&&view!=='motoristas') VIEW_RENDER_KEYS[view]=viewKey;
   const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT;bd.textContent=n>999?'999+':n;}
   atualizaDataMode();
 }
