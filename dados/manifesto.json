@@ -1,14 +1,14 @@
 {
   "v": 1,
   "snapshotVersion": 3,
-  "publishedAt": 1790759051886,
+  "publishedAt": 1790759968731,
   "compression": "gzip",
-  "rawBytes": 173390208,
-  "packedBytes": 22556003,
+  "rawBytes": 173390558,
+  "packedBytes": 22556052,
   "parts": [
     {
       "file": "parte-001.bin",
-      "bytes": 22556003
+      "bytes": 22556052
     }
   ]
 }
