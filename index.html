@@ -403,9 +403,19 @@
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .footer img{height:18px;opacity:.7}
+  /* abertura: não renderiza a demonstração antes da base real */
+  #bootLoader{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:var(--bg);color:var(--ink)}
+  body.booting #bootLoader{display:flex}
+  body.booting main{visibility:hidden}
+  body.booting #tabs{pointer-events:none;opacity:.55}
+  .boot-card{display:flex;flex-direction:column;align-items:center;gap:12px;padding:28px 34px;border:1px solid var(--border);background:var(--surface);border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.12);min-width:280px}
+  .boot-spin{width:32px;height:32px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--gold);animation:bootspin .8s linear infinite}
+  .boot-title{font-weight:800;font-size:15px}.boot-sub{font-size:12px;color:var(--muted);text-align:center}
+  @keyframes bootspin{to{transform:rotate(360deg)}}
 </style>
 </head>
-<body>
+<body class="booting">
+<div id="bootLoader"><div class="boot-card"><div class="boot-spin"></div><div class="boot-title">Carregando dados atualizados</div><div class="boot-sub" id="bootLoadTxt">Verificando a última publicação…</div></div></div>
 <header>
   <div class="head-top">
     <div class="brand">
@@ -416,7 +426,7 @@
       </div>
     </div>
     <div class="head-tools">
-      <span class="pill" id="dataModePill"><span class="dot"></span> <b id="dataModeTxt">dados de demonstração</b></span>
+      <span class="pill" id="dataModePill"><span class="dot"></span> <b id="dataModeTxt">carregando dados…</b></span>
       <button class="btn" id="themeBtn" title="Alternar tema">🌗 Tema</button>
       <button class="btn" id="printBtn" title="Gerar relatório executivo do painel em PDF (respeita os filtros)">📄 Relatório PDF</button>
     </div>
@@ -4030,9 +4040,18 @@ async function gerarDadosPublicacao(){
   finally{if(btn){btn.disabled=false;btn.textContent=old||'📦 Gerar dados para publicação';}}
 }
 async function _lerSnapshotMultipart(){
+  // O manifesto é pequeno e sempre é validado na origem. As partes grandes só são baixadas
+  // quando a publicação mudou; quando não mudou, o cache/IndexedDB já restaurado é reutilizado.
   const mr=await fetch('dados/manifesto.json?_='+Date.now(),{cache:'no-store'}); if(!mr.ok)return null;
   const M=await mr.json(); if(!M||M.v!==1||!Array.isArray(M.parts)||!M.parts.length)throw new Error('Manifesto de dados inválido');
-  const arr=await Promise.all(M.parts.map(async p=>{const r=await fetch('dados/'+encodeURIComponent(p.file)+'?_='+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error('Parte não encontrada: '+p.file);const b=new Uint8Array(await r.arrayBuffer());if(p.bytes&&b.byteLength!==p.bytes)throw new Error('Parte incompleta: '+p.file);return b;}));
+  const pub=+(M.publishedAt||0), atual=+(DATA_UPDATED_AT||(RAW&&RAW._savedAt)||0);
+  if(REAL&&atual&&pub&&atual>=pub) return {__cached:true,publishedAt:pub};
+  const ver=encodeURIComponent(String(M.publishedAt||M.packedBytes||M.rawBytes||1));
+  const arr=await Promise.all(M.parts.map(async p=>{
+    const r=await fetch('dados/'+encodeURIComponent(p.file)+'?v='+ver,{cache:'force-cache'});
+    if(!r.ok)throw new Error('Parte não encontrada: '+p.file);
+    const b=new Uint8Array(await r.arrayBuffer());if(p.bytes&&b.byteLength!==p.bytes)throw new Error('Parte incompleta: '+p.file);return b;
+  }));
   const total=arr.reduce((n,b)=>n+b.byteLength,0), joined=new Uint8Array(total); let off=0;arr.forEach(b=>{joined.set(b,off);off+=b.byteLength;});
   const raw=M.compression==='gzip'?await _gunz(joined):joined, S=JSON.parse(new TextDecoder().decode(raw));
   if(!S.publishedAt&&M.publishedAt)S.publishedAt=M.publishedAt; return S;
@@ -4041,11 +4060,15 @@ async function _lerSnapshotLegado(){ try{const r=await fetch('dados-pulso360.jso
 async function carregarDadosPublicados(){
   try{
     let S=null; try{S=await _lerSnapshotMultipart();}catch(e){console.warn('Pulso 360: falha na publicação multipart',e);}
+    if(S&&S.__cached){ DATA_UPDATED_AT=+(S.publishedAt||DATA_UPDATED_AT||0); atualizaDataMode(); return true; }
     if(!S)S=await _lerSnapshotLegado();
     if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3)return false;
     const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);
     if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}
-    restoreState(S);DATA_UPDATED_AT=pub||DATA_UPDATED_AT;atualizaDataMode();return true;
+    restoreState(S);DATA_UPDATED_AT=pub||DATA_UPDATED_AT;atualizaDataMode();
+    // Guarda a fotografia publicada no IndexedDB em segundo plano para a próxima abertura.
+    if(typeof agendarCache==='function')agendarCache();
+    return true;
   }catch(e){console.warn('Pulso 360: erro ao carregar dados publicados',e);return false;}
 }
 function mostrarPublicacao(rawMb,packedMb,nParts,ts){
@@ -4122,13 +4145,7 @@ $('#btnTratSync').onclick=()=>tratSyncFromSP(true).then(ok=>{ if(ok&&fichaAtual)
 $('#btnTratSyncFicha').onclick=()=>tratSyncFromSP(true).then(ok=>{ if(ok&&fichaAtual)renderFicha(); });
 $('#dadosLogout').onclick=async()=>{ try{ if(_msal) await _msal.logoutPopup({}); }catch(e){} TRAT_CACHE=null; _tratSyncTried=false; applyDadosGate(); goTab('semana'); };
 applyDadosGate();
-// abertura: restaura o rascunho/cache local e depois procura a fotografia publicada no GitHub.
-// A importação de relatórios NÃO consulta mais o SharePoint.
-(async function(){
-  let temCache=0; try{ temCache=await cacheRestaurar(); }catch(e){}
-  const pub=await carregarDadosPublicados();
-  if(!pub && temCache){ if(!DATA_UPDATED_AT)DATA_UPDATED_AT=+(RAW&&RAW._savedAt||temCache||0); atualizaDataMode(); }
-})();
+// A abertura é controlada por bootPulso360() no final do arquivo para evitar cargas e renders duplicados.
 // filtros
 ['#fFecha','#fOp','#fDia','#fDe','#fAte','#fStatus'].forEach(s=>$(s).addEventListener('change',renderAll));
 $('#fMot').addEventListener('focus',openMotMenu);
@@ -4197,15 +4214,28 @@ if(RAW&&RAW.placaId) PLACA_MOV=RAW.placaId;
 if(RAW&&RAW.movUnseg) MOV_UNSEG_STORE=RAW.movUnseg;
 if(RAW&&RAW.bdv){ BDV=RAW.bdv; BDV_N=Object.keys(BDV).length; }
 if(RAW&&RAW.admissao){ ADMISSAO=RAW.admissao.n||null; ADMISSAO_CPF=RAW.admissao.c||null; ADMISSAO_CANON=RAW.admissao.cn||null; ADMISSAO_NOMECPF=RAW.admissao.np||null; ADMISSAO_CANONCPF=RAW.admissao.cp||null; ADMISSAO_PRESENTES=RAW.admissao.p||null; ADMISSAO_PRESENTES_CANON=RAW.admissao.pc||null; ADMISSAO_DIAG=RAW.admissao.diag||null; MOTORISTAS_TMS=RAW.admissao.cad||null; MOTORISTAS_TMS_N=MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0; rebuildMotoristasIdx(); ADMISSAO_N=ADMISSAO?Object.keys(ADMISSAO).length:0; rebuildDePara(); }
-build(); fillFilters();
 TAB_FILTER_STATES.semana=readTopFilterState(); CURRENT_FILTER_TAB='semana';
-renderAll(); updateDropStatus();
-// Ao abrir o painel, tenta carregar automaticamente a fotografia publicada no GitHub Pages.
-// Se existir um rascunho local mais novo, carregarDadosPublicados() preserva o rascunho.
-(async()=>{
-  try{ await carregarDadosPublicados(); }
-  catch(e){ console.warn('Pulso 360: não foi possível carregar os dados publicados',e); }
-})();
+async function bootPulso360(){
+  const bt=$('#bootLoadTxt'), pill=$('#dataModePill'), txt=$('#dataModeTxt');
+  if(pill)pill.classList.remove('real'); if(txt)txt.textContent='carregando dados…';
+  let temCache=0, pub=false;
+  try{
+    if(bt)bt.textContent='Restaurando a última base utilizada…';
+    try{temCache=await cacheRestaurar();}catch(e){}
+    if(bt)bt.textContent='Verificando se existe uma publicação mais recente…';
+    try{pub=await carregarDadosPublicados();}catch(e){console.warn('Pulso 360: não foi possível carregar os dados publicados',e);}
+    // Sem publicação/cache: só então cai para uma base local antiga ou demonstração.
+    if(!pub&&!temCache){
+      if(RAW&&RAW.records&&RAW.schema===3){ REAL=true; } else { RAW=null; REAL=false; }
+      build(); fillFilters(); renderAll(); updateDropStatus();
+    }else if(!pub&&temCache){
+      if(!DATA_UPDATED_AT)DATA_UPDATED_AT=+(RAW&&RAW._savedAt||temCache||0); atualizaDataMode(); updateDropStatus();
+    }
+  }finally{
+    document.body.classList.remove('booting');
+  }
+}
+bootPulso360();
 </script>
 </body>
 </html>
