@@ -1891,7 +1891,11 @@ function timelinesHTML(rows){
    FICHA DO MOTORISTA (detalhamento — 5º indicador)
    ============================================================ */
 let fichaAtual=null;
+let FICHA_RETURN_SCROLL=0;
 function openFicha(nome){
+  // O Resumo permanece pronto no DOM. Guardamos apenas a posição para que o retorno
+  // não precise recalcular filtros, KPIs ou cards semanais.
+  FICHA_RETURN_SCROLL=window.scrollY||0;
   fichaAtual=nome; FICHA_EVID_JOB++;
   $$('#tabs button').forEach(x=>x.classList.remove('active'));
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-ficha'));
@@ -1900,7 +1904,25 @@ function openFicha(nome){
   requestAnimationFrame(()=>renderFicha());
 }
 function voltarResumo(){
-  fichaAtual=null;
+  // Cancela qualquer evidência pesada da ficha que ainda esteja pendente.
+  fichaAtual=null; FICHA_EVID_JOB++;
+  const resumo=$('#view-semana'), btn=document.querySelector('#tabs button[data-tab="semana"]');
+  // Na navegação normal, o Resumo já está renderizado e apenas oculto. Reativá-lo
+  // diretamente evita renderAll()/filtered() sobre toda a base.
+  if(resumo && resumo.innerHTML.trim()){
+    const origemFiltros=CURRENT_FILTER_TAB;
+    CURRENT_FILTER_TAB='semana';
+    // Se a ficha foi aberta a partir de outra aba, restaura apenas os controles do
+    // Resumo. Quando veio do próprio Resumo, nem isso é necessário.
+    if(origemFiltros!=='semana') applyTopFilterState('semana');
+    $$('#tabs button').forEach(x=>x.classList.toggle('active',x===btn));
+    $$('.view').forEach(v=>v.classList.toggle('active',v===resumo));
+    atualizaDataMode();
+    const y=FICHA_RETURN_SCROLL||0;
+    requestAnimationFrame(()=>window.scrollTo(0,y));
+    return;
+  }
+  // Fallback raro: se o Resumo ainda não tiver sido montado, usa o fluxo normal.
   goTab('semana');
 }
 function recomendacao(anosMeses, media, totAl, dd){
