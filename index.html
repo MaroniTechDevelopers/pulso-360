@@ -2032,8 +2032,11 @@ function fichaMetrics(nome){
   const porSemana={}; recs.forEach(r=>porSemana[r.semKey]=(porSemana[r.semKey]||0)+(r.ddReal||0));  // farol semanal = fora da jornada real
   const ddTotal=recs.reduce((a,r)=>a+r.horasDedoDuro,0);
   const ddRealTotal=recs.reduce((a,r)=>a+(r.ddReal||0),0);
-  const hexTotal=recs.reduce((a,r)=>a+(r.horaExtra||0),0);
-  const diasHex=recs.filter(r=>r.horaExtra>0).length;
+  // Usa a mesma auditoria/deduplicação dos KPIs gerais: jornada única para Ponto/Extra
+  // e trecho único de movimento para Condução/KM.
+  const audit=auditMetrics(recs);
+  const hexTotal=audit.hExtra;
+  const diasHex=new Set(recs.filter(r=>(r.horaExtra||0)>0).map(r=>r.data)).size;
   const semel=aderRecs(recs);   // aderência da CÂMERA/placa (qualquer condutor) — ponderada pelo tempo
   const semelMot=aderMotoristaRecs(recs);   // aderência DO MOTORISTA (reconhecido como ele ÷ movimento)
   const aderJornadaVal=aderJornada(recs);   // aderência de jornada (score positivo)
@@ -2041,7 +2044,7 @@ function fichaMetrics(nome){
   const placas=[...new Set(recs.map(r=>r.placa).filter(Boolean))].join(', ');
   const alR=alertasResumo(nome, activeRange()); const totAl=alR.total;
   const adm=admissaoDe(nome); const tempo=tempoDeCasa(adm);
-  const kmR=recs.reduce((a,r)=>a+(r.km||0),0), litrosR=recs.reduce((a,r)=>a+(r.litros||0),0);
+  const kmR=audit.km, litrosR=recs.reduce((a,r)=>a+(r.litros||0),0);
   const abF=ABAST&&ABAST[norm(nome)];
   const mediaR = MEDIA_OFF?null:((abF&&abF.media!=null)?abF.media:(litrosR>0?kmR/litrosR:d.media));   // média oculta até revisão; fonte será validada pela Trimble
   const metaFicha = metaVeic(recs.length?(recs.find(r=>r.placa)||{}).placa:'', recs.length?recs[0].operacao:'');
@@ -2049,10 +2052,12 @@ function fichaMetrics(nome){
   const reco=recomendacao(tempo,mediaR,totAl,ddTotal);
   const risco=riscoComposto({ident:semel, media:mediaR, meta:metaFicha, ddReal:ddRealTotal}, alR);
   const condDiv=recs.filter(r=>r.idDivergente||r.condutorDivergente).length;
-  const diasComMov=recs.filter(r=>r.primMov!=null).length;
+  const diasComPonto=audit.diasPonto;
+  const diasComMov=audit.diasMov;
+  const hCondAudit=audit.hCond;
   const interjViol=recs.filter(r=>r.interjornada!=null && r.interjornada<CFG.interjornadaMin).length;
   const restMinF=recs.reduce((m,r)=>(r.interjornada!=null?(m==null?r.interjornada:Math.min(m,r.interjornada)):m),null);
-  const out={nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,risco,condDiv,diasComMov,interjViol,restMinF}; FICHA_METRICS_CACHE.set(cacheKey,out); return out;
+  const out={nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,risco,condDiv,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF,audit}; FICHA_METRICS_CACHE.set(cacheKey,out); return out;
 }
 // pontos críticos e positivos p/ o relatório executivo
 function fichaPontos(M){
@@ -2100,7 +2105,7 @@ function planoDeAcao(M){
 function renderFicha(){
   const nome=fichaAtual; if(!nome){ $('#fichaBox').innerHTML=''; return; }
   const M=fichaMetrics(nome);
-  const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,litrosR,abF,mediaR,metaFicha,medaOk,reco,interjViol,restMinF}=M;
+  const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF}=M;
   const fichaRisco=M.risco;
   const weeks=GLOBAL_WEEKS.length?GLOBAL_WEEKS:Object.values(recs.reduce((a,r)=>{if(r.semKey&&!a[r.semKey])a[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};return a;},{})).sort((a,b)=>a.key<b.key?-1:1);
   const _dayF=dayFilter(); const _recsEvid=_dayF?recs.filter(r=>r.data===_dayF):recs;
@@ -2170,6 +2175,12 @@ function renderFicha(){
         <div class="lab">③ Aderência de jornada</div><div class="val tnum">${aderJornadaVal==null?'—':aderJornadaVal+'<small>%</small>'}</div><div class="sub">${hDec(ddRealTotal)} fora da jornada${ddTotal-ddRealTotal>60?' · +'+hDec(ddTotal-ddRealTotal)+' sem ponto':''}</div></div>
       <div class="card kpi"><div class="accent" style="background:${hexTotal>0?'var(--warning)':'var(--muted)'}"></div>
         <div class="lab">Hora extra (&gt;7h20)</div><div class="val tnum">${hDec(hexTotal)}</div><div class="sub">${diasHex} dia(s) acima da jornada</div></div>
+      <div class="card kpi"><div class="accent" style="background:var(--s2)"></div>
+        <div class="lab">KM rodado</div><div class="val tnum">${Math.round(kmR||0).toLocaleString('pt-BR')}</div><div class="sub">quilômetros no período selecionado</div></div>
+      <div class="card kpi"><div class="accent" style="background:var(--good)"></div>
+        <div class="lab">Dias com ponto</div><div class="val tnum">${(diasComPonto||0).toLocaleString('pt-BR')}</div><div class="sub">dias com jornada de ponto registrada</div></div>
+      <div class="card kpi"><div class="accent" style="background:var(--s4)"></div>
+        <div class="lab">Dias com movimentação</div><div class="val tnum">${(diasComMov||0).toLocaleString('pt-BR')}</div><div class="sub">${hDec(hCondAudit||0)} de condução no período</div></div>
       <div class="card kpi"><div class="accent" style="background:${restMinF!=null&&restMinF<CFG.interjornadaMin?'var(--critical)':(restMinF!=null?'var(--good)':'var(--muted)')}"></div>
         <div class="lab">Descanso entre jornadas</div><div class="val tnum">${restMinF==null?'—':hDec(restMinF)}</div><div class="sub">${interjViol>0?('⚠ '+interjViol+' dia(s) < 11h'):(restMinF!=null?'menor descanso · mín 11h ✓':'sem dados')}</div></div>
       <div class="card kpi"><div class="accent" style="background:${(alR.niveis&&alR.niveis.ALTO)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
