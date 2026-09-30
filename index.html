@@ -437,7 +437,7 @@
 </header>
 
 <main>
-  <!-- FILTER BAR (compartilhada) -->
+  <!-- FILTER BAR (estado independente por aba) -->
   <div class="filterbar" id="filterbar">
     <div class="f"><label>Fechamento (16→15)</label><select id="fFecha"><option value="">Todos</option></select></div>
     <div class="f"><label>Operação</label><select id="fOp"><option value="">Todas</option></select></div>
@@ -1315,7 +1315,7 @@ function build(){
   Object.values(PONTO_STATS_GLOBAL.all).forEach(g=>{ if(g.cpf)PONTO_STATS_GLOBAL.byCpf[g.cpf]=g; if(g.nn)PONTO_STATS_GLOBAL.byName[g.nn]=g; if(g.cn){PONTO_STATS_GLOBAL.canonCount[g.cn]=(PONTO_STATS_GLOBAL.canonCount[g.cn]||0)+1;PONTO_STATS_GLOBAL.byCanon[g.cn]=g;} });
   RECORDS.sort((a,b)=> a.data<b.data?1:a.data>b.data?-1:(a.operacao.localeCompare(b.operacao)) );
   DATA_REV++; FILTER_CACHE_KEY=''; FILTER_CACHE_ROWS=null; FILTER_CACHE_DIV_COUNT=0;
-  ALERT_SUM_CACHE.clear(); FICHA_METRICS_CACHE.clear(); SEMANA_AGG_CACHE_KEY=''; SEMANA_AGG_CACHE=null; MOTOR_COMPARE_CACHE_KEY=''; MOTOR_COMPARE_CACHE=null; MOTOR_COMPARE_SUMMARY=null; MOTOR_COMPARE_PROMISE_KEY=''; MOTOR_COMPARE_PROMISE=null; MOTOR_COMPARE_SEQ++; MOTOR_DOM_KEY=''; MOTOR_RENDER_JOB++; if(MOTOR_ACTIVE_WORKER){ try{MOTOR_ACTIVE_WORKER.terminate();}catch(e){} MOTOR_ACTIVE_WORKER=null; } if(MOTOR_TABLE_OBSERVER){ try{MOTOR_TABLE_OBSERVER.disconnect();}catch(e){} MOTOR_TABLE_OBSERVER=null; } BATIMENTO_CACHE_REV=-1; BATIMENTO_CACHE=null; TABLE_SORT_CACHE_KEY=''; TABLE_SORT_CACHE=null; VIEW_RENDER_KEYS=Object.create(null);
+  ALERT_SUM_CACHE.clear(); FICHA_METRICS_CACHE.clear(); SEMANA_AGG_CACHE_KEY=''; SEMANA_AGG_CACHE=null; MOTOR_COMPARE_CACHE_KEY=''; MOTOR_COMPARE_CACHE=null; MOTOR_COMPARE_SUMMARY=null; MOTOR_COMPARE_PROMISE_KEY=''; MOTOR_COMPARE_PROMISE=null; MOTOR_COMPARE_SEQ++; MOTOR_DOM_KEY=''; MOTOR_RENDER_JOB++; if(MOTOR_ACTIVE_WORKER){ try{MOTOR_ACTIVE_WORKER.terminate();}catch(e){} MOTOR_ACTIVE_WORKER=null; } if(MOTOR_TABLE_OBSERVER){ try{MOTOR_TABLE_OBSERVER.disconnect();}catch(e){} MOTOR_TABLE_OBSERVER=null; } BATIMENTO_CACHE_REV=-1; BATIMENTO_CACHE=null; TABLE_SORT_CACHE_KEY=''; TABLE_SORT_CACHE=null; VIEW_RENDER_KEYS=Object.create(null); VIEW_BADGE_COUNTS=Object.create(null);
 }
 
 /* ============================================================
@@ -1335,7 +1335,27 @@ let PLATE_RECORD_SUMMARY=Object.create(null), HAS_MOVEMENT_RECORDS=false;
 let BATIMENTO_CACHE_REV=-1, BATIMENTO_CACHE=null;
 let TABLE_SORT_CACHE_KEY='', TABLE_SORT_CACHE=null;
 let PONTO_STATS_GLOBAL=null;
-let VIEW_RENDER_KEYS=Object.create(null);
+let VIEW_RENDER_KEYS=Object.create(null), VIEW_BADGE_COUNTS=Object.create(null);
+
+// Filtros independentes por aba. O mesmo conjunto de controles do topo é
+// reutilizado visualmente, mas cada aba mantém seu próprio estado.
+const TOP_FILTER_FIELDS=['fFecha','fOp','fDia','fDe','fAte','fMot','fStatus','fBusca'];
+let TAB_FILTER_STATES=Object.create(null), CURRENT_FILTER_TAB='semana', FILTER_STATE_APPLYING=false;
+function emptyTopFilterState(){ return {fFecha:'',fOp:'',fDia:'',fDe:'',fAte:'',fMot:'',fStatus:'',fBusca:''}; }
+function readTopFilterState(){ const s=emptyTopFilterState(); for(const id of TOP_FILTER_FIELDS){ const el=document.getElementById(id); if(el)s[id]=el.value||''; } return s; }
+function ensureTopFilterState(tab){ if(!TAB_FILTER_STATES[tab])TAB_FILTER_STATES[tab]=emptyTopFilterState(); return TAB_FILTER_STATES[tab]; }
+function saveTopFilterState(tab){ if(!tab||FILTER_STATE_APPLYING)return; TAB_FILTER_STATES[tab]=readTopFilterState(); }
+function applyTopFilterState(tab){
+  const st=ensureTopFilterState(tab); FILTER_STATE_APPLYING=true;
+  for(const id of TOP_FILTER_FIELDS){ const el=document.getElementById(id); if(el)el.value=st[id]||''; }
+  FILTER_STATE_APPLYING=false; FILTER_CACHE_KEY=''; FILTER_CACHE_ROWS=null; FILTER_CACHE_DIV_COUNT=0;
+  try{ closeMotMenu(); renderMotMenu(); }catch(e){}
+}
+function setTabFilterState(tab,patch,replace=false){
+  const st=replace?emptyTopFilterState():Object.assign({},ensureTopFilterState(tab));
+  Object.assign(st,patch||{}); TAB_FILTER_STATES[tab]=st;
+  if(CURRENT_FILTER_TAB===tab)applyTopFilterState(tab);
+}
 function filterStateKey(){
   return [DATA_REV,$('#fFecha').value,$('#fOp').value,$('#fDia').value,$('#fDe').value,$('#fAte').value,norm($('#fMot').value),$('#fStatus').value,norm($('#fBusca').value)].join('\u0001');
 }
@@ -1854,9 +1874,7 @@ function openFicha(nome){
 }
 function voltarResumo(){
   fichaAtual=null;
-  $$('#tabs button').forEach(x=>x.classList.toggle('active',x.dataset.tab==='semana'));
-  $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-semana'));
-  renderAll();
+  goTab('semana');
 }
 function recomendacao(anosMeses, media, totAl, dd){
   const anos = /(\d+)\s*ano/.test(anosMeses) ? +RegExp.$1 : 0;
@@ -2459,9 +2477,10 @@ function atualizaDataMode(){
   }else{ pill.classList.remove('real'); txt.textContent='dados de demonstração'; }
 }
 function renderAll(){
+  // Qualquer mudança nos controles pertence somente à aba/filtro corrente.
+  saveTopFilterState(CURRENT_FILTER_TAB);
   const view=activeViewName(), fkey=filterStateKey();
   const rowViews=new Set(['semana','aderencia','linha','diverg','media','tabela']);
-  let rows=null; if(rowViews.has(view)) rows=filtered();
   const rng=activeRange();
   let viewKey;
   if(rowViews.has(view)) viewKey=DATA_REV+'|'+fkey+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'');
@@ -2469,8 +2488,13 @@ function renderAll(){
   else if(view==='semid') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+CFG.sem;
   else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view;
   else viewKey=DATA_REV+'|'+view;
-  // Se a aba já foi desenhada para o mesmo estado, preserva o DOM e evita recálculo ao alternar abas.
-  if(view!=='ficha'&&view!=='motoristas'&&VIEW_RENDER_KEYS[view]===viewKey){ const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT;bd.textContent=n>999?'999+':n;} atualizaDataMode(); return; }
+  // O cache é conferido antes de filtrar. Assim, voltar para uma aba com os mesmos
+  // filtros não revarre os ~87 mil registros só para descobrir que o DOM já está pronto.
+  if(view!=='ficha'&&view!=='motoristas'&&VIEW_RENDER_KEYS[view]===viewKey){
+    const bd=$('#badgeDiv'), n=VIEW_BADGE_COUNTS[view]; if(bd&&n!=null)bd.textContent=n>999?'999+':n;
+    atualizaDataMode(); return;
+  }
+  let rows=null; if(rowViews.has(view)) rows=filtered();
   if(view==='semana'){ renderKpis(rows); renderSemana(rows); }
   else if(view==='motoristas') renderMotoristas();
   else if(view==='aderencia') renderAderencia(rows);
@@ -2483,7 +2507,7 @@ function renderAll(){
   else if(view==='semid') renderPlacasSemId();
   else if(view==='ficha'&&fichaAtual) renderFicha();
   if(view!=='ficha'&&view!=='motoristas') VIEW_RENDER_KEYS[view]=viewKey;
-  const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT;bd.textContent=n>999?'999+':n;}
+  const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT; VIEW_BADGE_COUNTS[view]=n; bd.textContent=n>999?'999+':n;}
   atualizaDataMode();
 }
 let SAUDE_ROWS=[];
@@ -4038,10 +4062,13 @@ function mostrarPublicacao(rawMb,packedMb,nParts,ts){
 // tabs
 function goTab(t){ const b=document.querySelector('#tabs button[data-tab="'+t+'"]'); if(b) b.click(); }
 $('#tabs').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return;
+  const nextTab=b.dataset.tab;
+  // Salva os filtros da aba de origem e restaura somente os filtros da aba de destino.
+  saveTopFilterState(CURRENT_FILTER_TAB); CURRENT_FILTER_TAB=nextTab; applyTopFilterState(nextTab);
   $$('#tabs button').forEach(x=>x.classList.toggle('active',x===b));
-  $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+b.dataset.tab)); window.scrollTo(0,0);
-  if(b.dataset.tab==='dados') applyDadosGate();
-  if(b.dataset.tab!=='dados' && (IMPORT_DIRTY_ANALYZE||IMPORT_DIRTY_FILTERS)){
+  $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+nextTab)); window.scrollTo(0,0);
+  if(nextTab==='dados') applyDadosGate();
+  if(nextTab!=='dados' && (IMPORT_DIRTY_ANALYZE||IMPORT_DIRTY_FILTERS)){
     toast('Atualizando painel com as novas bases…');
     // deixa a aba aparecer antes do processamento pesado
     setTimeout(()=>flushImportChanges(true),0);
@@ -4050,17 +4077,17 @@ $('#tabs').addEventListener('click',e=>{ const b=e.target.closest('button'); if(
 // KPIs clicáveis → abrem a aba que detalha a informação
 $('#kpis').addEventListener('click',e=>{ const c=e.target.closest('.kpi[data-tab]'); if(!c)return; goTab(c.dataset.tab); });
 // foca um registro (motorista+dia) na Linha do tempo
-function focusRecord(mot, dia){ ['#fFecha','#fOp','#fStatus'].forEach(s=>$(s).value=''); $('#fBusca').value=''; $('#fDe').value=''; $('#fAte').value=''; $('#fMot').value=mot; $('#fDia').value=dia; goTab('linha'); }
+function focusRecord(mot, dia){ setTabFilterState('linha',{fMot:mot||'',fDia:dia||''},true); goTab('linha'); }
 // clicar num apontamento das Divergências → linha do tempo daquele motorista+dia
 $('#divList').addEventListener('click',e=>{ const c=e.target.closest('.divcard'); if(!c)return; focusRecord(decodeURIComponent(c.dataset.mot), c.dataset.dia); });
 $('#fTipoDiv').addEventListener('change',()=>renderDiverg(filtered()));
 // clicar numa operação na aba Aderência → Resumo dessa operação
 $('#aderBox').addEventListener('click',e=>{
-  const gp=e.target.closest('[data-goplacas]'); if(gp){ $('#fOp').value=decodeURIComponent(gp.dataset.goplacas); $('#fBusca').value=''; goTab('semid'); return; }
-  const c=e.target.closest('.adercard'); if(!c)return; $('#fOp').value=decodeURIComponent(c.dataset.op); goTab('semana'); });
-$('#aderKpis').addEventListener('click',e=>{ if(e.target.closest('[data-goplacas-all]')){ $('#fBusca').value=''; goTab('semid'); } });
+  const gp=e.target.closest('[data-goplacas]'); if(gp){ const st=readTopFilterState(); st.fOp=decodeURIComponent(gp.dataset.goplacas); st.fBusca=''; setTabFilterState('semid',st,true); goTab('semid'); return; }
+  const c=e.target.closest('.adercard'); if(!c)return; const st=readTopFilterState(); st.fOp=decodeURIComponent(c.dataset.op); setTabFilterState('semana',st,true); goTab('semana'); });
+$('#aderKpis').addEventListener('click',e=>{ if(e.target.closest('[data-goplacas-all]')){ const st=readTopFilterState(); st.fBusca=''; setTabFilterState('semid',st,true); goTab('semid'); } });
 // helper: focar uma placa na Linha do tempo (modo placa)
-function focusPlaca(placa){ $('#fBusca').value=placa; $('#fDia').value=''; $('#fDe').value=''; $('#fAte').value=''; goTab('linha'); }
+function focusPlaca(placa){ const src=readTopFilterState(), st=emptyTopFilterState(); st.fOp=src.fOp||''; st.fBusca=placa||''; setTabFilterState('linha',st,true); goTab('linha'); }
 // clicar numa placa em "Placas sem ID" / Saúde / Operação por placa → Linha do tempo daquela placa
 $('#semidBox').addEventListener('click',e=>{ const tr=e.target.closest('.semidrow'); if(tr) focusPlaca(tr.dataset.placa); });
 $('#saudeBox').addEventListener('click',e=>{ const tr=e.target.closest('.sauderow'); if(tr) focusPlaca(tr.dataset.placa); });
@@ -4111,7 +4138,11 @@ $('#fMotArrow').addEventListener('mousedown',e=>{ e.preventDefault(); const c=$(
 $('#fMot').addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeMotMenu(); $('#fMot').blur(); } else if(e.key==='Enter'){ const b=$('#fMotMenu .combo-opt.match')||$('#fMotMenu .combo-opt'); if(b){ e.preventDefault(); $('#fMot').value=decodeURIComponent(b.dataset.mot); closeMotMenu(); renderAll(); } } });
 document.addEventListener('mousedown',e=>{ const c=$('#fMotCombo'); if(c&&!c.contains(e.target)) closeMotMenu(); });
 $('#fBusca').addEventListener('input',renderAllDebounced);
-$('#clearFilters').onclick=()=>{ ['#fFecha','#fOp','#fDia','#fDe','#fAte','#fMot','#fStatus','#fTipoDiv'].forEach(s=>{const el=$(s); if(el)el.value='';}); $('#fBusca').value=''; renderAll(); };
+$('#clearFilters').onclick=()=>{
+  for(const id of TOP_FILTER_FIELDS){ const el=document.getElementById(id); if(el)el.value=''; }
+  if(CURRENT_FILTER_TAB==='diverg'&&$('#fTipoDiv'))$('#fTipoDiv').value='';
+  saveTopFilterState(CURRENT_FILTER_TAB); renderAll();
+};
 // ordenação tabela
 $$('#tbl thead th').forEach(th=>th.onclick=()=>{ const k=th.dataset.k; SORT.dir = (SORT.k===k)? -SORT.dir : (k==='_sev'?1:1); SORT.k=k; renderTable(filtered()); });
 $('#expCsv').onclick=exportCsv;
@@ -4166,7 +4197,9 @@ if(RAW&&RAW.placaId) PLACA_MOV=RAW.placaId;
 if(RAW&&RAW.movUnseg) MOV_UNSEG_STORE=RAW.movUnseg;
 if(RAW&&RAW.bdv){ BDV=RAW.bdv; BDV_N=Object.keys(BDV).length; }
 if(RAW&&RAW.admissao){ ADMISSAO=RAW.admissao.n||null; ADMISSAO_CPF=RAW.admissao.c||null; ADMISSAO_CANON=RAW.admissao.cn||null; ADMISSAO_NOMECPF=RAW.admissao.np||null; ADMISSAO_CANONCPF=RAW.admissao.cp||null; ADMISSAO_PRESENTES=RAW.admissao.p||null; ADMISSAO_PRESENTES_CANON=RAW.admissao.pc||null; ADMISSAO_DIAG=RAW.admissao.diag||null; MOTORISTAS_TMS=RAW.admissao.cad||null; MOTORISTAS_TMS_N=MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0; rebuildMotoristasIdx(); ADMISSAO_N=ADMISSAO?Object.keys(ADMISSAO).length:0; rebuildDePara(); }
-build(); fillFilters(); renderAll(); updateDropStatus();
+build(); fillFilters();
+TAB_FILTER_STATES.semana=readTopFilterState(); CURRENT_FILTER_TAB='semana';
+renderAll(); updateDropStatus();
 // Ao abrir o painel, tenta carregar automaticamente a fotografia publicada no GitHub Pages.
 // Se existir um rascunho local mais novo, carregarDadosPublicados() preserva o rascunho.
 (async()=>{
