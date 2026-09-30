@@ -1277,29 +1277,38 @@ function analyze(rec){
   });
 }
 
-function build(){
+function build(forceAnalyze=false){
   const base = REAL ? RAW.records : demoRecords();
   BASES = REAL ? Object.assign({ponto:true,mov:true,trim:false}, RAW.bases||{})
                : { ponto:true, mov:true, trim:true };
   applyBDV();   // Boletim do Veículo por cima: UO + aderência por placa (antes de resolver operações)
-  RECORDS = base.map(analyze);
-  // operação = do VEÍCULO (UO/placa). Só dias SEM veículo (só ponto) herdam a operação predominante
-  // do condutor — assim NÃO empurramos veículos para a operação do motorista (contagem por operação fica certa).
-  const byDrv={};
-  RECORDS.forEach(r=>{ if(r.operacao && r.operacao!=='—'){ const k=norm(r.motoristaEscala); const g=(byDrv[k]=byDrv[k]||{}); g[r.operacao]=(g[r.operacao]||0)+(r.horasMov||1); } });
-  const drvOp={}; for(const k in byDrv){ let best='',bv=-1; for(const op in byDrv[k]){ if(byDrv[k][op]>bv){bv=byDrv[k][op];best=op;} } if(best)drvOp[k]=best; }
-  RECORDS.forEach(r=>{ const semVeic=!((r.placas&&r.placas.length)||r.placa); if((!r.operacao||r.operacao==='—') && semVeic && drvOp[norm(r.motoristaEscala)]) r.operacao=drvOp[norm(r.motoristaEscala)]; });
-  // INTERJORNADA (CLT 11h): descanso entre o fim de uma jornada e o início da próxima (por motorista, dias trabalhados consecutivos)
-  const jrn={}; RECORDS.forEach(r=>{ if(r.punches&&r.punches.length){ (jrn[r.motoristaEscala]=jrn[r.motoristaEscala]||[]).push(r); } });
-  for(const nm in jrn){ const L=jrn[nm].sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
-    for(let i=1;i<L.length;i++){ const p=L[i-1], c=L[i];
-      const pFim=(p.saidaU!=null?p.saidaU:p.punches[p.punches.length-1]);
-      const cIni=(c.entrada!=null?c.entrada:c.punches[0]);
-      const rest=Math.round((Date.parse(c.data)+cIni*60000-(Date.parse(p.data)+pFim*60000))/60000);
-      if(rest>0){ c.interjornada=rest; if(rest<CFG.interjornadaMin && !c.flags.some(f=>f.k==='interjornada')){
-        c.flags.push({sev:'atencao',k:'interjornada',t:'Descanso entre jornadas < 11h ('+hDec(rest)+')'});
-        c.sev = c.flags.some(f=>f.sev==='critico')?'critico':'atencao'; } }
+  // Snapshots/cache novos já carregam os registros analisados. Nesse caso a abertura
+  // pula a etapa mais cara (analyze + interjornada) e apenas reconstrói os índices leves.
+  const ready = !!(REAL && RAW && RAW._readyRecords===1 && !forceAnalyze && Array.isArray(base) && (!base.length || base[0]._key));
+  if(ready){
+    RECORDS = base;
+  }else{
+    RECORDS = base.map(analyze);
+    // operação = do VEÍCULO (UO/placa). Só dias SEM veículo (só ponto) herdam a operação predominante
+    // do condutor — assim NÃO empurramos veículos para a operação do motorista (contagem por operação fica certa).
+    const byDrv={};
+    RECORDS.forEach(r=>{ if(r.operacao && r.operacao!=='—'){ const k=norm(r.motoristaEscala); const g=(byDrv[k]=byDrv[k]||{}); g[r.operacao]=(g[r.operacao]||0)+(r.horasMov||1); } });
+    const drvOp={}; for(const k in byDrv){ let best='',bv=-1; for(const op in byDrv[k]){ if(byDrv[k][op]>bv){bv=byDrv[k][op];best=op;} } if(best)drvOp[k]=best; }
+    RECORDS.forEach(r=>{ const semVeic=!((r.placas&&r.placas.length)||r.placa); if((!r.operacao||r.operacao==='—') && semVeic && drvOp[norm(r.motoristaEscala)]) r.operacao=drvOp[norm(r.motoristaEscala)]; });
+    // INTERJORNADA (CLT 11h): descanso entre o fim de uma jornada e o início da próxima (por motorista, dias trabalhados consecutivos)
+    const jrn={}; RECORDS.forEach(r=>{ if(r.punches&&r.punches.length){ (jrn[r.motoristaEscala]=jrn[r.motoristaEscala]||[]).push(r); } });
+    for(const nm in jrn){ const L=jrn[nm].sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
+      for(let i=1;i<L.length;i++){ const p=L[i-1], c=L[i];
+        const pFim=(p.saidaU!=null?p.saidaU:p.punches[p.punches.length-1]);
+        const cIni=(c.entrada!=null?c.entrada:c.punches[0]);
+        const rest=Math.round((Date.parse(c.data)+cIni*60000-(Date.parse(p.data)+pFim*60000))/60000);
+        if(rest>0){ c.interjornada=rest; if(rest<CFG.interjornadaMin && !c.flags.some(f=>f.k==='interjornada')){
+          c.flags.push({sev:'atencao',k:'interjornada',t:'Descanso entre jornadas < 11h ('+hDec(rest)+')'});
+          c.sev = c.flags.some(f=>f.sev==='critico')?'critico':'atencao'; } }
+      }
     }
+    // RAW continua sendo a fonte editável. O marcador ready só existe nas fotografias salvas/publicadas.
+    if(REAL && RAW) RAW._readyRecords=0;
   }
   // Campos normalizados usados pelos filtros. Evita milhares de chamadas a norm() a cada clique/tecla.
   RECORDS_BY_DRIVER_N=Object.create(null); RECORDS_BY_PLATE_N=Object.create(null); RECORDS_BY_TRIMBLE_N=Object.create(null); RECORDS_BY_OP=Object.create(null); RECORDS_BY_DATE=Object.create(null); RECORDS_BY_STATUS=Object.create(null); RECORDS_BY_FECHA=Object.create(null); RECORD_DRIVER_NAMES_N=new Set(); RECORD_PLATE_KEYS_N=new Set(); RECORD_TRIMBLE_NAMES_N=new Set(); RECORD_DATE_KEYS=[]; PONTO_RECORDS_BY_OP=Object.create(null); PONTO_RECORDS_BY_DATE=Object.create(null); PLATE_RECORD_SUMMARY=Object.create(null); HAS_MOVEMENT_RECORDS=false; GLOBAL_DIV_COUNT=0; DIVERG_RECORDS=[]; PONTO_STATS_GLOBAL={all:Object.create(null),byCpf:Object.create(null),byName:Object.create(null),byCanon:Object.create(null),canonCount:Object.create(null)};
@@ -1322,10 +1331,12 @@ function build(){
     if(r.sev!=='conforme'){ GLOBAL_DIV_COUNT++; DIVERG_RECORDS.push(r); }
   });
   RECORD_DATE_KEYS=Object.keys(RECORDS_BY_DATE).sort();
+  const _wk=Object.create(null); RECORDS.forEach(r=>{ if(r.semKey&&!_wk[r.semKey])_wk[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel}; });
+  GLOBAL_WEEKS=Object.values(_wk).sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:0);
   Object.values(PONTO_STATS_GLOBAL.all).forEach(g=>{ if(g.cpf)PONTO_STATS_GLOBAL.byCpf[g.cpf]=g; if(g.nn)PONTO_STATS_GLOBAL.byName[g.nn]=g; if(g.cn){PONTO_STATS_GLOBAL.canonCount[g.cn]=(PONTO_STATS_GLOBAL.canonCount[g.cn]||0)+1;PONTO_STATS_GLOBAL.byCanon[g.cn]=g;} });
   RECORDS.sort((a,b)=> a.data<b.data?1:a.data>b.data?-1:(a.operacao.localeCompare(b.operacao)) );
   DATA_REV++; FILTER_CACHE_KEY=''; FILTER_CACHE_ROWS=null; FILTER_CACHE_DIV_COUNT=0;
-  ALERT_SUM_CACHE.clear(); FICHA_METRICS_CACHE.clear(); SEMANA_AGG_CACHE_KEY=''; SEMANA_AGG_CACHE=null; MOTOR_COMPARE_CACHE_KEY=''; MOTOR_COMPARE_CACHE=null; MOTOR_COMPARE_SUMMARY=null; MOTOR_COMPARE_PROMISE_KEY=''; MOTOR_COMPARE_PROMISE=null; MOTOR_COMPARE_SEQ++; MOTOR_DOM_KEY=''; MOTOR_RENDER_JOB++; if(MOTOR_ACTIVE_WORKER){ try{MOTOR_ACTIVE_WORKER.terminate();}catch(e){} MOTOR_ACTIVE_WORKER=null; } if(MOTOR_TABLE_OBSERVER){ try{MOTOR_TABLE_OBSERVER.disconnect();}catch(e){} MOTOR_TABLE_OBSERVER=null; } BATIMENTO_CACHE_REV=-1; BATIMENTO_CACHE=null; TABLE_SORT_CACHE_KEY=''; TABLE_SORT_CACHE=null; VIEW_RENDER_KEYS=Object.create(null); VIEW_BADGE_COUNTS=Object.create(null);
+  ALERT_SUM_CACHE.clear(); FICHA_METRICS_CACHE.clear(); SEMANA_AGG_CACHE_KEY=''; SEMANA_AGG_CACHE=null; SEMANA_AGG_CACHE_MAP.clear(); SUMMARY_DOM_CACHE.clear(); MOTOR_COMPARE_CACHE_KEY=''; MOTOR_COMPARE_CACHE=null; MOTOR_COMPARE_SUMMARY=null; MOTOR_COMPARE_PROMISE_KEY=''; MOTOR_COMPARE_PROMISE=null; MOTOR_COMPARE_SEQ++; MOTOR_DOM_KEY=''; MOTOR_RENDER_JOB++; if(MOTOR_ACTIVE_WORKER){ try{MOTOR_ACTIVE_WORKER.terminate();}catch(e){} MOTOR_ACTIVE_WORKER=null; } if(MOTOR_TABLE_OBSERVER){ try{MOTOR_TABLE_OBSERVER.disconnect();}catch(e){} MOTOR_TABLE_OBSERVER=null; } BATIMENTO_CACHE_REV=-1; BATIMENTO_CACHE=null; TABLE_SORT_CACHE_KEY=''; TABLE_SORT_CACHE=null; VIEW_RENDER_KEYS=Object.create(null); VIEW_BADGE_COUNTS=Object.create(null);
 }
 
 /* ============================================================
@@ -1336,7 +1347,8 @@ let GLOBAL_DIV_COUNT=0;
 let RECORDS_BY_DRIVER_N=Object.create(null), RECORDS_BY_PLATE_N=Object.create(null), RECORDS_BY_TRIMBLE_N=Object.create(null), RECORDS_BY_OP=Object.create(null), RECORDS_BY_DATE=Object.create(null), RECORDS_BY_STATUS=Object.create(null), RECORDS_BY_FECHA=Object.create(null), RECORD_DRIVER_NAMES_N=new Set(), RECORD_PLATE_KEYS_N=new Set(), RECORD_TRIMBLE_NAMES_N=new Set(), RECORD_DATE_KEYS=[];
 let DIVERG_RECORDS=[];
 let ALERT_SUM_CACHE=new Map(), FICHA_METRICS_CACHE=new Map();
-let SEMANA_AGG_CACHE_KEY='', SEMANA_AGG_CACHE=null;
+let SEMANA_AGG_CACHE_KEY='', SEMANA_AGG_CACHE=null, SEMANA_AGG_CACHE_MAP=new Map(), SUMMARY_DOM_CACHE=new Map(), GLOBAL_WEEKS=[];
+let FICHA_EVID_JOB=0;
 let MOTOR_COMPARE_CACHE_KEY='', MOTOR_COMPARE_CACHE=null, MOTOR_COMPARE_SUMMARY=null;
 let MOTOR_COMPARE_PROMISE_KEY='', MOTOR_COMPARE_PROMISE=null, MOTOR_ACTIVE_WORKER=null, MOTOR_COMPARE_SEQ=0;
 let MOTOR_RENDER_JOB=0, MOTOR_DOM_KEY='', MOTOR_TABLE_OBSERVER=null, MOTOR_TABLE_TOKEN=0;
@@ -1526,6 +1538,9 @@ function riscoComposto(m, alR){
    ============================================================ */
 function semanaAgg(rows){
   const cacheKey=(rows===FILTER_CACHE_ROWS?FILTER_CACHE_KEY:('rows:'+rows.length+':'+DATA_REV))+'|semana';
+  if(SEMANA_AGG_CACHE_MAP.has(cacheKey)){
+    const hit=SEMANA_AGG_CACHE_MAP.get(cacheKey); SEMANA_AGG_CACHE_MAP.delete(cacheKey); SEMANA_AGG_CACHE_MAP.set(cacheKey,hit); return hit;
+  }
   if(SEMANA_AGG_CACHE&&SEMANA_AGG_CACHE_KEY===cacheKey) return SEMANA_AGG_CACHE;
   const wkMap=Object.create(null), opMap=Object.create(null);
   rows.forEach(r=>{
@@ -1548,7 +1563,9 @@ function semanaAgg(rows){
     list.sort((a,b)=>{const rk={vermelho:0,amarelo:1,verde:2};return (rk[a.risco.cls]-rk[b.risco.cls])||b.ddReal-a.ddReal;});
     return {op:og.op,list,dd:og.dd,aj:aderJornada(og.opRows),motsDedo:og.motsDedo.size};
   });
-  const out={weeks,ultima,data}; SEMANA_AGG_CACHE_KEY=cacheKey; SEMANA_AGG_CACHE=out; return out;
+  const out={weeks,ultima,data}; SEMANA_AGG_CACHE_KEY=cacheKey; SEMANA_AGG_CACHE=out;
+  SEMANA_AGG_CACHE_MAP.set(cacheKey,out); while(SEMANA_AGG_CACHE_MAP.size>8)SEMANA_AGG_CACHE_MAP.delete(SEMANA_AGG_CACHE_MAP.keys().next().value);
+  return out;
 }
 function renderSemana(rows){
   const box=$('#semanaBox');
@@ -1875,7 +1892,7 @@ function timelinesHTML(rows){
    ============================================================ */
 let fichaAtual=null;
 function openFicha(nome){
-  fichaAtual=nome;
+  fichaAtual=nome; FICHA_EVID_JOB++;
   $$('#tabs button').forEach(x=>x.classList.remove('active'));
   $$('.view').forEach(v=>v.classList.toggle('active',v.id==='view-ficha'));
   const fb=$('#fichaBox'); if(fb) fb.innerHTML='<div class="empty">Carregando motorista…</div>';
@@ -1990,10 +2007,10 @@ function renderFicha(){
   const M=fichaMetrics(nome);
   const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,litrosR,abF,mediaR,metaFicha,medaOk,reco,interjViol,restMinF}=M;
   const fichaRisco=M.risco;
-  const {weeks}=semanaAgg(RECORDS);
+  const weeks=GLOBAL_WEEKS.length?GLOBAL_WEEKS:Object.values(recs.reduce((a,r)=>{if(r.semKey&&!a[r.semKey])a[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};return a;},{})).sort((a,b)=>a.key<b.key?-1:1);
   const _dayF=dayFilter(); const _recsEvid=_dayF?recs.filter(r=>r.data===_dayF):recs;
-  const wk=buildWeekCards(_recsEvid,'fztl',12,false,_dayF?'dia':'week');   // evidência (dia único se filtrado; senão semanal) com zoom
   const strip=farolStripHTML(porSemana, weeks, {showHours:true});
+  const evidJob=++FICHA_EVID_JOB;
   const P=fichaPontos(M);   // pontos críticos × positivos (mesma fonte do PDF)
   const PL=planoDeAcao(M);  // plano de ação concreto (o que fazer)
   const trats=tratList(nome);   // histórico de tratativas (Lista SharePoint ou local)
@@ -2071,9 +2088,11 @@ function renderFicha(){
     <div class="card">${strip}</div>
 
     <div class="sec-title"><h2>Evidência — Ponto × Movimento</h2><span>${_dayF?('só o dia '+brDate(_dayF)+' · role o mouse para dar zoom (dia → horas)'):'a semana inteira · role o mouse para dar zoom (semana → dia → horas)'}</span></div>
-    <div class="grid">${ wk.html || '<div class="empty">Sem dias.</div>' }</div>
+    <div class="grid" id="fichaEvidBox"><div class="empty">Preparando evidência…</div></div>
   `;
-  setupZoomLazy(wk.ids);
+  // A ficha fica utilizável imediatamente; a timeline (parte mais pesada) entra no ciclo seguinte.
+  const _runEvid=()=>{ if(evidJob!==FICHA_EVID_JOB||fichaAtual!==nome)return; const wk=buildWeekCards(_recsEvid,'fztl',12,false,_dayF?'dia':'week'); const eb=$('#fichaEvidBox'); if(!eb)return; eb.innerHTML=wk.html||'<div class="empty">Sem dias.</div>'; setupZoomLazy(wk.ids); };
+  if('requestIdleCallback' in window)requestIdleCallback(_runEvid,{timeout:220});else setTimeout(_runEvid,0);
   const verTodas=$('#fichaVerTodas'); if(verTodas) verTodas.onclick=(ev)=>{ ev.preventDefault(); $('#fOp').value=''; renderAll(); };
   $$('.trat-del').forEach(btn=>{ btn.onclick=async()=>{ const uid=decodeURIComponent(btn.dataset.uid||''); if(uid) await excluirTratativa(nome,uid); }; });
 }
@@ -2498,6 +2517,13 @@ function renderAll(){
   else if(view==='semid') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+CFG.sem;
   else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view;
   else viewKey=DATA_REV+'|'+view;
+  // Cache LRU do Resumo: limpar um filtro ou voltar a uma combinação já usada restaura o HTML pronto.
+  if(view==='semana'&&SUMMARY_DOM_CACHE.has(viewKey)){
+    const c=SUMMARY_DOM_CACHE.get(viewKey); SUMMARY_DOM_CACHE.delete(viewKey); SUMMARY_DOM_CACHE.set(viewKey,c);
+    const kp=$('#kpis'), sb=$('#semanaBox'); if(kp)kp.innerHTML=c.kpis; if(sb)sb.innerHTML=c.semana;
+    VIEW_RENDER_KEYS[view]=viewKey; VIEW_BADGE_COUNTS[view]=c.badge||0;
+    const bd=$('#badgeDiv'); if(bd)bd.textContent=(c.badge||0)>999?'999+':(c.badge||0); atualizaDataMode(); return;
+  }
   // O cache é conferido antes de filtrar. Assim, voltar para uma aba com os mesmos
   // filtros não revarre os ~87 mil registros só para descobrir que o DOM já está pronto.
   if(view!=='ficha'&&view!=='motoristas'&&VIEW_RENDER_KEYS[view]===viewKey){
@@ -2505,7 +2531,7 @@ function renderAll(){
     atualizaDataMode(); return;
   }
   let rows=null; if(rowViews.has(view)) rows=filtered();
-  if(view==='semana'){ renderKpis(rows); renderSemana(rows); }
+  if(view==='semana'){ renderKpis(rows); renderSemana(rows); const c={kpis:$('#kpis').innerHTML,semana:$('#semanaBox').innerHTML,badge:FILTER_CACHE_DIV_COUNT}; SUMMARY_DOM_CACHE.set(viewKey,c); while(SUMMARY_DOM_CACHE.size>6)SUMMARY_DOM_CACHE.delete(SUMMARY_DOM_CACHE.keys().next().value); }
   else if(view==='motoristas') renderMotoristas();
   else if(view==='aderencia') renderAderencia(rows);
   else if(view==='linha') renderTimelines(rows);
@@ -2808,7 +2834,7 @@ function markImportDirty(reanalyze=true, filters=true){
 function flushImportChanges(render=true){
   const needA=IMPORT_DIRTY_ANALYZE, needF=IMPORT_DIRTY_FILTERS;
   IMPORT_DIRTY_ANALYZE=false; IMPORT_DIRTY_FILTERS=false;
-  if(needA) build();
+  if(needA) build(true);
   if(needF||needA) fillFilters();
   updateDropStatus();
   if(render) renderAll();
@@ -4007,13 +4033,34 @@ async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const da
    ============================================================ */
 async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz:false,b:bytes}; const cs=new CompressionStream('gzip'); const w=cs.writable.getWriter(); w.write(bytes); w.close(); return {gz:true,b:new Uint8Array(await new Response(cs.readable).arrayBuffer())}; }
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
-function snapshotState(){ return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N}; }
+function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
 function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
-async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();}catch(e){}}
+async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();return true;}catch(e){return false;}}
 async function idbGet(k){try{const db=await idbOpen();const v=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly'),rq=tx.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});db.close();return v;}catch(e){return null;}}
-let _cacheTimer=null;function agendarCache(){clearTimeout(_cacheTimer);_cacheTimer=setTimeout(()=>{const run=()=>cacheSalvar();if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:12000});else setTimeout(run,0);},6000);} async function cacheSalvar(){try{if(!REAL||!RAW)return;const raw=new TextEncoder().encode(JSON.stringify(snapshotState())),g=await _gz(raw);await idbSet('estado',{gz:g.gz,b:g.b,ts:Date.now()});}catch(e){}} async function cacheRestaurar(){try{const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);const S=JSON.parse(new TextDecoder().decode(bytes));if(!restoreState(S))return 0;return c.ts||1;}catch(e){return 0;}}
+let _cacheTimer=null;
+function agendarCache(){clearTimeout(_cacheTimer);_cacheTimer=setTimeout(()=>{const run=()=>cacheSalvar();if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:12000});else setTimeout(run,0);},4500);}
+async function cacheSalvar(){
+  try{
+    if(!REAL||!RAW)return;
+    const S=snapshotState(), ts=Date.now();
+    // Caminho rápido: structured clone do IndexedDB, sem stringify/gzip na próxima abertura.
+    const ok=await idbSet('estadoFast',{v:1,s:S,ts});
+    if(ok)return;
+    // Fallback para navegadores/quota que recusarem o objeto estruturado.
+    const raw=new TextEncoder().encode(JSON.stringify(S)),g=await _gz(raw); await idbSet('estado',{gz:g.gz,b:g.b,ts});
+  }catch(e){}
+}
+async function cacheRestaurar(){
+  try{
+    const f=await idbGet('estadoFast');
+    if(f&&f.v===1&&f.s&&restoreState(f.s))return f.ts||1;
+  }catch(e){}
+  try{
+    const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);const S=JSON.parse(new TextDecoder().decode(bytes));if(!restoreState(S))return 0;return c.ts||1;
+  }catch(e){return 0;}
+}
 function _baixarBlob(blob,nome){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
 async function gerarDadosPublicacao(){
   if(!REAL||!RAW){toast('Importe os relatórios antes de gerar os dados');return;}
@@ -4156,9 +4203,13 @@ $('#fMot').addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeMotMenu();
 document.addEventListener('mousedown',e=>{ const c=$('#fMotCombo'); if(c&&!c.contains(e.target)) closeMotMenu(); });
 $('#fBusca').addEventListener('input',renderAllDebounced);
 $('#clearFilters').onclick=()=>{
-  for(const id of TOP_FILTER_FIELDS){ const el=document.getElementById(id); if(el)el.value=''; }
-  if(CURRENT_FILTER_TAB==='diverg'&&$('#fTipoDiv'))$('#fTipoDiv').value='';
-  saveTopFilterState(CURRENT_FILTER_TAB); renderAll();
+  let changed=false;
+  for(const id of TOP_FILTER_FIELDS){ const el=document.getElementById(id); if(el&&el.value){el.value='';changed=true;} }
+  if(CURRENT_FILTER_TAB==='diverg'&&$('#fTipoDiv')&&$('#fTipoDiv').value){$('#fTipoDiv').value='';changed=true;}
+  if(!changed)return;
+  saveTopFilterState(CURRENT_FILTER_TAB);
+  // devolve o controle ao navegador antes de restaurar a visão sem filtros; quando já visitada, vem do cache de DOM.
+  requestAnimationFrame(()=>renderAll());
 };
 // ordenação tabela
 $$('#tbl thead th').forEach(th=>th.onclick=()=>{ const k=th.dataset.k; SORT.dir = (SORT.k===k)? -SORT.dir : (k==='_sev'?1:1); SORT.k=k; renderTable(filtered()); });
@@ -4169,7 +4220,7 @@ $('#expMedia').onclick=exportMedia;
 $('#expSaude').onclick=exportSaude;
 $('#expSemId').onclick=exportSemId;
 // config
-function bindCfg(id,key){ const el=$(id); el.value=CFG[key]; el.addEventListener('input',()=>{ CFG[key]=parseFloat(el.value)||0; saveCfg(); build(); fillFilters(); renderAll(); }); }
+function bindCfg(id,key){ const el=$(id); el.value=CFG[key]; el.addEventListener('input',()=>{ CFG[key]=parseFloat(el.value)||0; saveCfg(); build(true); fillFilters(); renderAll(); }); }
 bindCfg('#cfgTol','tol'); bindCfg('#cfgSem','sem'); bindCfg('#cfgFora','fora'); bindCfg('#cfgMovMin','movMin'); bindCfg('#cfgFarol','farolAmareloMax'); bindCfg('#cfgMeta','meta'); bindCfg('#cfgPreco','precoLitro'); bindCfg('#cfgJornadaMin','jornadaMin'); bindCfg('#cfgInterjornada','interjornadaMin');
 // import
 // SELECIONAR PASTA INTEIRA (varre as subpastas de dias) — resolve o "não dá p/ pegar vários dias em subpastas"
