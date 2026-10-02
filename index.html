@@ -228,6 +228,9 @@
   .amark.baixo{background:var(--s2)}
   .amark i{position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:12px;font-style:normal;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
   .amark.alto i{filter:drop-shadow(0 0 3px var(--critical))}
+  .lane.lane-multa{height:24px;background:var(--surface-2);overflow:visible}
+  .lane .mmark{position:absolute;top:13px;bottom:0;width:2px;transform:translateX(-1px);background:color-mix(in srgb,var(--warning) 82%,#8a5a2b 18%);border-radius:1px;cursor:help;z-index:5}
+  .lane .mmark i{position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:12px;font-style:normal;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.25))}
   .wtl-hint{font-size:11px;color:var(--muted);margin-top:8px}
   .flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
   .flag{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;padding:4px 9px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2)}
@@ -352,7 +355,6 @@
   .alert-tile .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
   .alert-tile.hot .n{color:var(--crit-ink)}
   .alert-tile .l{font-size:11px;color:var(--muted);margin-top:2px}
-  .alert-tile .multa-note{display:inline-block;font-size:10px;color:color-mix(in srgb,var(--warning) 76%,var(--ink-2));background:color-mix(in srgb,var(--warning) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--warning) 20%,var(--border));border-radius:999px;padding:2px 6px;margin-top:5px;font-weight:700;letter-spacing:.01em}
 
   /* ============ MOTORISTAS — TMS x PONTO ============ */
   .motbar{margin:0;align-items:flex-end}
@@ -457,7 +459,6 @@
     <button data-tab="operacao">Operação por placa</button>
     <button data-tab="saude">Saúde das câmeras</button>
     <button data-tab="semid">Placas sem ID</button>
-    <button data-tab="multas">Multas</button>
     <button data-tab="dados">Dados &amp; como usar</button>
   </nav>
 </header>
@@ -636,40 +637,6 @@
     <div class="sec-title"><h2>Saúde das câmeras — plano de manutenção</h2><span>status do equipamento × identificação real (aderência) por cavalo</span>
       <button class="btn" id="expSaude" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">⬇️ Exportar CSV</button></div>
     <div id="saudeBox"></div>
-  </section>
-
-  <!-- ===== MULTAS / INFRAÇÕES ===== -->
-  <section class="view" id="view-multas">
-    <div class="grid kpis" id="multaKpis"></div>
-    <div class="sec-title"><h2>Multas / Infrações</h2><span>escopo atual: velocidade + celular · auditoria do documento × placa/operação × jornada × câmera</span>
-      <button class="btn" id="expMultas" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">⬇️ Exportar CSV</button></div>
-    <div class="card" style="padding:12px 16px;margin-bottom:12px">
-      <div class="filterbar motbar">
-        <div class="f"><label>Responsabilidade / desconto</label><select id="multaResp">
-          <option value="">Todos</option>
-          <option value="DESCONTADA">Descontada (dia 01)</option>
-          <option value="PENDENTE">Conduta pendente de desconto</option>
-          <option value="REVISAR">Regra a definir / revisar</option>
-          <option value="CANCELADA">Cancelada</option>
-        </select></div>
-        <div class="f"><label>Conferência da câmera</label><select id="multaAudit">
-          <option value="">Todos</option>
-          <option value="CONFERE">Documento = câmera</option>
-          <option value="DIVERGE">Documento ≠ câmera</option>
-          <option value="SEM_CAMERA">Sem identificação no horário</option>
-          <option value="SEM_DOCUMENTO">Sem motorista no documento</option>
-        </select></div>
-        <button class="btn" id="multaLimpar" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Limpar filtros da multa</button>
-      </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:8px">Escopo padrão atual: <b>somente multas de Velocidade e Celular</b>. Regras: <b>dia 01 = descontada</b> · <b>velocidade/celular = conduta do motorista</b>. A fonte atual não possui valor monetário; por isso valores financeiros permanecem como <b>—</b>.</div>
-    </div>
-    <div class="tblwrap"><table id="multaTbl" style="min-width:1700px">
-      <thead><tr>
-        <th>Data/Hora</th><th>Auto</th><th>Placa</th><th>Operação na data</th><th>Motorista documento</th><th>Motorista jornada</th><th>Motorista câmera</th><th>Conferência</th><th>Tipo</th><th>Responsabilidade</th><th>Desconto</th><th>Situação</th><th>Vencimento</th>
-      </tr></thead>
-      <tbody id="multaBody"></tbody>
-    </table></div>
-    <div class="card" id="multaMore" style="display:none;margin-top:10px;padding:10px 14px;font-size:12px;color:var(--muted)"></div>
   </section>
 
   <!-- ===== DADOS ===== -->
@@ -1641,7 +1608,6 @@ function renderKpis(rows){
       {lab:'Dias com movimentação',val:audit.diasMov.toLocaleString('pt-BR'),sub:hDec(audit.hCond)+' de condução no período',ac:'var(--s4)',tab:'linha'}
     );
   }
-  if(MULTAS&&opSel){ const mr=multasResumo({op:opSel,range:activeRange()}); K.splice(0,0,{lab:'Multas — '+opSel,val:mr.total.toLocaleString('pt-BR'),sub:mr.descontadas.toLocaleString('pt-BR')+' descontada(s) · '+mr.pendentes.toLocaleString('pt-BR')+' pendente(s) · '+mr.conduta.toLocaleString('pt-BR')+' de conduta',ac:mr.pendentes?'var(--warning)':'var(--s2)',tab:'multas'}); }
   if(MEDIA_OFF){const i=K.findIndex(k=>k&&k.tab==='media');if(i>=0)K.splice(i,1);}
   if(placOk!=null){const placTot=placOk+placAcao;K.splice(1,0,
     {lab:'Placas (total)'+(opSel?' — '+opSel:''),val:placTot,sub:'veículos c/ movimento'+(opSel?' na operação':' na frota'),ac:'var(--s2)',tab:'semid'},
@@ -1766,6 +1732,29 @@ function fechamento(iso){ const m=String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
     label:`16/${MESES[sm-1]} – 15/${MESES[em-1]}/${String(ey).slice(2)}`,
     mesLabel:MESES[em-1]+'/'+String(ey).slice(2) }; }
 function fechaMin(f){ return (Math.round((Date.parse(f.end)-Date.parse(f.start))/86400000)+1)*1440; }
+
+function multaTimelineEvents(nome,start,total){
+  if(!MULTAS||!nome||!start||!total)return [];
+  const out=[], dayCount=Math.ceil(total/1440), nn=norm(nome);
+  for(let di=0;di<dayCount;di++){
+    const data=new Date(Date.parse(start)+di*86400000).toISOString().slice(0,10);
+    const arr=MULTAS_BY_DATE[data]||[];
+    for(const m of arr){
+      if(!multaEscopoPadrao(m)||_multaCancelada(m))continue;
+      const ctx=multaContext(m);
+      const doc=multaDriverMatchDoc(m,nome);
+      const ponto=norm(ctx.motPonto||'')===nn||nomeCanon(ctx.motPonto||'')===nomeCanon(nome);
+      const cam=norm(ctx.motCam||'')===nn||nomeCanon(ctx.motCam||'')===nomeCanon(nome);
+      if(!(doc||ponto||cam))continue;
+      const hm0=toMin(m.hora||''); if(hm0==null)continue;
+      const cls=multaTipoClasse(m.tipo);
+      out.push({t:di*1440+hm0,tipo:cls,placa:m.placa||'',auto:m.auto||m.numero||'',doc:m.motorista||'',cam:ctx.motCam||'',audit:ctx.audit||'',situacao:m.situacao||''});
+    }
+  }
+  return out;
+}
+function multaTimelineIcon(t){ return t==='CELULAR'?'📱':t==='VELOCIDADE'?'🚨':'🧾'; }
+function multaTimelineLabel(t){ return t==='CELULAR'?'Multa · celular':t==='VELOCIDADE'?'Multa · velocidade':'Multa'; }
 // monta os cards semanais (agrupa por motorista+semana), registra o estado de zoom e devolve {html, ids}
 function buildWeekCards(rows, prefix, cap, showNome, mode){
   mode=mode||'week';
@@ -1782,7 +1771,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
   const groups=Object.values(grp).sort((a,b)=> a.gkey<b.gkey?1:a.gkey>b.gkey?-1:a.nome.localeCompare(b.nome));
   const shown=groups.slice(0,cap); const ids=[]; const noun=mode==='fecha'?'períodos':(mode==='dia'?'dias':'semanas'); const zoomTxt=mode==='dia'?'dia → horas':(mode==='fecha'?'período → dia → horas':'semana → dia → horas');
   const html=shown.map((g,i)=>{
-    const id=prefix+i; ids.push(id); const ponto=[],mov=[],alertas=[],ident=[],interj=[],dayStats=Object.create(null); let dd=0,km=0,hpon=0,hcond=0,hex=0,nAlto=0,restMin=null,restViol=0; const placas=new Set(), dias=new Set(), ops=new Set(), journeySeen=new Set(), movSeen=new Set();
+    const id=prefix+i; ids.push(id); const ponto=[],mov=[],alertas=[],ident=[],interj=[],dayStats=Object.create(null); const multas=multaTimelineEvents(g.nome,g.start,g.total); let dd=0,km=0,hpon=0,hcond=0,hex=0,nAlto=0,restMin=null,restViol=0; const placas=new Set(), dias=new Set(), ops=new Set(), journeySeen=new Set(), movSeen=new Set();
     const feriasDays=feriasPeriodo(g.nome,g.start,g.total);
     g.recs.forEach(r=>{ const dIdx=Math.round((Date.parse(r.data)-Date.parse(g.start))/86400000); const off=dIdx*1440; dias.add(r.data); if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
       const P = (r.seqP && r.seqP.length===r.punches.length) ? r.seqP : r.punches;
@@ -1800,7 +1789,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
         if(r.punches&&r.punches.length){ const cs=off+r.punches[0]; interj.push({a:cs-r.interjornada,b:cs,min:r.interjornada,viol:r.interjornada<CFG.interjornadaMin,day:r.data}); } }
     });
     const identPct = aderTrilhaIdent(ident);   // % realmente verde na trilha; vermelho reduz o indicador
-    ZTL[id]={weekStart:g.start, ponto, mov, alertas, ident, interj, dayStats, ferias:feriasDays, motorista:g.nome, t0:0, t1:g.total, total:g.total};
+    ZTL[id]={weekStart:g.start, ponto, mov, alertas, multas, ident, interj, dayStats, ferias:feriasDays, motorista:g.nome, t0:0, t1:g.total, total:g.total};
     const opsArr=[...ops]; const opTxt=opsArr.join(', ')||'—';
     const meta=`<div class="meta">
       <div class="m"><span>Operação${opsArr.length>1?' ⚠':''}</span><b style="color:${opsArr.length>1?'var(--serious)':'inherit'}" title="${opsArr.length>1?'rodou em '+opsArr.length+' operações no período':''}">${opTxt}</b></div>
@@ -1824,6 +1813,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
         <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
         ${(ident.length||feriasDays.length)?`<div class="track"><span class="tlab">Identificação</span><div class="lane" data-k="ident"></div></div>`:''}
         ${(alertas.length||feriasDays.length)?`<div class="track"><span class="tlab">Alertas</span><div class="lane lane-al" data-k="alertas"></div></div>`:''}
+        ${multas.length?`<div class="track"><span class="tlab">Multas</span><div class="lane lane-multa" data-k="multas"></div></div>`:''}
       </div>
       <div class="wtl-hint">🖱️ role o mouse sobre a linha para <b>zoom</b> (${zoomTxt}) · arraste p/ navegar · duplo-clique reseta</div>
     </div>`;
@@ -1944,6 +1934,8 @@ function renderZoom(id){
   if(laneM) laneM.innerHTML=vacationBg+gl+(st.mov||[]).map(s=>{ const hr=hm(s.a%1440)+'–'+hm(s.b%1440); const lab=s.lab||((s.placa?s.placa+' · ':'')+hr); const ttl=lab+' · '+hm(s.b-s.a)+(s.unid?' · SEM identificação':' de condução')+(s.km?' · '+Math.round(s.km)+'km':''); return seg('mov',s.a,s.b,lab,s.unid?'unid':(s.fora?'fora':''),ttl); }).join('');
   const laneAl=el.querySelector('.lane[data-k="alertas"]');
   if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const cls=al.niv==='A'?'alto':al.niv==='M'?'medio':'baixo'; return `<span class="amark ${cls}" style="left:${p}%" title="${hm(al.t%1440)} · ${tipoLabel(al.tipo)} · ${nivName(al.niv)}"><i>${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
+  const laneMulta=el.querySelector('.lane[data-k="multas"]');
+  if(laneMulta){ laneMulta.innerHTML=vacationBg+gl+(st.multas||[]).map(m=>{ const p=pos(m.t); if(p<-1||p>101)return ''; const who=m.doc?(' · doc: '+firstName(m.doc)):''; const cam=m.cam?(' · câmera: '+firstName(m.cam)):''; const audit=m.audit==='DIVERGE'?' · ⚠ divergência':m.audit==='CONFERE'?' · confere':''; const ttl=hm(m.t%1440)+' · '+multaTimelineLabel(m.tipo)+(m.placa?' · '+m.placa:'')+(m.auto?' · auto '+m.auto:'')+who+cam+audit; return `<span class="mmark" style="left:${p}%" title="${pdfEsc(ttl)}"><i>${multaTimelineIcon(m.tipo)}</i></span>`; }).join(''); }
   const laneId=el.querySelector('.lane[data-k="ident"]');
   if(laneId){ laneId.innerHTML=vacationBg+gl+(st.ident||[]).map(s=>{ const cls=s.div?'iddiv':(s.ok?'idok':'idbad'); const lab=hm(s.a%1440)+'–'+hm(s.b%1440)+(s.div?(' · ⚠ câmera: '+firstName(s.who||'?')):(s.ok?' · identificado':' · SEM identificação')); return seg(cls,s.a,s.b,lab); }).join(''); }
 }
@@ -2181,8 +2173,6 @@ function renderFicha(){
   const P=fichaPontos(M);   // pontos críticos × positivos (mesma fonte do PDF)
   const PL=planoDeAcao(M);  // plano de ação concreto (o que fazer)
   const trats=tratList(nome);   // histórico de tratativas (Lista SharePoint ou local)
-  const multaOpts = {motorista:nome,range:activeRange(),op:(($('#fOp')&&$('#fOp').value)||'')};
-  const multaR = MULTAS ? multasResumo(multaOpts) : null;
   // se logado no M365 e ainda não puxou o banco compartilhado, sincroniza e re-renderiza (1x)
   if(TRAT_CACHE===null && !_tratSyncTried){ _tratSyncTried=true; tratSyncFromSP(false).then(ok=>{ if(ok && fichaAtual===nome) renderFicha(); }); }
   // este motorista rodou em outras operações fora do filtro atual? (evita o "só apareceu 1 dia")
@@ -2200,12 +2190,10 @@ function renderFicha(){
   const temNiv = alR.real && alR.niveis && (alR.niveis.ALTO||alR.niveis.MEDIO||alR.niveis.BAIXO);
   const sevTot = temNiv ? ((alR.niveis.ALTO||0)+(alR.niveis.MEDIO||0)+(alR.niveis.BAIXO||0)) : 0;
   const sevLine = temNiv ? NIVEL_DEF.map(a=>`${a.ic} ${((alR.niveis&&alR.niveis[a.k])||0).toLocaleString('pt-BR')} ${a.lab.toLowerCase()}`).join(' · ') : '';
-  const multaTipos = MULTAS ? multasCondutaPorTipo(multaOpts) : {celular:0,velocidade:0,total:0};
-  const multaLinha = MULTAS ? (' · <b>multas de conduta</b>: '+multaTipos.total.toLocaleString('pt-BR')+' · '+multaTipos.celular.toLocaleString('pt-BR')+' celular · '+multaTipos.velocidade.toLocaleString('pt-BR')+' velocidade') : '';
-  const alertaSubt = alR.real ? (totAl?('por tipo · total '+totAl.toLocaleString('pt-BR')+(temNiv?(' · <b>excesso de velocidade</b> por severidade ('+sevTot.toLocaleString('pt-BR')+'): '+sevLine):'')+multaLinha):('sem alertas no período'+multaLinha)) : '5 tipos monitorados (demo)';
+  const alertaSubt = alR.real ? (totAl?('por tipo · total '+totAl.toLocaleString('pt-BR')+(temNiv?(' · <b>excesso de velocidade</b> por severidade ('+sevTot.toLocaleString('pt-BR')+'): '+sevLine):'')):'sem alertas no período') : '5 tipos monitorados (demo)';
   const maxTipo = tiposArr.length?tiposArr[0][1]:0;
   const alertTiles = alR.real
-    ? (tiposArr.length ? tiposArr.map(([tp,n])=>`<div class="alert-tile ${n===maxTipo&&n>0?'hot':''}"><div class="n">${alertaIcon(tp)} ${n.toLocaleString('pt-BR')}</div><div class="l">${tipoLabel(tp)}</div>${multaNotaAlerta(tp,multaTipos)}</div>`).join('') : '<div class="empty" style="padding:16px">sem alertas no período</div>')
+    ? (tiposArr.length ? tiposArr.map(([tp,n])=>`<div class="alert-tile ${n===maxTipo&&n>0?'hot':''}"><div class="n">${alertaIcon(tp)} ${n.toLocaleString('pt-BR')}</div><div class="l">${tipoLabel(tp)}</div></div>`).join('') : '<div class="empty" style="padding:16px">sem alertas no período</div>')
     : ALERTA_DEF.map(a=>{ const n=(d.alertas&&d.alertas[a.k])||0; return `<div class="alert-tile ${n>=5?'hot':''}"><div class="n">${a.ic} ${n}</div><div class="l">${a.lab}</div></div>`; }).join('');
 
   $('#fichaBox').innerHTML = `
@@ -2252,8 +2240,6 @@ function renderFicha(){
         <div class="lab">Dias com ponto</div><div class="val tnum">${(diasComPonto||0).toLocaleString('pt-BR')}</div><div class="sub">dias com jornada de ponto registrada</div></div>
       <div class="card kpi"><div class="accent" style="background:var(--s4)"></div>
         <div class="lab">Dias com movimentação</div><div class="val tnum">${(diasComMov||0).toLocaleString('pt-BR')}</div><div class="sub">${hDec(hCondAudit||0)} de condução no período</div></div>
-      ${multaR?`<div class="card kpi"><div class="accent" style="background:${multaR.pendentes?'var(--warning)':'var(--s2)'}"></div>
-        <div class="lab">Multas</div><div class="val tnum">${multaR.total.toLocaleString('pt-BR')}</div><div class="sub"><b>${multaTipos.celular.toLocaleString('pt-BR')} celular</b> · <b>${multaTipos.velocidade.toLocaleString('pt-BR')} velocidade</b><br>${multaR.descontadas.toLocaleString('pt-BR')} descontada(s) · ${multaR.pendentes.toLocaleString('pt-BR')} pendente(s)<br>R$ — pendente · R$ — descontado</div></div>`:''}
       <div class="card kpi"><div class="accent" style="background:${restMinF!=null&&restMinF<CFG.interjornadaMin?'var(--critical)':(restMinF!=null?'var(--good)':'var(--muted)')}"></div>
         <div class="lab">Descanso entre jornadas</div><div class="val tnum">${restMinF==null?'—':hDec(restMinF)}</div><div class="sub">${interjViol>0?('⚠ '+interjViol+' dia(s) < 11h'):(restMinF!=null?'menor descanso · mín 11h ✓':'sem dados')}</div></div>
       <div class="card kpi"><div class="accent" style="background:${(alR.niveis&&alR.niveis.ALTO)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
@@ -2374,9 +2360,8 @@ function exportFichaPDF(){
   // Alertas por tipo (mesmos tiles da ficha na tela): real = alR.tipos; demo = ALERTA_DEF
   const tiposArr = M.alR.real ? Object.entries(M.alR.tipos||{}).sort((a,b)=>b[1]-a[1]) : [];
   const maxTipo = tiposArr.length?tiposArr[0][1]:0;
-  const multaTiposPdf = MULTAS ? multasCondutaPorTipo({motorista:nome,range:activeRange(),op:($('#fOp')&&$('#fOp').value)||''}) : {celular:0,velocidade:0,total:0};
   const alertaTiles = M.alR.real
-    ? tiposArr.map(([tp,nv])=>{const n=norm(tp);const mv=n.includes('CELULAR')?multaTiposPdf.celular:(n.includes('VELOCIDADE')?multaTiposPdf.velocidade:null);return `<div class="atile${nv===maxTipo&&nv>0?' hot':''}"><div class="an">${alertaIcon(tp)} ${nv.toLocaleString('pt-BR')}</div><div class="al">${pdfEsc(tipoLabel(tp))}</div>${mv==null?'':`<div style="font-size:8.5px;color:#b45309;font-weight:700;margin-top:3px">${mv.toLocaleString('pt-BR')} multa${mv===1?'':'s'}</div>`}</div>`;}).join('')
+    ? tiposArr.map(([tp,nv])=>`<div class="atile${nv===maxTipo&&nv>0?' hot':''}"><div class="an">${alertaIcon(tp)} ${nv.toLocaleString('pt-BR')}</div><div class="al">${pdfEsc(tipoLabel(tp))}</div></div>`).join('')
     : ALERTA_DEF.map(a=>{ const nv=(M.d.alertas&&M.d.alertas[a.k])||0; return `<div class="atile${nv>=5?' hot':''}"><div class="an">${a.ic} ${nv}</div><div class="al">${a.lab}</div></div>`; }).join('');
   const alertaSub = M.alR.real ? (M.totAl?'por tipo · total '+M.totAl.toLocaleString('pt-BR'):'sem alertas no período') : '5 tipos monitorados (demo)';
   const alertasBloco = alertaTiles ? `<h2 class="sec">Alertas — ${alertaSub}</h2><div class="alertas">${alertaTiles}</div>` : '';
@@ -2696,7 +2681,6 @@ function renderAll(){
   else if(view==='motoristas') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+(rng?(rng.de+'|'+rng.ate):'*');
   else if(view==='semid') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+CFG.sem;
   else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view;
-  else if(view==='multas') viewKey=DATA_REV+'|'+MULTAS_REV+'|'+fkey+'|'+($('#multaResp')?$('#multaResp').value:'')+'|'+($('#multaAudit')?$('#multaAudit').value:'');
   else viewKey=DATA_REV+'|'+view;
   // Cache LRU do Resumo: limpar um filtro ou voltar a uma combinação já usada restaura o HTML pronto.
   if(view==='semana'&&SUMMARY_DOM_CACHE.has(viewKey)){
@@ -2722,7 +2706,6 @@ function renderAll(){
   else if(view==='operacao') renderBatimento();
   else if(view==='saude') renderSaude();
   else if(view==='semid') renderPlacasSemId();
-  else if(view==='multas') renderMultas();
   else if(view==='ficha'&&fichaAtual) renderFicha();
   if(view!=='ficha'&&view!=='motoristas') VIEW_RENDER_KEYS[view]=viewKey;
   const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT; VIEW_BADGE_COUNTS[view]=n; bd.textContent=n>999?'999+':n;}
@@ -4174,7 +4157,6 @@ function multasCondutaPorTipo(opts){
   }
   return {celular,velocidade,total};
 }
-function multaNotaAlerta(tp,counts){ const n=norm(tp); let v=null; if(n.includes('CELULAR'))v=counts&&counts.celular; else if(n.includes('VELOCIDADE'))v=counts&&counts.velocidade; return v==null?'':`<div class="multa-note">${v.toLocaleString('pt-BR')} multa${v===1?'':'s'}</div>`; }
 function multaRowNorm(row,source){
   const keys=Object.keys(row||{}); const get=(aliases)=>{for(const a of aliases){const na=norm(a);const k=keys.find(x=>norm(x)===na)||keys.find(x=>norm(x).includes(na));if(k)return row[k];}return '';};
   const numero=String(get(['Número','Numero'])||'').trim(), auto=String(get(['Número da Atuação','Numero da Atuacao','Número da Autuação','Numero da Autuacao','Auto de Infração','Auto de Infracao'])||'').trim();
@@ -4183,32 +4165,32 @@ function multaRowNorm(row,source){
   const funcionario=String(get(['Funcionário','Funcionario'])||'').trim(), venc=isoDate(get(['Vencimento','Data Vencimento']));
   const tipoOc=String(get(['Tipo de Ocorrência','Tipo de Ocorrencia'])||'').trim(), tipo=String(get(['Tipo','Infração','Infracao','Descrição','Descricao'])||'').trim(), situacao=String(get(['Situação','Situacao','Status'])||'').trim();
   if(!numero&&!auto&&!dt.data&&!placa&&!tipo)return null;
-  return {numero,auto,data:dt.data,hora:dt.hora,dataHora:dt.raw,placa,motorista:mot.nome,motoristaCpf:mot.cpf,funcionario,vencimento:venc,tipoOcorrencia:tipoOc,tipo,situacao,descontoDia1:!!(dt.data&&dt.data.endsWith('-01')),condutaMotorista:multaConduta(tipo),fonte:source||''};
+  return {numero,auto,data:dt.data,hora:dt.hora,dataHora:dt.raw,placa,motorista:mot.nome,motoristaCpf:mot.cpf,funcionario,vencimento:venc,tipoOcorrencia:tipoOc,tipo,situacao,condutaMotorista:multaConduta(tipo),fonte:source||''};
 }
 async function parseMultasCsvFile(file,out,seen,diag){
   const text=decodeText(await file.arrayBuffer()).replace(/^﻿/,''); const lines=text.split(/\r?\n/); if(!lines.length)return;
   let hi=lines.findIndex(x=>x.trim()); if(hi<0)return; const first=lines[hi], delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':','; const head=splitCSVLine(first,delim);
   for(let i=hi+1;i<lines.length;i++){
     const line=lines[i]; if(!line||!line.trim())continue; const c=splitCSVLine(line,delim),row={}; head.forEach((h,j)=>row[h]=c[j]!=null?c[j]:''); const m=multaRowNorm(row,file.name); if(!m){diag.invalidas++;continue;}
-    const key=[m.numero,m.auto,m.dataHora,m.placa].join('|'); if(seen.has(key)){diag.duplicadas++;continue;} seen.add(key); out.push(m); diag.lidas++; if(m.descontoDia1)diag.dia1++; if(m.condutaMotorista)diag.conduta++;
+    const key=[m.numero,m.auto,m.dataHora,m.placa].join('|'); if(seen.has(key)){diag.duplicadas++;continue;} seen.add(key); out.push(m); diag.lidas++; if(m.condutaMotorista)diag.conduta++;
     if(i%4000===0) await uiYield();
   }
 }
 async function loadMultasFiles(files){
-  const arr=[...files].filter(f=>f&&!/^~\$/i.test(f.name)).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR')); const out=[],seen=new Set(),diag={arquivos:arr.length,lidas:0,duplicadas:0,invalidas:0,dia1:0,conduta:0,falhas:[]};
+  const arr=[...files].filter(f=>f&&!/^~\$/i.test(f.name)).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR')); const out=[],seen=new Set(),diag={arquivos:arr.length,lidas:0,duplicadas:0,invalidas:0,conduta:0,falhas:[]};
   for(let i=0;i<arr.length;i++){
     const f=arr[i]; toast('Multas '+(i+1)+'/'+arr.length+' · '+f.name);
     try{
       const ext=(f.name.split('.').pop()||'').toLowerCase();
       if(ext==='csv'||ext==='txt') await parseMultasCsvFile(f,out,seen,diag);
       else if(ext==='xlsx'||ext==='xls'){
-        const rows=await readFileRowsP(f); for(let j=0;j<rows.length;j++){const m=multaRowNorm(rows[j],f.name);if(!m){diag.invalidas++;continue;}const key=[m.numero,m.auto,m.dataHora,m.placa].join('|');if(seen.has(key)){diag.duplicadas++;continue;}seen.add(key);out.push(m);diag.lidas++;if(m.descontoDia1)diag.dia1++;if(m.condutaMotorista)diag.conduta++;if(j%3000===0)await uiYield();}
+        const rows=await readFileRowsP(f); for(let j=0;j<rows.length;j++){const m=multaRowNorm(rows[j],f.name);if(!m){diag.invalidas++;continue;}const key=[m.numero,m.auto,m.dataHora,m.placa].join('|');if(seen.has(key)){diag.duplicadas++;continue;}seen.add(key);out.push(m);diag.lidas++;if(m.condutaMotorista)diag.conduta++;if(j%3000===0)await uiYield();}
       } else diag.falhas.push({arquivo:f.name,erro:'formato não suportado'});
     }catch(e){console.error('Multas: falha em '+f.name,e);diag.falhas.push({arquivo:f.name,erro:String(e&&e.message||e)});} await uiYield();
   }
   MULTAS=out; MULTAS_N=out.length; MULTAS_DIAG=diag; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); afterImportChange({reanalyze:false,filters:false,persist:true});
   const extra=(diag.duplicadas?' · '+diag.duplicadas.toLocaleString('pt-BR')+' duplicada(s) ignorada(s)':'')+(diag.falhas.length?' · '+diag.falhas.length+' arquivo(s) com falha':'');
-  toast('Multas ✓ '+MULTAS_N.toLocaleString('pt-BR')+' registros · '+diag.dia1.toLocaleString('pt-BR')+' no dia 01 · '+diag.conduta.toLocaleString('pt-BR')+' de conduta'+extra);
+  toast('Multas ✓ '+MULTAS_N.toLocaleString('pt-BR')+' registros · '+diag.conduta.toLocaleString('pt-BR')+' de conduta (celular/velocidade)'+extra);
 }
 
 
@@ -4259,11 +4241,7 @@ function multaContext(m){
   const nd=norm(m.motorista||''), nc=norm(motCam||''); let audit='SEM_CAMERA';
   if(!nd)audit='SEM_DOCUMENTO'; else if(nc)audit=(nd===nc?'CONFERE':'DIVERGE');
   const cancelada=norm(m.situacao||'').includes('CANCEL');
-  let resp='REVISAR', desconto='A DEFINIR';
-  if(cancelada){resp='CANCELADA';desconto='N/A';}
-  else if(m.descontoDia1){resp='MOTORISTA';desconto='DESCONTADA';}
-  else if(m.condutaMotorista){resp='MOTORISTA';desconto='PENDENTE';}
-  const out={operacao,motPonto,motCam,audit,resp,desconto,cancelada,pendente:desconto==='PENDENTE'}; MULTA_CTX_CACHE.set(key,out); return out;
+  const out={operacao,motPonto,motCam,audit,cancelada}; MULTA_CTX_CACHE.set(key,out); return out;
 }
 function multaDriverMatchDoc(m,nome){
   const nn=norm(nome); if(!nn)return false; const cpf=(NOME2CPF&&NOME2CPF[nn])||'';
@@ -4281,53 +4259,8 @@ function multaRangeList(range){
   const out=[]; const ds=Object.keys(MULTAS_BY_DATE).sort(); for(const d of ds){if(d<range.de)continue;if(d>range.ate)break;out.push(...MULTAS_BY_DATE[d]);} return out;
 }
 function _multaCancelada(m){return norm(m.situacao||'').includes('CANCEL');}
-function _multaRawStatus(m){if(_multaCancelada(m))return 'CANCELADA';if(m.descontoDia1)return 'DESCONTADA';if(m.condutaMotorista)return 'PENDENTE';return 'REVISAR';}
-function multasResumo(opts){
-  opts=opts||{}; const range=opts.range||null,op=opts.op||'',nome=opts.motorista||''; let total=0,descontadas=0,pendentes=0,conduta=0,revisar=0,canceladas=0;
-  for(const m of multaRangeList(range)){
-    if(!multaEscopoPadrao(m))continue;
-    if(op&&multaOperacao(m)!==op)continue; if(nome&&!multaDriverMatchDoc(m,nome))continue;
-    total++; const st=_multaRawStatus(m); if(st==='CANCELADA')canceladas++; else if(st==='DESCONTADA')descontadas++; else if(st==='PENDENTE')pendentes++; else revisar++; if(m.condutaMotorista&&st!=='CANCELADA')conduta++;
-  }
-  return {total,descontadas,pendentes,conduta,revisar,canceladas};
-}
+
 function multaAuditLabel(a){return a==='CONFERE'?'Confere':a==='DIVERGE'?'Diverge':a==='SEM_DOCUMENTO'?'Sem motorista no documento':'Sem identificação no horário';}
-function multaRespLabel(c){return c.resp==='CANCELADA'?'Cancelada':c.desconto==='DESCONTADA'?'Motorista':c.desconto==='PENDENTE'?'Motorista':'Regra a definir';}
-function multaFiltered(){
-  if(!MULTAS)return [];
-  const rng=activeRange(),op=$('#fOp').value,mot=$('#fMot').value.trim(),q=norm($('#fBusca').value),resp=$('#multaResp')?$('#multaResp').value:'',aud=$('#multaAudit')?$('#multaAudit').value:''; const out=[];
-  for(const m of multaRangeList(rng)){
-    if(!multaEscopoPadrao(m))continue;
-    if(q){const hay=norm([m.numero,m.auto,m.placa,m.motorista,m.tipo,m.situacao].join(' '));if(!hay.includes(q))continue;}
-    if(op&&multaOperacao(m)!==op)continue; if(mot&&!multaDriverMatchDoc(m,mot))continue;
-    if(resp&&_multaRawStatus(m)!==resp)continue;
-    if(aud&&multaContext(m).audit!==aud)continue; out.push(m);
-  }
-  return out;
-}
-function renderMultas(){
-  const kb=$('#multaKpis'),body=$('#multaBody'),more=$('#multaMore'); if(!kb||!body)return;
-  if(!MULTAS){kb.innerHTML='';body.innerHTML='<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:32px">Carregue a fonte <b>12 — Multas / Infrações</b> na aba Dados.</td></tr>';if(more)more.style.display='none';return;}
-  const rows=multaFiltered(); MULTA_ROWS=rows; let descontadas=0,pend=0,cond=0,cancel=0,revisar=0;
-  for(const m of rows){const st=_multaRawStatus(m);if(st==='DESCONTADA')descontadas++;else if(st==='PENDENTE')pend++;else if(st==='CANCELADA')cancel++;else revisar++;if(m.condutaMotorista&&st!=='CANCELADA')cond++;}
-  const lim=500,show=rows.slice(0,lim); let div=0; for(const m of show)if(multaContext(m).audit==='DIVERGE')div++;
-  const K=[
-    {lab:'Total de multas',val:rows.length.toLocaleString('pt-BR'),sub:(cancel?cancel.toLocaleString('pt-BR')+' cancelada(s) · ':'')+cond.toLocaleString('pt-BR')+' de conduta',ac:'var(--s2)'},
-    {lab:'Descontadas',val:descontadas.toLocaleString('pt-BR'),sub:'registros com data no dia 01',ac:'var(--good)'},
-    {lab:'Pendentes de desconto',val:pend.toLocaleString('pt-BR'),sub:'velocidade/celular ainda sem dia 01',ac:pend?'var(--warning)':'var(--muted)'},
-    {lab:'Valor pendente',val:'R$ —',sub:'fonte atual não possui valor da multa',ac:'var(--muted)'},
-    {lab:'Valor descontado',val:'R$ —',sub:'fonte atual não possui valor descontado',ac:'var(--muted)'},
-    {lab:'Divergências câmera',val:div.toLocaleString('pt-BR'),sub:(rows.length>lim?'nas '+lim+' multas exibidas · filtre para auditar o conjunto':'documento ≠ câmera no filtro atual')+' · '+revisar.toLocaleString('pt-BR')+' regra(s) a definir',ac:div?'var(--critical)':'var(--good)'}
-  ];
-  kb.innerHTML=K.map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
-  body.innerHTML=show.map(m=>{const c=multaContext(m),auditCls=c.audit==='DIVERGE'?'badcell':c.audit==='CONFERE'?'okcell':'';return `<tr class="multarow" data-placa="${m.placa||''}" data-dia="${m.data||''}" title="Abrir placa na linha do tempo"><td>${brDate(m.data)}${m.hora?' '+m.hora:''}</td><td>${pdfEsc(m.auto||m.numero||'—')}</td><td><b>${m.placa||'—'}</b></td><td>${pdfEsc(c.operacao||'Não localizada')}</td><td>${pdfEsc(m.motorista||'—')}${m.motoristaCpf?'<br><small>'+pdfEsc(m.motoristaCpf)+'</small>':''}</td><td>${pdfEsc(c.motPonto||'—')}</td><td>${pdfEsc(c.motCam||'—')}</td><td><span class="${auditCls}">${multaAuditLabel(c.audit)}</span></td><td>${pdfEsc(m.tipo||'—')}</td><td>${multaRespLabel(c)}</td><td>${c.desconto}</td><td>${pdfEsc(m.situacao||'—')}</td><td>${m.vencimento?brDate(m.vencimento):'—'}</td></tr>`;}).join('')||'<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:32px">Nenhuma multa encontrada nos filtros atuais.</td></tr>';
-  if(more){if(rows.length>lim){more.style.display='block';more.innerHTML=`Exibindo as primeiras <b>${lim.toLocaleString('pt-BR')}</b> de <b>${rows.length.toLocaleString('pt-BR')}</b> multas. Use período, operação, motorista ou busca para reduzir a lista; o CSV exporta o conjunto completo.`;}else more.style.display='none';}
-}
-async function exportMultas(){
-  const rows=MULTA_ROWS.length?MULTA_ROWS:multaFiltered(), lines=[['Data','Hora','Auto','Numero','Placa','Operacao_data','Motorista_documento','CPF_documento','Motorista_jornada','Motorista_camera','Conferencia_camera','Tipo','Responsabilidade','Desconto','Situacao','Vencimento'].join(';')];
-  for(let i=0;i<rows.length;i++){const m=rows[i],c=multaContext(m),vals=[m.data,m.hora,m.auto,m.numero,m.placa,c.operacao,m.motorista,m.motoristaCpf,c.motPonto,c.motCam,multaAuditLabel(c.audit),m.tipo,multaRespLabel(c),c.desconto,m.situacao,m.vencimento];lines.push(vals.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';'));if(i&&i%3000===0)await uiYield();}
-  baixarCsv(lines,'multas_auditoria_pulso360.csv');
-}
 
 function updateDropStatus(){
   const opc=['#drop-alertas','#drop-tms','#drop-abast','#drop-metas','#drop-boletim','#drop-pedidos','#drop-saude','#drop-bdv','#drop-motoristas','#drop-multas'];
@@ -4344,7 +4277,7 @@ function updateDropStatus(){
   set('#stBdv', BDV?Object.keys(BDV).length:0, '#drop-bdv', 'placas');
   if(MOTORISTAS_TMS_N||ADMISSAO_N){ const d=diagnosticoAdmissaoAtual(); $('#stMotoristas').textContent=(MOTORISTAS_TMS_N?MOTORISTAS_TMS_N.toLocaleString('pt-BR')+' cadastrados · ':'')+ADMISSAO_N.toLocaleString('pt-BR')+' com admissão · '+d.ok+'/'+d.total+' vinculados'+(d.semData?' · '+d.semData+' sem data':'')+(d.semMatch?' · '+d.semMatch+' sem correspondência':'')+' ✓'; $('#drop-motoristas').classList.add('loaded'); }
   else set('#stMotoristas', 0, '#drop-motoristas', 'motoristas c/ admissão');
-  if(MULTAS_N){ const d=MULTAS_DIAG||{}; $('#stMultas').textContent=MULTAS_N.toLocaleString('pt-BR')+' infrações · '+((d.dia1||0).toLocaleString('pt-BR'))+' dia 01 · '+((d.conduta||0).toLocaleString('pt-BR'))+' conduta ✓'; $('#drop-multas').classList.add('loaded'); }
+  if(MULTAS_N){ const d=MULTAS_DIAG||{}; $('#stMultas').textContent=MULTAS_N.toLocaleString('pt-BR')+' infrações · '+((d.conduta||0).toLocaleString('pt-BR'))+' conduta (celular/velocidade) ✓'; $('#drop-multas').classList.add('loaded'); }
   else set('#stMultas',0,'#drop-multas','infrações');
 }
 
@@ -4700,7 +4633,7 @@ $('#tabs').addEventListener('click',e=>{ const b=e.target.closest('button'); if(
   } else renderAll();
 });
 // KPIs clicáveis → abrem a aba que detalha a informação
-$('#kpis').addEventListener('click',e=>{ const c=e.target.closest('.kpi[data-tab]'); if(!c)return; if(c.dataset.tab==='multas')setTabFilterState('multas',readTopFilterState(),true); goTab(c.dataset.tab); });
+$('#kpis').addEventListener('click',e=>{ const c=e.target.closest('.kpi[data-tab]'); if(!c)return; goTab(c.dataset.tab); });
 // foca um registro (motorista+dia) na Linha do tempo
 function focusRecord(mot, dia){ setTabFilterState('linha',{fMot:mot||'',fDia:dia||''},true); goTab('linha'); }
 // clicar num apontamento das Divergências → linha do tempo daquele motorista+dia
@@ -4719,7 +4652,6 @@ $('#saudeBox').addEventListener('click',e=>{ const tr=e.target.closest('.saudero
 $('#opBox').addEventListener('click',e=>{ const tr=e.target.closest('.oprow'); if(tr) focusPlaca(tr.dataset.placa); });
 // clicar numa linha do Consolidado → Linha do tempo daquele motorista+dia
 $('#tblBody').addEventListener('click',e=>{ const tr=e.target.closest('.tblrow'); if(tr) focusRecord(decodeURIComponent(tr.dataset.mot||''), tr.dataset.dia); });
-if($('#multaBody'))$('#multaBody').addEventListener('click',e=>{ const tr=e.target.closest('.multarow'); if(!tr)return; const st=emptyTopFilterState(); st.fBusca=tr.dataset.placa||''; st.fDia=tr.dataset.dia||''; setTabFilterState('linha',st,true); goTab('linha'); });
 // clicar numa linha da Média → ficha do motorista
 $('#mediaBox').addEventListener('click',e=>{ const tr=e.target.closest('.mediarow'); if(tr) openFicha(decodeURIComponent(tr.dataset.mot||'')); });
 // capinha do motorista → detalhamento (ficha)
@@ -4730,11 +4662,6 @@ $('#btnTratativa').onclick=openTratModal;
 $('#tratCancel').onclick=()=>{ $('#tratModal').style.display='none'; };
 $('#tratSave').onclick=salvarTratativa;
 $('#tratModal').addEventListener('click',e=>{ if(e.target.id==='tratModal') $('#tratModal').style.display='none'; });
-// aba Multas — filtros locais / exportação
-if($('#multaResp'))$('#multaResp').addEventListener('change',()=>{VIEW_RENDER_KEYS.multas='';renderAll();});
-if($('#multaAudit'))$('#multaAudit').addEventListener('change',()=>{VIEW_RENDER_KEYS.multas='';renderAll();});
-if($('#multaLimpar'))$('#multaLimpar').onclick=()=>{if($('#multaResp'))$('#multaResp').value='';if($('#multaAudit'))$('#multaAudit').value='';VIEW_RENDER_KEYS.multas='';renderAll();};
-if($('#expMultas'))$('#expMultas').onclick=exportMultas;
 
 // aba Motoristas — filtros locais / exportação
 $('#motCadClass').addEventListener('change',renderMotoristas);
