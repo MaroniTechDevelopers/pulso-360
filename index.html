@@ -374,6 +374,9 @@
   .drop.loaded{border-style:solid;border-color:color-mix(in srgb,var(--good) 55%,var(--border))}
   .drop.loaded .status-line{color:var(--good-ink)}
   .drop code{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 5px;font-size:11px}
+  .bulk-chip{font-size:10.5px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px 7px}
+  .bulk-chip.ok{color:var(--good-ink);border-color:color-mix(in srgb,var(--good) 42%,var(--border));background:color-mix(in srgb,var(--good) 8%,var(--surface))}
+  .bulk-chip.err{color:var(--crit-ink);border-color:color-mix(in srgb,var(--critical) 40%,var(--border))}
   .cfg{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
   .cfg .cf label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
   .cfg .cf input{width:100%;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font:inherit;cursor:text}
@@ -661,7 +664,7 @@
         <h3><span class="num">2</span> Movimentação + Identificação (Trimble)</h3>
         <p>Histórico do veículo com o condutor identificado. Colunas: <code>Veículo</code>, <code>Ocorrência</code>, <code>Data/Hora inicial</code> / <code>final</code>, <code>Motorista</code>, <code>Distância</code>, <code>Consumo</code>. Aceita <code>.zip</code> com vários CSVs diários (grande) — carregue a jornada antes.</p>
         <input type="file" id="fileMov" accept=".zip,.csv,.xlsx,.xls,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('fileMov').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn solid" onclick="document.getElementById('fileMov').click()">Selecionar arquivos / ZIPs (múltiplos)</button>
         <button class="btn" style="margin-top:6px" onclick="pickDir('mov')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stMov">nenhum arquivo — usando demonstração</div>
       </div>
@@ -669,7 +672,7 @@
         <h3><span class="num">3</span> Alertas (Trimble) <span style="font-size:11px;color:var(--muted);font-weight:400">opcional</span></h3>
         <p>Histórico de alertas. Colunas: <code>Motorista</code>, <code>Tipo</code>, <code>Nível</code>, <code>UO</code>, <code>Data</code>. Aceita <code>.zip</code> ou <code>.csv</code> — só conta (não guarda as linhas).</p>
         <input type="file" id="fileAlertas" accept=".zip,.csv,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('fileAlertas').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn solid" onclick="document.getElementById('fileAlertas').click()">Selecionar arquivos / ZIPs (múltiplos)</button>
         <button class="btn" style="margin-top:6px" onclick="pickDir('alertas')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stAlertas">nenhum arquivo</div>
       </div>
@@ -698,7 +701,7 @@
         <h3><span class="num">7</span> Boletim do Motorista <span style="font-size:11px;color:var(--muted);font-weight:400">ocorrências · alertas por tipo</span></h3>
         <p>Boletim do Motorista (Trimble), 1 linha por <b>motorista + dia</b>. Traz os alertas por tipo em colunas: <code>Uso de Celular</code>, <code>Fadiga</code>, <code>Distração</code>, <code>Sem Cinto</code>, <code>Freada</code>, <code>Excesso Velocidade</code>, <code>Parado Ligado</code>… Alimenta os <b>blocos por tipo</b> da ficha. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
         <input type="file" id="fileBoletim" accept=".zip,.csv,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('fileBoletim').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn solid" onclick="document.getElementById('fileBoletim').click()">Selecionar arquivos / ZIPs (múltiplos)</button>
         <button class="btn" style="margin-top:6px" onclick="pickDir('boletim')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stBoletim">nenhum arquivo</div>
       </div>
@@ -706,7 +709,7 @@
         <h3><span class="num">8</span> Relatório de Pedidos <span style="font-size:11px;color:var(--muted);font-weight:400">viagens · operação por viagem</span></h3>
         <p>Pedidos/viagens do TMS. Colunas: <code>CPF Motoristas</code>, <code>Veículos</code>, <code>Centro Resultado</code>, <code>Data Carregamento</code>. <b>Opcional</b> (a operação já vem da UO da Trimble) — serve p/ a divergência <b>condutor não vinculado à placa</b> e operação por viagem. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
         <input type="file" id="filePedidos" accept=".zip,.csv,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('filePedidos').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn solid" onclick="document.getElementById('filePedidos').click()">Selecionar arquivos / ZIPs (múltiplos)</button>
         <button class="btn" style="margin-top:6px" onclick="pickDir('pedidos')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stPedidos">nenhum arquivo</div>
       </div>
@@ -721,7 +724,7 @@
         <h3><span class="num">10</span> Boletim do Veículo <span style="font-size:11px;color:var(--muted);font-weight:400">identificação · UO · câmera</span></h3>
         <p>Boletim do Veículo (Trimble), 1 linha por <b>placa + dia</b>. Colunas: <code>PLACA</code>, <code>UO</code> (operação), <code>MOTORISTAS</code> (vazio = não identificado), <code>DISTÂNCIA PERCORRIDA</code>, <code>SEM MOTORISTA</code>, <code>CÂMERA OBSTRUÍDA</code>, <code>DESCONEXÃO DA CÂMERA</code>. É a fonte da <b>aderência de identificação</b> (dias identificados ÷ dias que moveu), da <b>operação pela UO</b> e da <b>saúde da câmera</b> p/ o plano de ação. Aceita <code>.csv</code> ou <code>.zip</code>.</p>
         <input type="file" id="fileBdv" accept=".zip,.csv,.txt" multiple hidden>
-        <button class="btn solid" onclick="document.getElementById('fileBdv').click()">Selecionar arquivos (vários dias)</button>
+        <button class="btn solid" onclick="document.getElementById('fileBdv').click()">Selecionar arquivos / ZIPs (múltiplos)</button>
         <button class="btn" style="margin-top:6px" onclick="pickDir('bdv')">📁 Selecionar pasta (todos os dias)</button>
         <div class="status-line" id="stBdv">nenhum arquivo</div>
       </div>
@@ -2931,6 +2934,7 @@ function exportMedia(){
    O painel é recalculado uma única vez ao sair da aba Dados.
    ============================================================ */
 let IMPORT_DIRTY_ANALYZE=false, IMPORT_DIRTY_FILTERS=false;
+let BULK_IMPORT_ACTIVE=false, BULK_IMPORT_CANCEL=false;
 function activeTabName(){ const b=document.querySelector('#tabs button.active'); return b?b.dataset.tab:''; }
 function markImportDirty(reanalyze=true, filters=true){
   if(reanalyze) IMPORT_DIRTY_ANALYZE=true;
@@ -2948,6 +2952,8 @@ function flushImportChanges(render=true){
 function afterImportChange(opts){
   opts=opts||{};
   const reanalyze=opts.reanalyze!==false, filters=opts.filters!==false;
+  // Importação em lote: não persiste/recalcula a cada fonte. Faz tudo uma única vez no final.
+  if(BULK_IMPORT_ACTIVE){ markImportDirty(reanalyze,filters); updateDropStatus(); return; }
   if(opts.persist!==false && RAW) saveData();
   markImportDirty(reanalyze,filters);
   updateDropStatus();
@@ -2972,9 +2978,9 @@ function readFile(file, cb){
     rd.readAsArrayBuffer(file);   // lê bytes p/ detectar acentuação (UTF-8 ou Windows-1252)
   }
 }
-function readFileRowsP(file){ return new Promise(resolve=>{ let done=false; const finish=rows=>{ if(done)return; done=true; resolve(rows||[]); }; try{ readFile(file,finish); }catch(e){ finish([]); } setTimeout(()=>finish([]),60000); }); }
-async function readFilesRows(files){ const all=[]; const arr=[...files].sort((a,b)=>String(a.name).localeCompare(String(b.name))); for(const f of arr){ const rows=await readFileRowsP(f); if(rows&&rows.length) all.push(...rows); } return all; }
-function loadXlsxSheetP(file, prefer, needCols){ return new Promise(resolve=>{ let done=false; const finish=(rows,name)=>{ if(done)return; done=true; resolve({rows:rows||[],name:name||''}); }; try{ loadXlsxSheet(file,prefer,needCols,finish); }catch(e){ finish([], ''); } setTimeout(()=>finish([], ''),60000); }); }
+const FILE_READ_TIMEOUT_MS=300000; // rede/arquivos grandes: até 5 min antes de considerar falha\nfunction readFileRowsP(file){ return new Promise(resolve=>{ let done=false; const finish=rows=>{ if(done)return; done=true; resolve(rows||[]); }; try{ readFile(file,finish); }catch(e){ console.warn('Falha ao ler '+(file&&file.name||'arquivo'),e); finish([]); } setTimeout(()=>{ if(!done)console.warn('Timeout de leitura: '+(file&&file.name||'arquivo')); finish([]); },FILE_READ_TIMEOUT_MS); }); }
+async function readFilesRows(files){ const all=[]; const arr=[...files].sort((a,b)=>String(a.name).localeCompare(String(b.name))); for(const f of arr){ if(BULK_IMPORT_CANCEL)break; const rows=await readFileRowsP(f); if(rows&&rows.length) all.push(...rows); await uiYield(); } return all; }
+function loadXlsxSheetP(file, prefer, needCols){ return new Promise(resolve=>{ let done=false; const finish=(rows,name)=>{ if(done)return; done=true; resolve({rows:rows||[],name:name||''}); }; try{ loadXlsxSheet(file,prefer,needCols,finish); }catch(e){ console.warn('Falha ao ler Excel '+(file&&file.name||''),e); finish([], ''); } setTimeout(()=>{ if(!done)console.warn('Timeout de Excel: '+(file&&file.name||'arquivo')); finish([], ''); },FILE_READ_TIMEOUT_MS); }); }
 function decodeText(buf){
   try{ return new TextDecoder('utf-8',{fatal:true}).decode(buf); }
   catch(_){ try{ return new TextDecoder('windows-1252').decode(buf); }
@@ -3026,6 +3032,35 @@ function aggAlertas(text, keep){
   const placaUO={}; for(const pl in puo){ let best=-1,uo=''; for(const u in puo[pl]){ if(puo[pl][u]>best){best=puo[pl][u];uo=u;} } placaUO[pl]={uo, uoCurta:uoCurta(uo), n:best}; }
   return {A,n,placaUO,tl};
 }
+
+// Versao assíncrona para muitos ZIPs/CSVs: processa em blocos e devolve o controle
+// ao navegador periodicamente, evitando congelar a tela durante arquivos grandes.
+async function aggAlertasAsync(text, keep){
+  text=String(text||'').replace(/^﻿/,''); const nl=text.indexOf('\n'); if(nl<0) return {A:{},n:0,tl:{}};
+  const first=text.slice(0,nl).replace(/\r$/,'');
+  const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
+  const head=splitCSVLine(first,delim); const H={}; head.forEach((h,i)=>H[norm(h)]=i);
+  const find=(...ns)=>{ for(const n of ns){ for(const k in H){ if(k.indexOf(n)>=0) return H[k]; } } return -1; };
+  const iMot=find('MOTORISTA'), iTipo=find('TIPO'), iNivel=find('NIVEL'), iData=find('DATA'), iHora=find('HORA'), iDesc=find('DESCONSIDERADO'), iUO=find('UO'), iPlaca=find('PLACA','VEICULO');
+  const A={},puo={},tl={}; let n=0,start=nl+1,rows=0;
+  while(start<text.length){
+    let end=text.indexOf('\n',start); if(end<0)end=text.length;
+    const line=text.slice(start,text.charCodeAt(end-1)===13?end-1:end); start=end+1; if(!line)continue;
+    const c=splitCSVLine(line,delim); if(iTipo>=0&&c.length<=iTipo)continue;
+    if(iDesc>=0&&norm(c[iDesc]||'')[0]==='S')continue;
+    if(iPlaca>=0&&iUO>=0){const pl=placaKey(c[iPlaca]),uo=(c[iUO]||'').trim();if(pl&&uo)(puo[pl]=puo[pl]||{})[uo]=(puo[pl][uo]||0)+1;}
+    const nome=(iMot>=0?(c[iMot]||'').trim():''); if(!nome)continue; const nn=norm(nome);
+    const tipo=((iTipo>=0?c[iTipo]:'')||'').trim()||'ALERTA',nivel=norm(iNivel>=0?c[iNivel]:'');
+    if(tipoPareceCpf(tipo))continue;
+    const a=(A[nn]=A[nn]||{nome,total:0,niveis:{},tipos:{},semanas:{}});a.total++;a.tipos[tipo]=(a.tipos[tipo]||0)+1;if(nivel)a.niveis[nivel]=(a.niveis[nivel]||0)+1;
+    let d=null;if(iData>=0){d=isoDate(splitDT(c[iData]).date||c[iData]);if(d){const wk=weekInfo(d).key;if(wk)a.semanas[wk]=(a.semanas[wk]||0)+1;}}
+    if(d&&(!keep||keep.has(nn))){let tmin=iHora>=0?toMin(c[iHora]):null;if(tmin==null){const dt=splitDT(c[iData]);if(dt.time)tmin=toMin(dt.time);}if(tmin!=null){const arr=(tl[nn]=tl[nn]||[]);if(arr.length<5000)arr.push([d,tmin,(nivel[0]||''),tipo]);}}
+    n++; rows++; if(rows%2500===0)await uiYield();
+  }
+  const placaUO={};for(const pl in puo){let best=-1,uo='';for(const u in puo[pl])if(puo[pl][u]>best){best=puo[pl][u];uo=u;}placaUO[pl]={uo,uoCurta:uoCurta(uo),n:best};}
+  return {A,n,placaUO,tl};
+}
+
 function placaKey(v){ return String(v||'').toUpperCase().replace(/[\s-]/g,''); }
 // nome curto da operação a partir da UO da Trimble ("TRANSMARONI - OPERAÇÃO FRIGO" → "FRIGO")
 function uoCurta(uo){ let s=String(uo||'').trim(); const m=s.match(/OPERA[ÇC][ÃA]O\s+(.+)$/i); if(m) return m[1].trim(); s=s.replace(/^GRUPO\s+/i,'').replace(/^TRANSMARONI\s*-?\s*/i,''); return s.trim(); }
@@ -3221,6 +3256,33 @@ function accMovText(text, movRaw, roster){
   return n;
 }
 
+
+// Mesmo parser de movimentacao, mas cooperativo: em bases grandes cede a thread
+// a cada bloco de linhas. Isso permite selecionar dezenas de ZIPs sem a pagina travar.
+async function accMovTextAsync(text, movRaw, roster){
+  text=String(text||'').replace(/^﻿/,''); const nl=text.indexOf('\n'); if(nl<0)return 0;
+  const first=text.slice(0,nl).replace(/\r$/,'');
+  const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
+  const head=splitCSVLine(first,delim),H=head.map(norm);
+  const find=(...aliases)=>{for(const a0 of aliases){const a=norm(a0);for(let i=0;i<H.length;i++)if(H[i].includes(a))return i;}return -1;};
+  const iOcc=find('ocorrencia','status','evento','situacao'),iM=find('motorista','condutor'),iIni=find('data/hora inicial','datahora_inicial','inicial','inicio','ini'),iFim=find('data/hora final','datahora_final','final','fim'),iP=find('veiculo','placa','patante'),iKm=find('distancia','km','percorrida'),iCons=find('consumo','combustivel','litros'),iD=find('data_arquivo','data','dia');
+  let n=0,start=nl+1,rows=0;
+  while(start<text.length){
+    let end=text.indexOf('\n',start);if(end<0)end=text.length;
+    const line=text.slice(start,text.charCodeAt(end-1)===13?end-1:end);start=end+1;if(!line)continue;
+    const c=splitCSVLine(line,delim);if(iOcc>=0&&!norm(c[iOcc]||'').includes('MOVIMENTO'))continue;
+    const nome=iM>=0?String(c[iM]||'').trim():'';
+    const di=iIni>=0?splitDT(c[iIni]):{date:'',time:''},df=iFim>=0?splitDT(c[iFim]):{date:'',time:''};
+    const data=di.date||(iD>=0?isoDate(splitDT(c[iD]).date||c[iD]):''),ini=toMin(di.time),fim=toMin(df.time);if(!data||ini==null||fim==null)continue;
+    const dataFim=df.date||data;let tsIni=Date.parse(data)+ini*60000,tsFim=Date.parse(dataFim)+fim*60000;if(!isFinite(tsIni)||!isFinite(tsFim))continue;if(tsFim<tsIni)tsFim+=86400000;
+    const placa=iP>=0?placaKey(c[iP]):'';
+    if(placa){let cur=tsIni;while(cur<tsFim){const d=new Date(cur),day=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()),dayEnd=day+86400000,e=Math.min(tsFim,dayEnd),iso=new Date(day).toISOString().slice(0,10),a=Math.round((cur-day)/60000),b=Math.round((e-day)/60000),dur=Math.max(0,b-a),pk=placa+'|'+iso;MOV_TOT[pk]=(MOV_TOT[pk]||0)+dur;if(nome)MOV_IDN[pk]=(MOV_IDN[pk]||0)+dur;else{const arr=(MOV_UNSEG[pk]=MOV_UNSEG[pk]||[]);if(arr.length<300)arr.push([a,b]);}cur=e;}}
+    if(nome){const nn=norm(nome),g=(movRaw[nn]=movRaw[nn]||{nn,nome,segs:[]});g.segs.push({tsIni,tsFim,km:iKm>=0?numBR(c[iKm]):0,litros:iCons>=0?numBR(c[iCons]):0,placa});n++;}
+    rows++; if(rows%2500===0)await uiYield();
+  }
+  return n;
+}
+
 // merge + join por JORNADA REAL (linha do ponto), e não apenas por dia civil.
 // Isso é essencial para turno noturno: a jornada de 07/09 pode terminar em 08/09 às 12:28.
 function finalizeRecords(jor, movRaw, movRows, pontoRows){
@@ -3370,16 +3432,25 @@ async function combinarFilesTexto(files){
 }
 
 // Processa vários CSV/ZIP sem concatenar todos em uma string gigante.
+const IMPORT_STATUS_BY_LABEL={Boletim:'#stBoletim',Pedidos:'#stPedidos','Boletim do Veículo':'#stBdv'};
+function setImportStatus(sel,msg){const el=$(sel);if(el)el.textContent=msg;}
 async function forEachCsvText(files, cb, label){
-  const arr=[...files].sort((a,b)=>String(a.name).localeCompare(String(b.name))); let done=0,parts=0,fail=0;
+  const arr=[...files].filter(f=>f&&!/^~\$/.test(f.name||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR')); let done=0,parts=0,fail=0;
+  const statusSel=IMPORT_STATUS_BY_LABEL[label]||'';
   for(const f of arr){
     try{
+      if(statusSel)setImportStatus(statusSel,'processando '+(done+1)+'/'+arr.length+' · '+f.name);
       const ext=(f.name.split('.').pop()||'').toLowerCase();
       if(ext==='zip'){
         if(typeof JSZip==='undefined')throw new Error('sem JSZip');
+        await uiYield();
         const zip=await JSZip.loadAsync(await f.arrayBuffer());
-        const names=Object.keys(zip.files).filter(n=>/\.csv$/i.test(n)&&!zip.files[n].dir).sort();
-        for(const nm of names){ const text=decodeText(await zip.files[nm].async('arraybuffer')); await cb(text,f,nm); parts++; await uiYield(); }
+        const names=Object.keys(zip.files).filter(n=>/\.(csv|txt)$/i.test(n)&&!zip.files[n].dir).sort();
+        if(!names.length)throw new Error('ZIP sem CSV/TXT');
+        for(let j=0;j<names.length;j++){
+          if(statusSel)setImportStatus(statusSel,'ZIP '+(done+1)+'/'+arr.length+' · arquivo interno '+(j+1)+'/'+names.length);
+          const text=decodeText(await zip.files[names[j]].async('arraybuffer')); await cb(text,f,names[j]); parts++; await uiYield();
+        }
       }else{ const text=decodeText(await f.arrayBuffer()); await cb(text,f,f.name); parts++; }
     }catch(e){ fail++; console.warn('Falha ao processar',f&&f.name,e); }
     done++; if(label)toast(label+': '+done+'/'+arr.length+(fail?(' · '+fail+' falha(s)'):'')+'…'); await uiYield();
@@ -3425,29 +3496,70 @@ function mergeAlertas(dst, src){ dst.n=(dst.n||0)+(src.n||0);
 // MOVIMENTAÇÃO local (vários csv/zip) — streaming (1 arquivo por vez), soma os dias
 async function loadMovLocais(files){
   if(!(pending.ponto&&pending.ponto.length)){ toast('Carregue primeiro a jornada (ponto)'); return; }
+  if(typeof JSZip==='undefined' && [...files].some(f=>/\.zip$/i.test(f.name||''))){ toast('Biblioteca ZIP não carregou'); return; }
   MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={};
-  const jor=parseJornada(pending.ponto); const movRaw={}; let movRows=0, done=0;
-  const arr=[...files].sort((a,b)=>String(a.name).localeCompare(b.name));
-  for(const f of arr){ try{ const ext=(f.name.split('.').pop()||'').toLowerCase();
-      if(ext==='zip'){ const zip=await JSZip.loadAsync(await f.arrayBuffer()); const names=Object.keys(zip.files).filter(n=>/\.csv$/i.test(n)&&!zip.files[n].dir).sort(); for(const nm of names){ movRows+=accMovText(decodeText(await zip.files[nm].async('arraybuffer')), movRaw, jor.roster); } }
-      else if(ext==='xlsx'||ext==='xls'){ movRows+=accMov(await readFileRowsP(f), movRaw, jor.roster); }
-      else { movRows+=accMovText(await fileToText(f), movRaw, jor.roster); } }catch(_){}
-    done++; toast('Movimentação: '+done+'/'+arr.length+'…'); }
-  finalizeRecords(jor, movRaw, movRows, pending.ponto.length);
-  toast('Movimentação ✓ '+arr.length+' arquivo(s) · '+movRows.toLocaleString('pt-BR')+' movimentos · '+((RAW&&RAW.records)?RAW.records.length:0)+' motorista-dias');
+  const jor=parseJornada(pending.ponto),movRaw={}; let movRows=0,done=0,fail=0,parts=0;
+  const arr=[...files].filter(f=>f&&!/^~\$/.test(f.name||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'));
+  if(!arr.length){toast('Nenhum arquivo válido selecionado');return;}
+  for(const f of arr){
+    const pos=done+1; const st=$('#stMov'); if(st)st.textContent='processando '+pos+'/'+arr.length+' · '+f.name;
+    try{
+      const ext=(f.name.split('.').pop()||'').toLowerCase();
+      if(ext==='zip'){
+        await uiYield();
+        const zip=await JSZip.loadAsync(await f.arrayBuffer());
+        const names=Object.keys(zip.files).filter(n=>/\.(csv|txt)$/i.test(n)&&!zip.files[n].dir).sort();
+        if(!names.length)throw new Error('ZIP sem CSV/TXT');
+        for(let j=0;j<names.length;j++){
+          const nm=names[j]; if(st)st.textContent='ZIP '+pos+'/'+arr.length+' · arquivo interno '+(j+1)+'/'+names.length;
+          const ab=await zip.files[nm].async('arraybuffer');
+          movRows+=await accMovTextAsync(decodeText(ab),movRaw,jor.roster); parts++; await uiYield();
+        }
+      }else if(ext==='xlsx'||ext==='xls'){
+        movRows+=accMov(await readFileRowsP(f),movRaw,jor.roster); parts++;
+      }else{
+        movRows+=await accMovTextAsync(await fileToText(f),movRaw,jor.roster); parts++;
+      }
+    }catch(e){fail++;console.warn('Falha na movimentação:',f&&f.name,e);}
+    done++; await uiYield();
+  }
+  if(!movRows){ if($('#stMov'))$('#stMov').textContent='nenhum movimento válido encontrado'; toast('Não encontrei movimentos válidos nos arquivos'); return; }
+  finalizeRecords(jor,movRaw,movRows,pending.ponto.length);
+  updateDropStatus();
+  if(fail)toast('⚠ Movimentação: '+fail+' arquivo(s) falharam; confira a seleção');
+  toast('Movimentação ✓ '+done+' arquivo(s) · '+parts+' CSV/planilha(s) processado(s) · '+movRows.toLocaleString('pt-BR')+' movimentos');
 }
 // ALERTAS local (vários csv/zip) — streaming + merge, soma os dias
 async function loadAlertasLocais(files){
-  const acc={A:{},n:0,placaUO:{},tl:{}}; const keep=namesOfInterest(); const arr=[...files].sort((a,b)=>String(a.name).localeCompare(b.name)); let done=0,fail=0;
-  for(const f of arr){ try{ const ext=(f.name.split('.').pop()||'').toLowerCase();
-      if(ext==='zip'){ const zip=await JSZip.loadAsync(await f.arrayBuffer()); const names=Object.keys(zip.files).filter(n=>/\.csv$/i.test(n)&&!zip.files[n].dir).sort(); for(const nm of names){ mergeAlertas(acc, aggAlertas(decodeText(await zip.files[nm].async('arraybuffer')), keep)); } }
-      else { mergeAlertas(acc, aggAlertas(await fileToText(f), keep)); } }catch(_){ fail++; }
-    done++; toast('Alertas: '+done+'/'+arr.length+(fail?(' · '+fail+' falha(s)'):'')+'…'); }
-  ALERTS=acc.A; ALERTS_N=acc.n; if(acc.placaUO&&Object.keys(acc.placaUO).length) PLACA_UO=acc.placaUO; AL_TL=acc.tl;
-  if(REAL&&RAW){ RAW.alertas=ALERTS; RAW.placaUO=PLACA_UO; RAW.counts=RAW.counts||{}; RAW.counts.alertas=acc.n; }
-  afterImportChange({reanalyze:true,filters:true,persist:true});
-  if(fail) toast('⚠ Alertas: '+fail+' arquivo(s) falharam — total pode estar incompleto');
-  toast('Alertas ✓ '+acc.n.toLocaleString('pt-BR')+' eventos · '+Object.keys(acc.A).length+' motoristas');
+  if(typeof JSZip==='undefined' && [...files].some(f=>/\.zip$/i.test(f.name||''))){ toast('Biblioteca ZIP não carregou'); return; }
+  const acc={A:{},n:0,placaUO:{},tl:{}},keep=namesOfInterest();
+  const arr=[...files].filter(f=>f&&!/^~\$/.test(f.name||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR')); let done=0,fail=0,parts=0;
+  if(!arr.length){toast('Nenhum arquivo válido selecionado');return;}
+  for(const f of arr){
+    const pos=done+1,st=$('#stAlertas'); if(st)st.textContent='processando '+pos+'/'+arr.length+' · '+f.name;
+    try{
+      const ext=(f.name.split('.').pop()||'').toLowerCase();
+      if(ext==='zip'){
+        await uiYield();
+        const zip=await JSZip.loadAsync(await f.arrayBuffer());
+        const names=Object.keys(zip.files).filter(n=>/\.(csv|txt)$/i.test(n)&&!zip.files[n].dir).sort();
+        if(!names.length)throw new Error('ZIP sem CSV/TXT');
+        for(let j=0;j<names.length;j++){
+          if(st)st.textContent='ZIP '+pos+'/'+arr.length+' · arquivo interno '+(j+1)+'/'+names.length;
+          const ab=await zip.files[names[j]].async('arraybuffer');
+          mergeAlertas(acc,await aggAlertasAsync(decodeText(ab),keep));parts++;await uiYield();
+        }
+      }else{
+        mergeAlertas(acc,await aggAlertasAsync(await fileToText(f),keep));parts++;
+      }
+    }catch(e){fail++;console.warn('Falha nos alertas:',f&&f.name,e);}
+    done++;await uiYield();
+  }
+  ALERTS=acc.A;ALERTS_N=acc.n;if(acc.placaUO&&Object.keys(acc.placaUO).length)PLACA_UO=acc.placaUO;AL_TL=acc.tl;
+  if(REAL&&RAW){RAW.alertas=ALERTS;RAW.placaUO=PLACA_UO;RAW.counts=RAW.counts||{};RAW.counts.alertas=acc.n;}
+  afterImportChange({reanalyze:true,filters:true,persist:true});updateDropStatus();
+  if(fail)toast('⚠ Alertas: '+fail+' arquivo(s) falharam; confira a seleção');
+  toast('Alertas ✓ '+done+' arquivo(s) · '+parts+' CSV(s) processado(s) · '+acc.n.toLocaleString('pt-BR')+' eventos');
 }
 
 /* ===== BOLETIM DO MOTORISTA (ocorrências): 1 linha por motorista+dia, alertas por tipo em COLUNAS ===== */
@@ -4329,6 +4441,7 @@ $('#expSemId').onclick=exportSemId;
 function bindCfg(id,key){ const el=$(id); el.value=CFG[key]; el.addEventListener('input',()=>{ CFG[key]=parseFloat(el.value)||0; saveCfg(); build(true); fillFilters(); renderAll(); }); }
 bindCfg('#cfgTol','tol'); bindCfg('#cfgSem','sem'); bindCfg('#cfgFora','fora'); bindCfg('#cfgMovMin','movMin'); bindCfg('#cfgFarol','farolAmareloMax'); bindCfg('#cfgMeta','meta'); bindCfg('#cfgPreco','precoLitro'); bindCfg('#cfgJornadaMin','jornadaMin'); bindCfg('#cfgInterjornada','interjornadaMin');
 // import
+// importacao manual por relatorio; multiplos arquivos/ZIPs sao processados em fila.
 // SELECIONAR PASTA INTEIRA (varre as subpastas de dias) — resolve o "não dá p/ pegar vários dias em subpastas"
 let _dirTarget='';
 function pickDir(target){ _dirTarget=target; const el=$('#fileDir'); el.value=''; el.click(); }
@@ -4347,19 +4460,28 @@ $('#fileDir').addEventListener('change', async e=>{
     else if(t==='bdv'){ const fs=pick(CSVZIP); if(!fs.length){toast('Nenhum arquivo na pasta');return;} toast('Boletim do Veículo ('+fs.length+' arq)…'); setTimeout(()=>loadBdvFilesFast(fs),20); }
   }catch(err){ toast('Erro ao ler a pasta'); }
 });
+// Evita dois lotes da mesma fonte rodando ao mesmo tempo (causa comum de carga incompleta).
+const SOURCE_IMPORT_BUSY=Object.create(null);
+async function runSourceImport(key,label,files,loader){
+  const fs=[...files].filter(Boolean); if(!fs.length)return;
+  if(SOURCE_IMPORT_BUSY[key]){toast(label+' ainda está sendo processado. Aguarde o lote atual.');return;}
+  SOURCE_IMPORT_BUSY[key]=true;
+  try{await loader(fs);}catch(e){console.error('Falha na importação '+key,e);toast('Erro ao processar '+label);}finally{SOURCE_IMPORT_BUSY[key]=false;}
+}
 // import — os relatórios diários aceitam VÁRIOS arquivos (período completo); somam os dias
 $('#filePonto').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length)return; toast('Lendo jornada ('+fs.length+' arq)…'); try{pending.ponto=await readFilesRows(fs);updateDropStatus();if(pending.mov)ingest();toast('Jornada ✓ '+pending.ponto.length.toLocaleString('pt-BR')+' linhas · '+fs.length+' arquivo(s)');}catch(err){toast('Erro ao ler a jornada');} });
-$('#fileMov').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return;
-  if(!pending.ponto){ toast('Carregue primeiro a jornada (ponto)'); return; }
-  toast('Lendo movimentação ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadMovLocais(fs),30); });
-$('#fileAlertas').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length) return; toast('Processando alertas ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadAlertasLocais(fs),30); });
+$('#fileMov').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return;
+  if(!pending.ponto){toast('Carregue primeiro a jornada (ponto)');return;}
+  toast('Movimentação: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('mov','Movimentação',fs,loadMovLocais),30); });
+$('#fileAlertas').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return;
+  toast('Alertas: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('alertas','Alertas',fs,loadAlertasLocais),30); });
 $('#fileTms').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo TMS ('+fs.length+' arq)…');loadTmsFiles(fs); });
 $('#fileAbast').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo abastecimento ('+fs.length+' arq, aguarde)…');setTimeout(()=>loadAbastecimentoFiles(fs),30); });
 $('#fileMetas').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo metas ('+fs.length+' arq)…');loadMetasFiles(fs); });
-$('#fileBoletim').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length)return; toast('Processando Boletim ('+fs.length+' arq)…'); setTimeout(()=>loadBoletimFilesFast(fs),20); });
-$('#filePedidos').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length)return; toast('Processando Pedidos ('+fs.length+' arq)…'); setTimeout(()=>loadPedidosFilesFast(fs),20); });
+$('#fileBoletim').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Boletim: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('boletim','Boletim do Motorista',fs,loadBoletimFilesFast),20); });
+$('#filePedidos').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Pedidos: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('pedidos','Pedidos',fs,loadPedidosFilesFast),20); });
 $('#fileSaude').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo saúde das câmeras ('+fs.length+' arq)…');loadSaudeFiles(fs); });
-$('#fileBdv').addEventListener('change',e=>{ const fs=e.target.files; if(!fs.length)return; toast('Processando Boletim do Veículo ('+fs.length+' arq)…'); setTimeout(()=>loadBdvFilesFast(fs),20); });
+$('#fileBdv').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Boletim do Veículo: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('bdv','Boletim do Veículo',fs,loadBdvFilesFast),20); });
 $('#fileMotoristas').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo Relatório de Motoristas ('+fs.length+' arq)…');setTimeout(()=>loadMotoristasFiles(fs),30); });
 $('#recalc').onclick=()=>{ ingest(); };
 $('#resetDemo').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Voltou à demonstração'); };
