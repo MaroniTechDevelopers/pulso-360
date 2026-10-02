@@ -2981,6 +2981,81 @@ function readFile(file, cb){
 const FILE_READ_TIMEOUT_MS=300000; // rede/arquivos grandes: até 5 min antes de considerar falha
 function readFileRowsP(file){ return new Promise(resolve=>{ let done=false; const finish=rows=>{ if(done)return; done=true; resolve(rows||[]); }; try{ readFile(file,finish); }catch(e){ console.warn('Falha ao ler '+(file&&file.name||'arquivo'),e); finish([]); } setTimeout(()=>{ if(!done)console.warn('Timeout de leitura: '+(file&&file.name||'arquivo')); finish([]); },FILE_READ_TIMEOUT_MS); }); }
 async function readFilesRows(files){ const all=[]; const arr=[...files].sort((a,b)=>String(a.name).localeCompare(String(b.name))); for(const f of arr){ if(BULK_IMPORT_CANCEL)break; const rows=await readFileRowsP(f); if(rows&&rows.length) all.push(...rows); await uiYield(); } return all; }
+
+// Jornada/Ponto: leitor robusto para vários Excel/CSV.
+// Procura a linha de cabeçalho nas primeiras linhas de TODAS as abas e usa raw:false
+// para preservar datas/horários formatados em vez de números seriais do Excel.
+function jornadaHeaderScore(cells){
+  const a=(cells||[]).map(v=>norm(String(v==null?'':v)));
+  const has=(terms)=>a.some(v=>terms.some(t=>v===t||v.includes(t)));
+  const nome=has(['NOME DO FUNCIONARIO','FUNCIONARIO','COLABORADOR','MOTORISTA','NOME']);
+  const data=has(['DIA','DATA']);
+  const bat=has(['ENTRADA 1','SAIDA 1','SAÍDA 1','ENTRADA','SAIDA','SAÍDA','BATIDA','HORARIO','HORÁRIO','HORA']);
+  return (nome?4:0)+(data?4:0)+(bat?5:0);
+}
+function jornadaRowsFromMatrix(M){
+  if(!M||!M.length) return {rows:[],header:-1};
+  let best=-1,bestScore=-1;
+  const lim=Math.min(M.length,40);
+  for(let i=0;i<lim;i++){ const sc=jornadaHeaderScore(M[i]); if(sc>bestScore){bestScore=sc;best=i;} }
+  if(best<0||bestScore<9) return {rows:[],header:-1};
+  const hdr=(M[best]||[]).map((v,i)=>{ const t=String(v==null?'':v).trim(); return t||('__COL_'+i); });
+  const rows=[];
+  for(let r=best+1;r<M.length;r++){
+    const line=M[r]||[]; if(!line.some(v=>String(v==null?'':v).trim()!=='')) continue;
+    const o={}; hdr.forEach((h,i)=>o[h]=line[i]!=null?line[i]:''); rows.push(o);
+  }
+  return {rows,header:best};
+}
+function parseJornadaCsvRobusto(text){
+  text=String(text||'').replace(/^﻿/,''); const lines=text.split(/\r?\n/);
+  if(!lines.length) return [];
+  let best=-1,bestScore=-1,bestDel=';';
+  const lim=Math.min(lines.length,40);
+  for(let i=0;i<lim;i++){
+    if(!lines[i].trim()) continue;
+    for(const d of [';',',','\t']){ const cells=splitCSVLine(lines[i],d); const sc=jornadaHeaderScore(cells); if(sc>bestScore){bestScore=sc;best=i;bestDel=d;} }
+  }
+  if(best<0||bestScore<9) return [];
+  const hdr=splitCSVLine(lines[best],bestDel).map((v,i)=>String(v||'').trim()||('__COL_'+i)); const rows=[];
+  for(let i=best+1;i<lines.length;i++){ if(!lines[i].trim()) continue; const c=splitCSVLine(lines[i],bestDel); const o={}; hdr.forEach((h,j)=>o[h]=c[j]!=null?c[j]:''); rows.push(o); }
+  return rows;
+}
+async function readJornadaFileRows(file){
+  const ext=(String(file&&file.name||'').split('.').pop()||'').toLowerCase();
+  if(ext==='xlsx'||ext==='xls'){
+    if(typeof XLSX==='undefined') throw new Error('Biblioteca XLSX não disponível');
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false});
+    let out=[],validSheets=0;
+    for(const sn of wb.SheetNames){
+      const ws=wb.Sheets[sn];
+      // raw:false faz horas/datas usarem o texto formatado da célula (ex. 19:17).
+      const M=XLSX.utils.sheet_to_json(ws,{defval:'',header:1,raw:false,dateNF:'dd/mm/yyyy hh:mm'});
+      const got=jornadaRowsFromMatrix(M);
+      if(got.rows.length){ out.push(...got.rows); validSheets++; }
+      await uiYield();
+    }
+    if(!validSheets) throw new Error('Cabeçalho da Jornada não localizado em nenhuma aba');
+    return out;
+  }
+  if(ext==='csv'||ext==='txt'){
+    const rows=parseJornadaCsvRobusto(decodeText(await file.arrayBuffer()));
+    if(!rows.length) throw new Error('Cabeçalho da Jornada não localizado');
+    return rows;
+  }
+  throw new Error('Formato não suportado: '+ext);
+}
+async function readJornadaFiles(files,onProgress){
+  const arr=[...files].filter(f=>f&&!/^~\$/i.test(f.name)).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'));
+  const all=[], ok=[], fail=[];
+  for(let i=0;i<arr.length;i++){
+    const f=arr[i]; if(onProgress)onProgress(i+1,arr.length,f.name);
+    try{ const rows=await readJornadaFileRows(f); if(rows.length){all.push(...rows);ok.push({name:f.name,rows:rows.length});} else fail.push({name:f.name,error:'sem linhas válidas'}); }
+    catch(err){ console.error('Jornada: falha em '+f.name,err); fail.push({name:f.name,error:String(err&&err.message||err)}); }
+    await uiYield();
+  }
+  return {rows:all,ok,fail,total:arr.length};
+}
 function loadXlsxSheetP(file, prefer, needCols){ return new Promise(resolve=>{ let done=false; const finish=(rows,name)=>{ if(done)return; done=true; resolve({rows:rows||[],name:name||''}); }; try{ loadXlsxSheet(file,prefer,needCols,finish); }catch(e){ console.warn('Falha ao ler Excel '+(file&&file.name||''),e); finish([], ''); } setTimeout(()=>{ if(!done)console.warn('Timeout de Excel: '+(file&&file.name||'arquivo')); finish([], ''); },FILE_READ_TIMEOUT_MS); }); }
 function decodeText(buf){
   try{ return new TextDecoder('utf-8',{fatal:true}).decode(buf); }
@@ -4473,9 +4548,15 @@ async function runSourceImport(key,label,files,loader){
 $('#filePonto').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return;
   toast('Jornada: '+fs.length+' planilha(s)/arquivo(s) na fila…');
   setTimeout(()=>runSourceImport('ponto','Jornada',fs,async files=>{
-    const rows=await readFilesRows(files); if(!rows.length){toast('Jornada: nenhum registro válido encontrado');return;}
-    pending.ponto=rows; updateDropStatus(); if(pending.mov)ingest();
-    toast('Jornada ✓ '+rows.length.toLocaleString('pt-BR')+' linhas · '+files.length+' arquivo(s)');
+    const res=await readJornadaFiles(files,(i,n,name)=>toast('Jornada '+i+'/'+n+' · '+name));
+    if(!res.rows.length){
+      const nomes=res.fail.slice(0,3).map(x=>x.name).join(', ');
+      toast('Jornada: nenhum registro válido'+(nomes?' · confira '+nomes:'')); return;
+    }
+    pending.ponto=res.rows; updateDropStatus(); if(pending.mov)ingest();
+    const extra=res.fail.length?(' · '+res.fail.length+' arquivo(s) ignorado(s)'):'';
+    toast('Jornada ✓ '+res.rows.length.toLocaleString('pt-BR')+' linhas · '+res.ok.length+'/'+res.total+' arquivo(s)'+extra);
+    if(res.fail.length) console.warn('Jornada — arquivos ignorados',res.fail);
   }),20);
 });
 $('#fileMov').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return;
