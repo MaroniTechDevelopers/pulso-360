@@ -731,7 +731,7 @@
       <div class="drop" id="drop-motoristas">
         <h3><span class="num">11</span> Relatório de Motoristas <span style="font-size:11px;color:var(--muted);font-weight:400">cadastro TMS · ativo/inativo · admissão</span></h3>
         <p>Cadastro de motoristas (TMS). Lê <code>Nome</code>, <code>CPF</code>, <code>Data Admissão</code>, <code>Situação/Status</code>, <code>Centro Resultado</code>, <code>Cargo</code> e, quando existir, <code>Data Demissão</code>. Alimenta a aba <b>Motoristas</b> (TMS × Ponto) e o tempo de casa. Aceita múltiplos <code>.csv</code>/<code>.txt</code>.</p>
-        <input type="file" id="fileMotoristas" accept=".csv,.txt" multiple hidden>
+        <input type="file" id="fileMotoristas" accept=".csv,.txt,.xlsx,.xls" multiple hidden>
         <button class="btn solid" onclick="document.getElementById('fileMotoristas').click()">Selecionar arquivos</button>
         <div class="status-line" id="stMotoristas">nenhum arquivo</div>
       </div>
@@ -2978,7 +2978,8 @@ function readFile(file, cb){
     rd.readAsArrayBuffer(file);   // lê bytes p/ detectar acentuação (UTF-8 ou Windows-1252)
   }
 }
-const FILE_READ_TIMEOUT_MS=300000; // rede/arquivos grandes: até 5 min antes de considerar falha\nfunction readFileRowsP(file){ return new Promise(resolve=>{ let done=false; const finish=rows=>{ if(done)return; done=true; resolve(rows||[]); }; try{ readFile(file,finish); }catch(e){ console.warn('Falha ao ler '+(file&&file.name||'arquivo'),e); finish([]); } setTimeout(()=>{ if(!done)console.warn('Timeout de leitura: '+(file&&file.name||'arquivo')); finish([]); },FILE_READ_TIMEOUT_MS); }); }
+const FILE_READ_TIMEOUT_MS=300000; // rede/arquivos grandes: até 5 min antes de considerar falha
+function readFileRowsP(file){ return new Promise(resolve=>{ let done=false; const finish=rows=>{ if(done)return; done=true; resolve(rows||[]); }; try{ readFile(file,finish); }catch(e){ console.warn('Falha ao ler '+(file&&file.name||'arquivo'),e); finish([]); } setTimeout(()=>{ if(!done)console.warn('Timeout de leitura: '+(file&&file.name||'arquivo')); finish([]); },FILE_READ_TIMEOUT_MS); }); }
 async function readFilesRows(files){ const all=[]; const arr=[...files].sort((a,b)=>String(a.name).localeCompare(String(b.name))); for(const f of arr){ if(BULK_IMPORT_CANCEL)break; const rows=await readFileRowsP(f); if(rows&&rows.length) all.push(...rows); await uiYield(); } return all; }
 function loadXlsxSheetP(file, prefer, needCols){ return new Promise(resolve=>{ let done=false; const finish=(rows,name)=>{ if(done)return; done=true; resolve({rows:rows||[],name:name||''}); }; try{ loadXlsxSheet(file,prefer,needCols,finish); }catch(e){ console.warn('Falha ao ler Excel '+(file&&file.name||''),e); finish([], ''); } setTimeout(()=>{ if(!done)console.warn('Timeout de Excel: '+(file&&file.name||'arquivo')); finish([], ''); },FILE_READ_TIMEOUT_MS); }); }
 function decodeText(buf){
@@ -4469,20 +4470,27 @@ async function runSourceImport(key,label,files,loader){
   try{await loader(fs);}catch(e){console.error('Falha na importação '+key,e);toast('Erro ao processar '+label);}finally{SOURCE_IMPORT_BUSY[key]=false;}
 }
 // import — os relatórios diários aceitam VÁRIOS arquivos (período completo); somam os dias
-$('#filePonto').addEventListener('change',async e=>{ const fs=e.target.files; if(!fs.length)return; toast('Lendo jornada ('+fs.length+' arq)…'); try{pending.ponto=await readFilesRows(fs);updateDropStatus();if(pending.mov)ingest();toast('Jornada ✓ '+pending.ponto.length.toLocaleString('pt-BR')+' linhas · '+fs.length+' arquivo(s)');}catch(err){toast('Erro ao ler a jornada');} });
+$('#filePonto').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return;
+  toast('Jornada: '+fs.length+' planilha(s)/arquivo(s) na fila…');
+  setTimeout(()=>runSourceImport('ponto','Jornada',fs,async files=>{
+    const rows=await readFilesRows(files); if(!rows.length){toast('Jornada: nenhum registro válido encontrado');return;}
+    pending.ponto=rows; updateDropStatus(); if(pending.mov)ingest();
+    toast('Jornada ✓ '+rows.length.toLocaleString('pt-BR')+' linhas · '+files.length+' arquivo(s)');
+  }),20);
+});
 $('#fileMov').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return;
   if(!pending.ponto){toast('Carregue primeiro a jornada (ponto)');return;}
   toast('Movimentação: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('mov','Movimentação',fs,loadMovLocais),30); });
 $('#fileAlertas').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return;
   toast('Alertas: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('alertas','Alertas',fs,loadAlertasLocais),30); });
-$('#fileTms').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo TMS ('+fs.length+' arq)…');loadTmsFiles(fs); });
-$('#fileAbast').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo abastecimento ('+fs.length+' arq, aguarde)…');setTimeout(()=>loadAbastecimentoFiles(fs),30); });
-$('#fileMetas').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo metas ('+fs.length+' arq)…');loadMetasFiles(fs); });
+$('#fileTms').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('TMS: '+fs.length+' arquivo(s) na fila…'); setTimeout(()=>runSourceImport('tms','TMS',fs,loadTmsFiles),20); });
+$('#fileAbast').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Abastecimento: '+fs.length+' arquivo(s) na fila…'); setTimeout(()=>runSourceImport('abast','Abastecimento',fs,loadAbastecimentoFiles),20); });
+$('#fileMetas').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Metas: '+fs.length+' arquivo(s) na fila…'); setTimeout(()=>runSourceImport('metas','Metas',fs,loadMetasFiles),20); });
 $('#fileBoletim').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Boletim: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('boletim','Boletim do Motorista',fs,loadBoletimFilesFast),20); });
 $('#filePedidos').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Pedidos: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('pedidos','Pedidos',fs,loadPedidosFilesFast),20); });
-$('#fileSaude').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo saúde das câmeras ('+fs.length+' arq)…');loadSaudeFiles(fs); });
+$('#fileSaude').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Saúde: '+fs.length+' arquivo(s) na fila…'); setTimeout(()=>runSourceImport('saude','Saúde das câmeras',fs,loadSaudeFiles),20); });
 $('#fileBdv').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Boletim do Veículo: '+fs.length+' arquivo(s)/ZIP(s) na fila…'); setTimeout(()=>runSourceImport('bdv','Boletim do Veículo',fs,loadBdvFilesFast),20); });
-$('#fileMotoristas').addEventListener('change',e=>{ const fs=e.target.files;if(!fs.length)return;toast('Lendo Relatório de Motoristas ('+fs.length+' arq)…');setTimeout(()=>loadMotoristasFiles(fs),30); });
+$('#fileMotoristas').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Motoristas: '+fs.length+' arquivo(s) na fila…'); setTimeout(()=>runSourceImport('motoristas','Relatório de Motoristas',fs,loadMotoristasFiles),20); });
 $('#recalc').onclick=()=>{ ingest(); };
 $('#resetDemo').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Voltou à demonstração'); };
 $('#clearData').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Bases removidas'); };
