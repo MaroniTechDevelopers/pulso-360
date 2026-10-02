@@ -350,6 +350,13 @@
   .planolist li{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.45;padding:8px 10px;background:var(--surface-2);border-radius:9px;border-left:3px solid var(--gold)}
   .planolist .pa-ic{font-size:16px;flex:none;line-height:1.3}
   .planolist b{color:var(--ink)}
+  .multalist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .multalist li{display:grid;grid-template-columns:120px 150px minmax(110px,.8fr) minmax(130px,1fr) minmax(160px,1.2fr);gap:10px;align-items:center;padding:9px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;font-size:12px;color:var(--ink-2)}
+  .multalist .mdate{font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
+  .multalist .mtype{font-weight:800}.multalist .mtype.cel{color:#7c3aed}.multalist .mtype.vel{color:var(--critical)}
+  .multalist .mplate{font-weight:750;color:var(--ink)}
+  .multalist .maudit{font-weight:700}.multalist .maudit.ok{color:var(--good-ink)}.multalist .maudit.bad{color:var(--critical)}.multalist .maudit.muted{color:var(--muted)}
+  @media(max-width:980px){.multalist li{grid-template-columns:1fr 1fr}.multalist li>span:last-child{grid-column:1/-1}}
   .ficha-hero{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
   .ficha-hero .avatar{width:60px;height:60px;border-radius:14px;font-size:20px}
   .ficha-hero h2{font-size:20px}
@@ -2241,6 +2248,15 @@ function renderFicha(){
     ? (tiposArr.length ? tiposArr.map(([tp,n])=>`<div class="alert-tile ${n===maxTipo&&n>0?'hot':''}"><div class="n">${alertaIcon(tp)} ${n.toLocaleString('pt-BR')}</div><div class="l">${tipoLabel(tp)}</div></div>`).join('') : '<div class="empty" style="padding:16px">sem alertas no período</div>')
     : ALERTA_DEF.map(a=>{ const n=(d.alertas&&d.alertas[a.k])||0; return `<div class="alert-tile ${n>=5?'hot':''}"><div class="n">${a.ic} ${n}</div><div class="l">${a.lab}</div></div>`; }).join('');
 
+  // A seção de multas usa EXATAMENTE a mesma lista que alimenta o número da capa.
+  // Assim: capa = N => ficha lista N registros no mesmo período.
+  const multaRowsHTML = _multaList.map(m=>{
+    const ctx=multaContext(m), cls=multaTipoClasse(m.tipo), tipoTxt=cls==='CELULAR'?'Celular':'Velocidade';
+    const audit=ctx.audit||''; const auditTxt=audit==='CONFERE'?'Câmera confere':audit==='DIVERGE'?('Câmera: '+(ctx.motCam||'outro condutor')):(ctx.motCam?('Câmera: '+ctx.motCam):'Sem identificação no horário');
+    const auditCls=audit==='CONFERE'?'ok':audit==='DIVERGE'?'bad':'muted';
+    return `<li><span class="mdate">${brDate(m.data)}${m.hora?' · '+pdfEsc(m.hora):''}</span><span class="mtype ${cls==='CELULAR'?'cel':'vel'}">${cls==='CELULAR'?'📱':'🚨'} ${tipoTxt}</span><span class="mplate">${pdfEsc(m.placa||'—')}</span><span>Auto ${pdfEsc(m.auto||m.numero||'—')}</span><span class="maudit ${auditCls}">${pdfEsc(auditTxt)}</span></li>`;
+  }).join('');
+
   $('#fichaBox').innerHTML = `
     <div class="card" style="margin-bottom:14px">
       <div class="ficha-hero">
@@ -2290,6 +2306,9 @@ function renderFicha(){
       <div class="card kpi"><div class="accent" style="background:${(alR.niveis&&alR.niveis.ALTO)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
         <div class="lab">Alertas (total)</div><div class="val tnum">${totAl.toLocaleString('pt-BR')}</div><div class="sub">todos os tipos${alR.niveis&&alR.niveis.ALTO?' · '+alR.niveis.ALTO+' veloc. em nível alto':''}</div></div>
     </div>
+
+    ${MULTAS_N?`<div class="sec-title"><h2>Multas do período (${_multaList.length})</h2><span>mesma base usada na capa · celular + velocidade · canceladas excluídas</span></div>
+    <div class="card">${_multaList.length?`<ul class="multalist">${multaRowsHTML}</ul>`:'<div class="empty" style="padding:18px">Nenhuma multa de celular/velocidade neste período.</div>'}</div>`:''}
 
     <div class="sec-title"><h2>Alertas</h2><span>${alertaSubt}</span></div>
     <div class="card"><div class="alert-row">${alertTiles}</div></div>
