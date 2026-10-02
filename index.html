@@ -276,6 +276,15 @@
 
   /* ============ CAPINHAS (cards clicáveis do motorista) ============ */
   .capgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:12px;padding:14px 16px}
+  .sem-rankbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+  .sem-rankbar .rtitle{font-size:12px;font-weight:750;color:var(--ink)}
+  .sem-rankseg{display:inline-flex;align-items:center;gap:3px;padding:3px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px}
+  .sem-rankseg button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:11.5px;font-weight:700;padding:5px 9px;border-radius:7px;cursor:pointer}
+  .sem-rankseg button:hover{color:var(--ink);background:var(--surface)}
+  .sem-rankseg button.active{color:var(--ink);background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .sem-rankhint{font-size:11px;color:var(--muted);margin-left:auto}
+  .op-ranknote{font-size:11px;color:var(--muted);font-weight:500;margin-left:6px}
+  @media(max-width:900px){.sem-rankhint{width:100%;margin-left:0}}
   .capinha{text-align:left;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 13px;cursor:pointer;display:flex;flex-direction:column;gap:10px;transition:transform .12s,box-shadow .12s,border-color .12s}
   .capinha:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--gold)}
   .capinha:focus-visible{outline:2px solid var(--s2);outline-offset:2px}
@@ -288,7 +297,7 @@
   .cap-metrics .cm{flex:1;background:var(--surface-2);border-radius:8px;padding:6px 8px;text-align:center}
   .cap-metrics .cm span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
   .cap-metrics .cm b{font-size:15px;font-variant-numeric:tabular-nums}
-  .cap-metrics .cm b.ok{color:var(--good-ink)} .cap-metrics .cm b.bad{color:var(--crit-ink)}
+  .cap-metrics .cm b.ok{color:var(--good-ink)} .cap-metrics .cm b.bad{color:var(--crit-ink)} .cap-metrics .cm b.warn{color:var(--warning)}
   .cap-foot{display:flex;flex-direction:column;gap:8px}
   .cap-alerts{display:inline-flex;gap:4px;flex-wrap:wrap}
   /* farol agrupado por mês */
@@ -495,6 +504,15 @@
     <div class="sec-title"><h2>Resumo semanal</h2><span>aderência de jornada por operação · farol por motorista/semana</span>
       <button class="btn" id="expSemana" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">⬇️ Exportar CSV</button></div>
     <div class="card" style="padding:11px 16px;margin-bottom:12px">
+      <div class="sem-rankbar">
+        <span class="rtitle">Ranking dos motoristas</span>
+        <div class="sem-rankseg" id="semRankSeg" role="group" aria-label="Filtro do ranking semanal">
+          <button type="button" class="active" data-rank="all">Todos</button>
+          <button type="button" data-rank="worst">10 piores</button>
+          <button type="button" data-rank="best">10 melhores</button>
+        </div>
+        <span class="sem-rankhint">ordem padrão: pior → melhor · farol + aderência + fora da jornada + identificação + alertas + multas</span>
+      </div>
       <div class="legend">
         <span class="lg"><b>Farol de risco (composto):</b></span>
         <span class="lg"><span class="sw" style="background:var(--good)"></span> Verde — sem sinais</span>
@@ -1633,6 +1651,19 @@ function riscoComposto(m, alR){
 /* ============================================================
    RENDER — RESUMO SEMANAL (Capivara: por operação + farol)
    ============================================================ */
+let SEMANA_RANK_MODE='all';
+function resumoRankCmp(a,b){
+  const rk={vermelho:0,amarelo:1,verde:2};
+  let d=(rk[(a.risco&&a.risco.cls)||'verde']??2)-(rk[(b.risco&&b.risco.cls)||'verde']??2); if(d)return d;
+  d=((b.risco&&b.risco.n)||0)-((a.risco&&a.risco.n)||0); if(d)return d;
+  const ah=(a._alR&&a._alR.niveis&&a._alR.niveis.ALTO)||0, bh=(b._alR&&b._alR.niveis&&b._alR.niveis.ALTO)||0; d=bh-ah; if(d)return d;
+  const aaj=a.aj==null?101:a.aj, baj=b.aj==null?101:b.aj; d=aaj-baj; if(d)return d;
+  d=(b.ddReal||0)-(a.ddReal||0); if(d)return d;
+  const aid=a.ident==null?101:a.ident, bid=b.ident==null?101:b.ident; d=aid-bid; if(d)return d;
+  d=(b._multaTot||0)-(a._multaTot||0); if(d)return d;
+  d=((b._alR&&b._alR.total)||0)-((a._alR&&a._alR.total)||0); if(d)return d;
+  return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
+}
 function semanaAgg(rows){
   const cacheKey=(rows===FILTER_CACHE_ROWS?FILTER_CACHE_KEY:('rows:'+rows.length+':'+DATA_REV))+'|semana';
   if(SEMANA_AGG_CACHE_MAP.has(cacheKey)){
@@ -1656,8 +1687,8 @@ function semanaAgg(rows){
     const list=Object.values(og.mots);
     list.forEach(m=>{ const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)]; m.media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(m.litros>0?(m.km/m.litros):d.media)); m.op=og.op; m.meta=metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
       m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs); m.aj=aderJornada(m.recs);
-      m._alR=alertasResumo(m.nome,rng); m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls; });
-    list.sort((a,b)=>{const rk={vermelho:0,amarelo:1,verde:2};return (rk[a.risco.cls]-rk[b.risco.cls])||b.ddReal-a.ddReal;});
+      m._alR=alertasResumo(m.nome,rng); m._multaTot=MULTAS_N?multasCondutaMotoristaCount(m.nome,rng):0; m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls; });
+    list.sort(resumoRankCmp);
     return {op:og.op,list,dd:og.dd,aj:aderJornada(og.opRows),motsDedo:og.motsDedo.size};
   });
   const out={weeks,ultima,data}; SEMANA_AGG_CACHE_KEY=cacheKey; SEMANA_AGG_CACHE=out;
@@ -1668,19 +1699,34 @@ function renderSemana(rows){
   const box=$('#semanaBox');
   if(!rows.length){ box.innerHTML='<div class="empty">Nenhum registro para o filtro atual.</div>'; return; }
   const {weeks,data}=semanaAgg(rows);
-  box.innerHTML = data.map(g=>`
-    <div class="card op-block">
-      <div class="op-head"><h3>${g.op}</h3>
+  const global=[]; data.forEach(g=>g.list.forEach(m=>global.push(m))); global.sort(resumoRankCmp);
+  global.forEach((m,i)=>{m._rankPos=i+1;m._rankTotal=global.length;});
+  let chosen=null;
+  if(SEMANA_RANK_MODE==='worst') chosen=new Set(global.slice(0,10));
+  else if(SEMANA_RANK_MODE==='best') chosen=new Set(global.slice(-10));
+  const bestMode=SEMANA_RANK_MODE==='best';
+  const html=[];
+  data.forEach(g=>{
+    let vis=chosen?g.list.filter(m=>chosen.has(m)):g.list.slice();
+    if(bestMode)vis.sort((a,b)=>resumoRankCmp(b,a)); else vis.sort(resumoRankCmp);
+    if(!vis.length)return;
+    const note=chosen?`<span class="op-ranknote">${vis.length} selecionado(s) de ${g.list.length}</span>`:'';
+    html.push(`<div class="card op-block">
+      <div class="op-head"><h3>${g.op}${note}</h3>
         <div class="op-kpi"><span style="color:${ajColor(g.aj)}">${g.aj==null?'—':g.aj+'%'}</span> aderência de jornada · ${hDec(g.dd)} fora da jornada · <b>${g.motsDedo}</b> motorista(s) · ${g.list.length} no total</div></div>
-      <div class="capgrid">${ g.list.map(m=>capinha(m,weeks)).join('') }</div>
-    </div>`).join('');
+      <div class="capgrid">${vis.map(m=>capinha(m,weeks)).join('')}</div>
+    </div>`);
+  });
+  box.innerHTML=html.join('')||'<div class="empty">Nenhum motorista encontrado neste ranking.</div>';
 }
 // "capinha" do motorista — clicável, leva ao detalhamento (ficha)
 function capinha(m,weeks){
   const strip=farolStripHTML(m.semanas, weeks, {size:'sm'});
   const medaOk = m.media!=null && m.media>=(m.meta!=null?m.meta:CFG.meta);
   const medaTxt = m.media!=null ? m.media.toFixed(2).replace('.',',') : '—';
-  const alR = m._alR || alertasResumo(m.nome,activeRange()); const totAl = alR.total;
+  const rng=activeRange();
+  const alR = m._alR || alertasResumo(m.nome,rng); const totAl = alR.total;
+  const multaTot = m._multaTot!=null ? m._multaTot : (MULTAS_N ? multasCondutaMotoristaCount(m.nome,rng) : 0);
   const alBadges = alR.badges.slice(0,3).map(b=>`<span class="abadge ${b.hot?'hot':''}" title="${b.lab}">${b.ic}${b.n}</span>`).join('') || '<span class="abadge ok">sem alertas</span>';
   return `<button class="capinha" data-mot="${encodeURIComponent(m.nome)}">
     <div class="cap-top">
@@ -1693,6 +1739,7 @@ function capinha(m,weeks){
       ${MEDIA_OFF?'':`<div class="cm"><span>Média</span><b class="${medaOk?'ok':'bad'}">${medaTxt}</b></div>`}
       <div class="cm"><span>Fora da jornada</span><b class="${m.ddReal>0?'bad':''}" title="horas de condução fora do horário do ponto${m.aj!=null?' · aderência de jornada '+m.aj+'%':''}">${m.ddReal>0?hDec(m.ddReal):'0h'}</b></div>
       <div class="cm"><span>Alertas</span><b class="${totAl>=5?'bad':''}">${totAl}</b></div>
+      ${MULTAS_N?`<div class="cm"><span>Multas</span><b class="${multaTot>0?'warn':''}" title="Celular + velocidade no período">${multaTot}</b></div>`:''}
     </div>
     <div class="cap-foot">
       ${strip}
@@ -4157,6 +4204,24 @@ function multasCondutaPorTipo(opts){
   }
   return {celular,velocidade,total};
 }
+
+const MULTAS_CAP_COUNT_CACHE=new Map();
+function multasCondutaMotoristaCount(nome,range){
+  if(!MULTAS||!nome)return 0;
+  const nn=norm(nome), de=range&&range.de||'', ate=range&&range.ate||'';
+  const key=[MULTAS_REV,nn,de,ate].join('|');
+  if(MULTAS_CAP_COUNT_CACHE.has(key))return MULTAS_CAP_COUNT_CACHE.get(key);
+  const arr=MULTAS_BY_DRIVER_N[nn]||[]; let n=0;
+  for(const m of arr){
+    if(!multaEscopoPadrao(m)||_multaCancelada(m))continue;
+    if(de&&m.data&&m.data<de)continue;
+    if(ate&&m.data&&m.data>ate)continue;
+    n++;
+  }
+  MULTAS_CAP_COUNT_CACHE.set(key,n);
+  if(MULTAS_CAP_COUNT_CACHE.size>2000){const it=MULTAS_CAP_COUNT_CACHE.keys().next();if(!it.done)MULTAS_CAP_COUNT_CACHE.delete(it.value);}
+  return n;
+}
 function multaRowNorm(row,source){
   const keys=Object.keys(row||{}); const get=(aliases)=>{for(const a of aliases){const na=norm(a);const k=keys.find(x=>norm(x)===na)||keys.find(x=>norm(x).includes(na));if(k)return row[k];}return '';};
   const numero=String(get(['Número','Numero'])||'').trim(), auto=String(get(['Número da Atuação','Numero da Atuacao','Número da Autuação','Numero da Autuacao','Auto de Infração','Auto de Infracao'])||'').trim();
@@ -4195,7 +4260,7 @@ async function loadMultasFiles(files){
 
 
 function rebuildMultasIndex(){
-  MULTAS_BY_DATE=Object.create(null); MULTAS_BY_DRIVER_N=Object.create(null);
+  MULTAS_BY_DATE=Object.create(null); MULTAS_BY_DRIVER_N=Object.create(null); MULTAS_CAP_COUNT_CACHE.clear();
   for(const m of (MULTAS||[])){
     if(m.data)(MULTAS_BY_DATE[m.data]=MULTAS_BY_DATE[m.data]||[]).push(m);
     const nn=norm(m.motorista||''); if(nn)(MULTAS_BY_DRIVER_N[nn]=MULTAS_BY_DRIVER_N[nn]||[]).push(m);
@@ -4710,6 +4775,14 @@ $('#expSaude').onclick=exportSaude;
 $('#expSemId').onclick=exportSemId;
 // config
 function bindCfg(id,key){ const el=$(id); el.value=CFG[key]; el.addEventListener('input',()=>{ CFG[key]=parseFloat(el.value)||0; saveCfg(); build(true); fillFilters(); renderAll(); }); }
+const _semRankSeg=$('#semRankSeg');
+if(_semRankSeg)_semRankSeg.addEventListener('click',e=>{
+  const b=e.target.closest('button[data-rank]'); if(!b)return;
+  SEMANA_RANK_MODE=b.dataset.rank||'all';
+  _semRankSeg.querySelectorAll('button[data-rank]').forEach(x=>x.classList.toggle('active',x===b));
+  if(ACTIVE_TAB==='semana')renderSemana(filtered());
+});
+
 bindCfg('#cfgTol','tol'); bindCfg('#cfgSem','sem'); bindCfg('#cfgFora','fora'); bindCfg('#cfgMovMin','movMin'); bindCfg('#cfgFarol','farolAmareloMax'); bindCfg('#cfgMeta','meta'); bindCfg('#cfgPreco','precoLitro'); bindCfg('#cfgJornadaMin','jornadaMin'); bindCfg('#cfgInterjornada','interjornadaMin');
 // import
 // importacao manual por relatorio; multiplos arquivos/ZIPs sao processados em fila.
