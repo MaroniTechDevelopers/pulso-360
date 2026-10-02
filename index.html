@@ -456,6 +456,7 @@
     <button data-tab="operacao">Operação por placa</button>
     <button data-tab="saude">Saúde das câmeras</button>
     <button data-tab="semid">Placas sem ID</button>
+    <button data-tab="multas">Multas</button>
     <button data-tab="dados">Dados &amp; como usar</button>
   </nav>
 </header>
@@ -634,6 +635,40 @@
     <div class="sec-title"><h2>Saúde das câmeras — plano de manutenção</h2><span>status do equipamento × identificação real (aderência) por cavalo</span>
       <button class="btn" id="expSaude" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">⬇️ Exportar CSV</button></div>
     <div id="saudeBox"></div>
+  </section>
+
+  <!-- ===== MULTAS / INFRAÇÕES ===== -->
+  <section class="view" id="view-multas">
+    <div class="grid kpis" id="multaKpis"></div>
+    <div class="sec-title"><h2>Multas / Infrações</h2><span>auditoria do documento × placa/operação × jornada × identificação da câmera</span>
+      <button class="btn" id="expMultas" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">⬇️ Exportar CSV</button></div>
+    <div class="card" style="padding:12px 16px;margin-bottom:12px">
+      <div class="filterbar motbar">
+        <div class="f"><label>Responsabilidade / desconto</label><select id="multaResp">
+          <option value="">Todos</option>
+          <option value="DESCONTADA">Descontada (dia 01)</option>
+          <option value="PENDENTE">Conduta pendente de desconto</option>
+          <option value="REVISAR">Regra a definir / revisar</option>
+          <option value="CANCELADA">Cancelada</option>
+        </select></div>
+        <div class="f"><label>Conferência da câmera</label><select id="multaAudit">
+          <option value="">Todos</option>
+          <option value="CONFERE">Documento = câmera</option>
+          <option value="DIVERGE">Documento ≠ câmera</option>
+          <option value="SEM_CAMERA">Sem identificação no horário</option>
+          <option value="SEM_DOCUMENTO">Sem motorista no documento</option>
+        </select></div>
+        <button class="btn" id="multaLimpar" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Limpar filtros da multa</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px">Regras atuais: <b>dia 01 = descontada</b> · <b>velocidade/celular = conduta do motorista</b>. A fonte atual não possui valor monetário; por isso valores financeiros permanecem como <b>—</b>.</div>
+    </div>
+    <div class="tblwrap"><table id="multaTbl" style="min-width:1700px">
+      <thead><tr>
+        <th>Data/Hora</th><th>Auto</th><th>Placa</th><th>Operação na data</th><th>Motorista documento</th><th>Motorista jornada</th><th>Motorista câmera</th><th>Conferência</th><th>Tipo</th><th>Responsabilidade</th><th>Desconto</th><th>Situação</th><th>Vencimento</th>
+      </tr></thead>
+      <tbody id="multaBody"></tbody>
+    </table></div>
+    <div class="card" id="multaMore" style="display:none;margin-top:10px;padding:10px 14px;font-size:12px;color:var(--muted)"></div>
   </section>
 
   <!-- ===== DADOS ===== -->
@@ -1004,7 +1039,8 @@ let ADMISSAO=null, ADMISSAO_CPF=null, ADMISSAO_N=0;
 let ADMISSAO_CANON=null, ADMISSAO_NOMECPF=null, ADMISSAO_CANONCPF=null;
 let ADMISSAO_PRESENTES=null, ADMISSAO_PRESENTES_CANON=null, ADMISSAO_DIAG=null;
 let MOTORISTAS_TMS=null, MOTORISTAS_TMS_N=0;   // cadastro mestre do Relatório de Motoristas (TMS): ativo/inativo/cargo/centro
-let MULTAS=null, MULTAS_N=0, MULTAS_DIAG=null;   // base de multas/infrações normalizada para cruzamento posterior
+let MULTAS=null, MULTAS_N=0, MULTAS_DIAG=null, MULTAS_REV=0;   // base de multas/infrações
+let MULTAS_BY_DATE=Object.create(null), MULTAS_BY_DRIVER_N=Object.create(null), MULTA_CTX_CACHE=new Map(), MULTA_OP_REV=-1, MULTA_OP_BY_PD=Object.create(null), MULTA_ROWS=[];
 let MOTORISTAS_IDX={byCpf:{},byNome:{},byCanon:{},canonAmb:{}};
 function nomeTokens(s){ return nomeCanon(s).split(/\s+/).filter(Boolean); }
 function rebuildMotoristasIdx(){
@@ -1604,6 +1640,7 @@ function renderKpis(rows){
       {lab:'Dias com movimentação',val:audit.diasMov.toLocaleString('pt-BR'),sub:hDec(audit.hCond)+' de condução no período',ac:'var(--s4)',tab:'linha'}
     );
   }
+  if(MULTAS&&opSel){ const mr=multasResumo({op:opSel,range:activeRange()}); K.splice(0,0,{lab:'Multas — '+opSel,val:mr.total.toLocaleString('pt-BR'),sub:mr.descontadas.toLocaleString('pt-BR')+' descontada(s) · '+mr.pendentes.toLocaleString('pt-BR')+' pendente(s) · '+mr.conduta.toLocaleString('pt-BR')+' de conduta',ac:mr.pendentes?'var(--warning)':'var(--s2)',tab:'multas'}); }
   if(MEDIA_OFF){const i=K.findIndex(k=>k&&k.tab==='media');if(i>=0)K.splice(i,1);}
   if(placOk!=null){const placTot=placOk+placAcao;K.splice(1,0,
     {lab:'Placas (total)'+(opSel?' — '+opSel:''),val:placTot,sub:'veículos c/ movimento'+(opSel?' na operação':' na frota'),ac:'var(--s2)',tab:'semid'},
@@ -2143,6 +2180,7 @@ function renderFicha(){
   const P=fichaPontos(M);   // pontos críticos × positivos (mesma fonte do PDF)
   const PL=planoDeAcao(M);  // plano de ação concreto (o que fazer)
   const trats=tratList(nome);   // histórico de tratativas (Lista SharePoint ou local)
+  const multaR = MULTAS ? multasResumo({motorista:nome,range:activeRange()}) : null;
   // se logado no M365 e ainda não puxou o banco compartilhado, sincroniza e re-renderiza (1x)
   if(TRAT_CACHE===null && !_tratSyncTried){ _tratSyncTried=true; tratSyncFromSP(false).then(ok=>{ if(ok && fichaAtual===nome) renderFicha(); }); }
   // este motorista rodou em outras operações fora do filtro atual? (evita o "só apareceu 1 dia")
@@ -2210,6 +2248,8 @@ function renderFicha(){
         <div class="lab">Dias com ponto</div><div class="val tnum">${(diasComPonto||0).toLocaleString('pt-BR')}</div><div class="sub">dias com jornada de ponto registrada</div></div>
       <div class="card kpi"><div class="accent" style="background:var(--s4)"></div>
         <div class="lab">Dias com movimentação</div><div class="val tnum">${(diasComMov||0).toLocaleString('pt-BR')}</div><div class="sub">${hDec(hCondAudit||0)} de condução no período</div></div>
+      ${multaR?`<div class="card kpi"><div class="accent" style="background:${multaR.pendentes?'var(--warning)':'var(--s2)'}"></div>
+        <div class="lab">Multas</div><div class="val tnum">${multaR.total.toLocaleString('pt-BR')}</div><div class="sub">${multaR.descontadas.toLocaleString('pt-BR')} descontada(s) · ${multaR.pendentes.toLocaleString('pt-BR')} pendente(s)<br>R$ — pendente · R$ — descontado</div></div>`:''}
       <div class="card kpi"><div class="accent" style="background:${restMinF!=null&&restMinF<CFG.interjornadaMin?'var(--critical)':(restMinF!=null?'var(--good)':'var(--muted)')}"></div>
         <div class="lab">Descanso entre jornadas</div><div class="val tnum">${restMinF==null?'—':hDec(restMinF)}</div><div class="sub">${interjViol>0?('⚠ '+interjViol+' dia(s) < 11h'):(restMinF!=null?'menor descanso · mín 11h ✓':'sem dados')}</div></div>
       <div class="card kpi"><div class="accent" style="background:${(alR.niveis&&alR.niveis.ALTO)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
@@ -2647,10 +2687,11 @@ function renderAll(){
   const rowViews=new Set(['semana','aderencia','linha','diverg','media','tabela']);
   const rng=activeRange();
   let viewKey;
-  if(rowViews.has(view)) viewKey=DATA_REV+'|'+fkey+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'');
+  if(rowViews.has(view)) viewKey=DATA_REV+'|M'+MULTAS_REV+'|'+fkey+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'');
   else if(view==='motoristas') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+(rng?(rng.de+'|'+rng.ate):'*');
   else if(view==='semid') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+CFG.sem;
   else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view;
+  else if(view==='multas') viewKey=DATA_REV+'|'+MULTAS_REV+'|'+fkey+'|'+($('#multaResp')?$('#multaResp').value:'')+'|'+($('#multaAudit')?$('#multaAudit').value:'');
   else viewKey=DATA_REV+'|'+view;
   // Cache LRU do Resumo: limpar um filtro ou voltar a uma combinação já usada restaura o HTML pronto.
   if(view==='semana'&&SUMMARY_DOM_CACHE.has(viewKey)){
@@ -2676,6 +2717,7 @@ function renderAll(){
   else if(view==='operacao') renderBatimento();
   else if(view==='saude') renderSaude();
   else if(view==='semid') renderPlacasSemId();
+  else if(view==='multas') renderMultas();
   else if(view==='ficha'&&fichaAtual) renderFicha();
   if(view!=='ficha'&&view!=='motoristas') VIEW_RENDER_KEYS[view]=viewKey;
   const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT; VIEW_BADGE_COUNTS[view]=n; bd.textContent=n>999?'999+':n;}
@@ -4146,9 +4188,125 @@ async function loadMultasFiles(files){
       } else diag.falhas.push({arquivo:f.name,erro:'formato não suportado'});
     }catch(e){console.error('Multas: falha em '+f.name,e);diag.falhas.push({arquivo:f.name,erro:String(e&&e.message||e)});} await uiYield();
   }
-  MULTAS=out; MULTAS_N=out.length; MULTAS_DIAG=diag; afterImportChange({reanalyze:false,filters:false,persist:true});
+  MULTAS=out; MULTAS_N=out.length; MULTAS_DIAG=diag; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); afterImportChange({reanalyze:false,filters:false,persist:true});
   const extra=(diag.duplicadas?' · '+diag.duplicadas.toLocaleString('pt-BR')+' duplicada(s) ignorada(s)':'')+(diag.falhas.length?' · '+diag.falhas.length+' arquivo(s) com falha':'');
   toast('Multas ✓ '+MULTAS_N.toLocaleString('pt-BR')+' registros · '+diag.dia1.toLocaleString('pt-BR')+' no dia 01 · '+diag.conduta.toLocaleString('pt-BR')+' de conduta'+extra);
+}
+
+
+function rebuildMultasIndex(){
+  MULTAS_BY_DATE=Object.create(null); MULTAS_BY_DRIVER_N=Object.create(null);
+  for(const m of (MULTAS||[])){
+    if(m.data)(MULTAS_BY_DATE[m.data]=MULTAS_BY_DATE[m.data]||[]).push(m);
+    const nn=norm(m.motorista||''); if(nn)(MULTAS_BY_DRIVER_N[nn]=MULTAS_BY_DRIVER_N[nn]||[]).push(m);
+  }
+}
+function _isoBaseMin(d){ const m=String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m?Date.UTC(+m[1],+m[2]-1,+m[3])/60000:null; }
+function _multaMinute(m){ const b=_isoBaseMin(m&&m.data); if(b==null)return null; const h=toMin(m.hora||'00:00'); return b+(h==null?0:h); }
+function rebuildMultaOperationIndex(){
+  if(MULTA_OP_REV===DATA_REV)return;
+  const tmp=Object.create(null); MULTA_OP_BY_PD=Object.create(null);
+  for(const r of (RECORDS||[])){
+    const ps=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]); const op=r.operacao||''; if(!op||op==='—')continue;
+    const w=Math.max(1,+r.horasMov||0,+r.horasPonto||0);
+    for(const p of ps){const pk=placaKey(p);if(!pk||!r.data)continue;const k=pk+'|'+r.data;const g=(tmp[k]=tmp[k]||Object.create(null));g[op]=(g[op]||0)+w;}
+  }
+  for(const k in tmp){let best='',bw=-1;for(const op in tmp[k])if(tmp[k][op]>bw){bw=tmp[k][op];best=op;}MULTA_OP_BY_PD[k]=best;}
+  MULTA_OP_REV=DATA_REV;
+}
+function multaOperacao(m){ rebuildMultaOperationIndex(); return (m&&m.placa&&m.data&&MULTA_OP_BY_PD[m.placa+'|'+m.data])||''; }
+function _recordCoversMinute(r,arr,t){
+  const b=_isoBaseMin(r.data); if(b==null||t==null)return false;
+  for(const s of (arr||[])){let a=+s.ini,bm=+s.fim;if(!Number.isFinite(a)||!Number.isFinite(bm))continue;if(bm<a)bm+=1440;if(t>=b+a&&t<=b+bm)return true;} return false;
+}
+function _recordPointCovers(r,t){
+  const b=_isoBaseMin(r.data),q=r.seqP||[]; if(b==null||t==null)return false;
+  for(let i=0;i+1<q.length;i+=2)if(t>=b+q[i]&&t<=b+q[i+1])return true; return false;
+}
+function multaContext(m){
+  const key=[MULTAS_REV,DATA_REV,m.numero,m.auto,m.dataHora,m.placa].join('|'); if(MULTA_CTX_CACHE.has(key))return MULTA_CTX_CACHE.get(key);
+  const t=_multaMinute(m), recs=(RECORDS_BY_PLATE_N[m.placa]||[]), same=[], mov=[], ponto=[], cam=[];
+  for(const r of recs){
+    const rb=_isoBaseMin(r.data); if(rb==null)continue; const diff=t==null?999:Math.abs((t-rb)/1440); if(diff>2)continue;
+    if(r.data===m.data)same.push(r);
+    if(_recordCoversMinute(r,r.mov,t))mov.push(r);
+    if(_recordPointCovers(r,t))ponto.push(r);
+    for(const sg of (r.segs||[]))if(_recordCoversMinute(r,[sg],t)&&sg.motorista)cam.push(sg.motorista);
+  }
+  const pref=mov.length?mov:(ponto.length?ponto:same);
+  const ops=pref.map(r=>r.operacao).filter(o=>o&&o!=='—'); const operacao=multaOperacao(m)||(ops.length?ops[0]:'');
+  const pts=[...new Set((ponto.length?ponto:same.filter(r=>r.punches&&r.punches.length)).map(r=>r.motoristaEscala).filter(Boolean))];
+  const cams=[...new Set(cam.filter(Boolean))];
+  const motPonto=pts.length===1?pts[0]:(pts.length?pts.join(' / '):''); const motCam=cams.length===1?cams[0]:(cams.length?cams.join(' / '):'');
+  const nd=norm(m.motorista||''), nc=norm(motCam||''); let audit='SEM_CAMERA';
+  if(!nd)audit='SEM_DOCUMENTO'; else if(nc)audit=(nd===nc?'CONFERE':'DIVERGE');
+  const cancelada=norm(m.situacao||'').includes('CANCEL');
+  let resp='REVISAR', desconto='A DEFINIR';
+  if(cancelada){resp='CANCELADA';desconto='N/A';}
+  else if(m.descontoDia1){resp='MOTORISTA';desconto='DESCONTADA';}
+  else if(m.condutaMotorista){resp='MOTORISTA';desconto='PENDENTE';}
+  const out={operacao,motPonto,motCam,audit,resp,desconto,cancelada,pendente:desconto==='PENDENTE'}; MULTA_CTX_CACHE.set(key,out); return out;
+}
+function multaDriverMatchDoc(m,nome){
+  const nn=norm(nome); if(!nn)return false; const cpf=(NOME2CPF&&NOME2CPF[nn])||'';
+  if(cpf&&m.motoristaCpf&&cpf===m.motoristaCpf)return true;
+  const mn=norm(m.motorista||''); return !!(mn&&(mn===nn||nomeCanon(m.motorista)===nomeCanon(nome)));
+}
+function multaDriverMatch(m,nome,ctx){
+  if(multaDriverMatchDoc(m,nome))return true;
+  if(!ctx)return false;
+  const nn=norm(nome),cn=norm(ctx.motCam||''); return !!(cn&&(cn===nn||nomeCanon(ctx.motCam)===nomeCanon(nome)));
+}
+function multaRangeList(range){
+  if(!MULTAS)return [];
+  if(!range)return MULTAS;
+  const out=[]; const ds=Object.keys(MULTAS_BY_DATE).sort(); for(const d of ds){if(d<range.de)continue;if(d>range.ate)break;out.push(...MULTAS_BY_DATE[d]);} return out;
+}
+function _multaCancelada(m){return norm(m.situacao||'').includes('CANCEL');}
+function _multaRawStatus(m){if(_multaCancelada(m))return 'CANCELADA';if(m.descontoDia1)return 'DESCONTADA';if(m.condutaMotorista)return 'PENDENTE';return 'REVISAR';}
+function multasResumo(opts){
+  opts=opts||{}; const range=opts.range||null,op=opts.op||'',nome=opts.motorista||''; let total=0,descontadas=0,pendentes=0,conduta=0,revisar=0,canceladas=0;
+  for(const m of multaRangeList(range)){
+    if(op&&multaOperacao(m)!==op)continue; if(nome&&!multaDriverMatchDoc(m,nome))continue;
+    total++; const st=_multaRawStatus(m); if(st==='CANCELADA')canceladas++; else if(st==='DESCONTADA')descontadas++; else if(st==='PENDENTE')pendentes++; else revisar++; if(m.condutaMotorista&&st!=='CANCELADA')conduta++;
+  }
+  return {total,descontadas,pendentes,conduta,revisar,canceladas};
+}
+function multaAuditLabel(a){return a==='CONFERE'?'Confere':a==='DIVERGE'?'Diverge':a==='SEM_DOCUMENTO'?'Sem motorista no documento':'Sem identificação no horário';}
+function multaRespLabel(c){return c.resp==='CANCELADA'?'Cancelada':c.desconto==='DESCONTADA'?'Motorista':c.desconto==='PENDENTE'?'Motorista':'Regra a definir';}
+function multaFiltered(){
+  if(!MULTAS)return [];
+  const rng=activeRange(),op=$('#fOp').value,mot=$('#fMot').value.trim(),q=norm($('#fBusca').value),resp=$('#multaResp')?$('#multaResp').value:'',aud=$('#multaAudit')?$('#multaAudit').value:''; const out=[];
+  for(const m of multaRangeList(rng)){
+    if(q){const hay=norm([m.numero,m.auto,m.placa,m.motorista,m.tipo,m.situacao].join(' '));if(!hay.includes(q))continue;}
+    if(op&&multaOperacao(m)!==op)continue; if(mot&&!multaDriverMatchDoc(m,mot))continue;
+    if(resp&&_multaRawStatus(m)!==resp)continue;
+    if(aud&&multaContext(m).audit!==aud)continue; out.push(m);
+  }
+  return out;
+}
+function renderMultas(){
+  const kb=$('#multaKpis'),body=$('#multaBody'),more=$('#multaMore'); if(!kb||!body)return;
+  if(!MULTAS){kb.innerHTML='';body.innerHTML='<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:32px">Carregue a fonte <b>12 — Multas / Infrações</b> na aba Dados.</td></tr>';if(more)more.style.display='none';return;}
+  const rows=multaFiltered(); MULTA_ROWS=rows; let descontadas=0,pend=0,cond=0,cancel=0,revisar=0;
+  for(const m of rows){const st=_multaRawStatus(m);if(st==='DESCONTADA')descontadas++;else if(st==='PENDENTE')pend++;else if(st==='CANCELADA')cancel++;else revisar++;if(m.condutaMotorista&&st!=='CANCELADA')cond++;}
+  const lim=500,show=rows.slice(0,lim); let div=0; for(const m of show)if(multaContext(m).audit==='DIVERGE')div++;
+  const K=[
+    {lab:'Total de multas',val:rows.length.toLocaleString('pt-BR'),sub:(cancel?cancel.toLocaleString('pt-BR')+' cancelada(s) · ':'')+cond.toLocaleString('pt-BR')+' de conduta',ac:'var(--s2)'},
+    {lab:'Descontadas',val:descontadas.toLocaleString('pt-BR'),sub:'registros com data no dia 01',ac:'var(--good)'},
+    {lab:'Pendentes de desconto',val:pend.toLocaleString('pt-BR'),sub:'velocidade/celular ainda sem dia 01',ac:pend?'var(--warning)':'var(--muted)'},
+    {lab:'Valor pendente',val:'R$ —',sub:'fonte atual não possui valor da multa',ac:'var(--muted)'},
+    {lab:'Valor descontado',val:'R$ —',sub:'fonte atual não possui valor descontado',ac:'var(--muted)'},
+    {lab:'Divergências câmera',val:div.toLocaleString('pt-BR'),sub:(rows.length>lim?'nas '+lim+' multas exibidas · filtre para auditar o conjunto':'documento ≠ câmera no filtro atual')+' · '+revisar.toLocaleString('pt-BR')+' regra(s) a definir',ac:div?'var(--critical)':'var(--good)'}
+  ];
+  kb.innerHTML=K.map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+  body.innerHTML=show.map(m=>{const c=multaContext(m),auditCls=c.audit==='DIVERGE'?'badcell':c.audit==='CONFERE'?'okcell':'';return `<tr class="multarow" data-placa="${m.placa||''}" data-dia="${m.data||''}" title="Abrir placa na linha do tempo"><td>${brDate(m.data)}${m.hora?' '+m.hora:''}</td><td>${pdfEsc(m.auto||m.numero||'—')}</td><td><b>${m.placa||'—'}</b></td><td>${pdfEsc(c.operacao||'Não localizada')}</td><td>${pdfEsc(m.motorista||'—')}${m.motoristaCpf?'<br><small>'+pdfEsc(m.motoristaCpf)+'</small>':''}</td><td>${pdfEsc(c.motPonto||'—')}</td><td>${pdfEsc(c.motCam||'—')}</td><td><span class="${auditCls}">${multaAuditLabel(c.audit)}</span></td><td>${pdfEsc(m.tipo||'—')}</td><td>${multaRespLabel(c)}</td><td>${c.desconto}</td><td>${pdfEsc(m.situacao||'—')}</td><td>${m.vencimento?brDate(m.vencimento):'—'}</td></tr>`;}).join('')||'<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:32px">Nenhuma multa encontrada nos filtros atuais.</td></tr>';
+  if(more){if(rows.length>lim){more.style.display='block';more.innerHTML=`Exibindo as primeiras <b>${lim.toLocaleString('pt-BR')}</b> de <b>${rows.length.toLocaleString('pt-BR')}</b> multas. Use período, operação, motorista ou busca para reduzir a lista; o CSV exporta o conjunto completo.`;}else more.style.display='none';}
+}
+async function exportMultas(){
+  const rows=MULTA_ROWS.length?MULTA_ROWS:multaFiltered(), lines=[['Data','Hora','Auto','Numero','Placa','Operacao_data','Motorista_documento','CPF_documento','Motorista_jornada','Motorista_camera','Conferencia_camera','Tipo','Responsabilidade','Desconto','Situacao','Vencimento'].join(';')];
+  for(let i=0;i<rows.length;i++){const m=rows[i],c=multaContext(m),vals=[m.data,m.hora,m.auto,m.numero,m.placa,c.operacao,m.motorista,m.motoristaCpf,c.motPonto,c.motCam,multaAuditLabel(c.audit),m.tipo,multaRespLabel(c),c.desconto,m.situacao,m.vencimento];lines.push(vals.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';'));if(i&&i%3000===0)await uiYield();}
+  baixarCsv(lines,'multas_auditoria_pulso360.csv');
 }
 
 function updateDropStatus(){
@@ -4412,7 +4570,7 @@ async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
 function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
-function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
+function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
 async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();return true;}catch(e){return false;}}
 async function idbGet(k){try{const db=await idbOpen();const v=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly'),rq=tx.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});db.close();return v;}catch(e){return null;}}
@@ -4522,7 +4680,7 @@ $('#tabs').addEventListener('click',e=>{ const b=e.target.closest('button'); if(
   } else renderAll();
 });
 // KPIs clicáveis → abrem a aba que detalha a informação
-$('#kpis').addEventListener('click',e=>{ const c=e.target.closest('.kpi[data-tab]'); if(!c)return; goTab(c.dataset.tab); });
+$('#kpis').addEventListener('click',e=>{ const c=e.target.closest('.kpi[data-tab]'); if(!c)return; if(c.dataset.tab==='multas')setTabFilterState('multas',readTopFilterState(),true); goTab(c.dataset.tab); });
 // foca um registro (motorista+dia) na Linha do tempo
 function focusRecord(mot, dia){ setTabFilterState('linha',{fMot:mot||'',fDia:dia||''},true); goTab('linha'); }
 // clicar num apontamento das Divergências → linha do tempo daquele motorista+dia
@@ -4541,6 +4699,7 @@ $('#saudeBox').addEventListener('click',e=>{ const tr=e.target.closest('.saudero
 $('#opBox').addEventListener('click',e=>{ const tr=e.target.closest('.oprow'); if(tr) focusPlaca(tr.dataset.placa); });
 // clicar numa linha do Consolidado → Linha do tempo daquele motorista+dia
 $('#tblBody').addEventListener('click',e=>{ const tr=e.target.closest('.tblrow'); if(tr) focusRecord(decodeURIComponent(tr.dataset.mot||''), tr.dataset.dia); });
+if($('#multaBody'))$('#multaBody').addEventListener('click',e=>{ const tr=e.target.closest('.multarow'); if(!tr)return; const st=emptyTopFilterState(); st.fBusca=tr.dataset.placa||''; st.fDia=tr.dataset.dia||''; setTabFilterState('linha',st,true); goTab('linha'); });
 // clicar numa linha da Média → ficha do motorista
 $('#mediaBox').addEventListener('click',e=>{ const tr=e.target.closest('.mediarow'); if(tr) openFicha(decodeURIComponent(tr.dataset.mot||'')); });
 // capinha do motorista → detalhamento (ficha)
@@ -4551,6 +4710,12 @@ $('#btnTratativa').onclick=openTratModal;
 $('#tratCancel').onclick=()=>{ $('#tratModal').style.display='none'; };
 $('#tratSave').onclick=salvarTratativa;
 $('#tratModal').addEventListener('click',e=>{ if(e.target.id==='tratModal') $('#tratModal').style.display='none'; });
+// aba Multas — filtros locais / exportação
+if($('#multaResp'))$('#multaResp').addEventListener('change',()=>{VIEW_RENDER_KEYS.multas='';renderAll();});
+if($('#multaAudit'))$('#multaAudit').addEventListener('change',()=>{VIEW_RENDER_KEYS.multas='';renderAll();});
+if($('#multaLimpar'))$('#multaLimpar').onclick=()=>{if($('#multaResp'))$('#multaResp').value='';if($('#multaAudit'))$('#multaAudit').value='';VIEW_RENDER_KEYS.multas='';renderAll();};
+if($('#expMultas'))$('#expMultas').onclick=exportMultas;
+
 // aba Motoristas — filtros locais / exportação
 $('#motCadClass').addEventListener('change',renderMotoristas);
 $('#motCadBusca').addEventListener('input',debounce(renderMotoristas,180));
@@ -4657,8 +4822,8 @@ $('#fileBdv').addEventListener('change',e=>{ const fs=[...e.target.files]; e.tar
 $('#fileMotoristas').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Motoristas: '+fs.length+' arquivo(s) na fila…'); setTimeout(()=>runSourceImport('motoristas','Relatório de Motoristas',fs,loadMotoristasFiles),20); });
 $('#fileMultas').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Multas: '+fs.length+' arquivo(s) na fila…'); setTimeout(()=>runSourceImport('multas','Multas / Infrações',fs,loadMultasFiles),20); });
 $('#recalc').onclick=()=>{ ingest(); };
-$('#resetDemo').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Voltou à demonstração'); };
-$('#clearData').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Bases removidas'); };
+$('#resetDemo').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Voltou à demonstração'); };
+$('#clearData').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Bases removidas'); };
 
 // INIT
 if(RAW&&RAW.alertas){ ALERTS=RAW.alertas; ALERTS_N=(RAW.counts&&RAW.counts.alertas)||0; PLACA_UO=RAW.placaUO||null; }
