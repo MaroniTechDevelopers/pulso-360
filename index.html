@@ -2377,6 +2377,7 @@ function pdfShell(titulo, sub, badge, corpo){
   .atile.hot{border-color:#ef4444;background:#fef2f2}
   .atile .an{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums}
   .atile .al{font-size:9.5px;color:#64748b;text-transform:uppercase;letter-spacing:.02em;margin-top:2px;line-height:1.2}
+  .atile .amsub{font-size:9px;color:#b45309;font-weight:700;margin-top:4px;line-height:1.2}
   ul.trat{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
   ul.trat li{border-left:3px solid #f5c800;background:#f8fafc;border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.4}
   ul.trat .tt-tag{display:inline-block;background:#fdf3c4;color:#8a6d00;font-weight:700;font-size:10px;padding:1px 7px;border-radius:20px;margin-right:6px}
@@ -2413,6 +2414,14 @@ function exportFichaPDF(){
   const M=fichaMetrics(nome), P=fichaPontos(M);
   const nf=v=>v==null?'—':v.toFixed(2).replace('.',',');
   const alto=(M.alR.niveis&&M.alR.niveis.ALTO)||0;
+  // Mesma regra da ficha: multas de celular + velocidade, canceladas fora,
+  // somente dentro do período operacional e da operação atualmente filtrada.
+  const multaRangePDF=Object.assign({},activeRange()||{}, {op:($('#fOp').value||'')});
+  const multaListPDF=MULTAS_N?multasCondutaMotoristaList(nome,multaRangePDF):[];
+  const multaCelPDF=multaListPDF.filter(m=>multaTipoClasse(m.tipo)==='CELULAR').length;
+  const multaVelPDF=multaListPDF.filter(m=>multaTipoClasse(m.tipo)==='VELOCIDADE').length;
+  const multaByTipoPDF={CELULAR:multaCelPDF,VELOCIDADE:multaVelPDF};
+  const multaSubPDF=(tp)=>{ const c=multaTipoClasse(tp), n=multaByTipoPDF[c]||0; return (c==='CELULAR'||c==='VELOCIDADE')?`<div class="amsub">${n.toLocaleString('pt-BR')} multa${n===1?'':'s'}</div>`:''; };
   const kpis=`<div class="kgrid p6">
     ${MEDIA_OFF?'':pdfKpi('④ Média realizada', (M.mediaR==null?'—':nf(M.mediaR)), 'meta '+nf(M.metaFicha)+(M.mediaR!=null?(M.medaOk?' ✓':' ✗'):''), M.medaOk?'#10b981':'#ef4444')}
     ${pdfKpi('① Aderência (câmera)', (M.semel==null?'—':M.semel+'<small>%</small>'), 'movimento do veículo identificado', M.semel==null?'#94a3b8':(M.semel>=CFG.sem?'#10b981':'#ef4444'))}
@@ -2420,6 +2429,7 @@ function exportFichaPDF(){
     ${pdfKpi('③ Aderência de jornada', (M.aderJornadaVal==null?'—':M.aderJornadaVal+'<small>%</small>'), hDec(M.ddRealTotal)+' fora da jornada', M.aderJornadaVal==null?'#94a3b8':(M.aderJornadaVal>=90?'#10b981':M.aderJornadaVal>=70?'#f59e0b':'#ef4444'))}
     ${pdfKpi('Hora extra (&gt;7h20)', hDec(M.hexTotal), M.diasHex+' dia(s) acima', M.hexTotal>0?'#f59e0b':'#94a3b8')}
     ${pdfKpi('Alertas (total)', M.totAl.toLocaleString('pt-BR'), (alto?alto+' veloc. em nível alto':'todos os tipos'), alto?'#ef4444':(M.totAl>0?'#f59e0b':'#94a3b8'))}
+    ${MULTAS_N?pdfKpi('Multas', multaListPDF.length.toLocaleString('pt-BR'), multaCelPDF+' celular · '+multaVelPDF+' velocidade · período operacional', multaListPDF.length?'#f59e0b':'#94a3b8'):''}
     ${pdfKpi('Descanso entre jornadas', (M.restMinF==null?'—':hDec(M.restMinF)), (M.interjViol>0?M.interjViol+' dia(s) < 11h':(M.restMinF!=null?'mín · 11h ✓':'sem dados')), (M.restMinF!=null&&M.restMinF<CFG.interjornadaMin)?'#ef4444':(M.restMinF!=null?'#10b981':'#94a3b8'))}
   </div>`;
   const pontos=`<div class="cols">
@@ -2430,9 +2440,9 @@ function exportFichaPDF(){
   const tiposArr = M.alR.real ? Object.entries(M.alR.tipos||{}).sort((a,b)=>b[1]-a[1]) : [];
   const maxTipo = tiposArr.length?tiposArr[0][1]:0;
   const alertaTiles = M.alR.real
-    ? tiposArr.map(([tp,nv])=>`<div class="atile${nv===maxTipo&&nv>0?' hot':''}"><div class="an">${alertaIcon(tp)} ${nv.toLocaleString('pt-BR')}</div><div class="al">${pdfEsc(tipoLabel(tp))}</div></div>`).join('')
-    : ALERTA_DEF.map(a=>{ const nv=(M.d.alertas&&M.d.alertas[a.k])||0; return `<div class="atile${nv>=5?' hot':''}"><div class="an">${a.ic} ${nv}</div><div class="al">${a.lab}</div></div>`; }).join('');
-  const alertaSub = M.alR.real ? (M.totAl?'por tipo · total '+M.totAl.toLocaleString('pt-BR'):'sem alertas no período') : '5 tipos monitorados (demo)';
+    ? tiposArr.map(([tp,nv])=>`<div class="atile${nv===maxTipo&&nv>0?' hot':''}"><div class="an">${alertaIcon(tp)} ${nv.toLocaleString('pt-BR')}</div><div class="al">${pdfEsc(tipoLabel(tp))}</div>${multaSubPDF(tp)}</div>`).join('')
+    : ALERTA_DEF.map(a=>{ const nv=(M.d.alertas&&M.d.alertas[a.k])||0; return `<div class="atile${nv>=5?' hot':''}"><div class="an">${a.ic} ${nv}</div><div class="al">${a.lab}</div>${multaSubPDF(a.lab)}</div>`; }).join('');
+  const alertaSub = M.alR.real ? (M.totAl?'por tipo · total '+M.totAl.toLocaleString('pt-BR')+(MULTAS_N?' · multas no período '+multaListPDF.length.toLocaleString('pt-BR'):''):'sem alertas no período') : '5 tipos monitorados (demo)';
   const alertasBloco = alertaTiles ? `<h2 class="sec">Alertas — ${alertaSub}</h2><div class="alertas">${alertaTiles}</div>` : '';
   const PL=planoDeAcao(M);
   const plano=`<ul class="plan">${PL.map(a=>`<li><span>${a.ic}</span><div><b>${pdfEsc(a.t)}</b> — ${pdfEsc(a.d)}</div></li>`).join('')}</ul>`;
