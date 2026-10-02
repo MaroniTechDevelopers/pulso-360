@@ -352,6 +352,7 @@
   .alert-tile .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
   .alert-tile.hot .n{color:var(--crit-ink)}
   .alert-tile .l{font-size:11px;color:var(--muted);margin-top:2px}
+  .alert-tile .multa-note{font-size:10px;color:color-mix(in srgb,var(--warning) 72%,var(--muted));margin-top:4px;font-weight:700;letter-spacing:.01em}
 
   /* ============ MOTORISTAS — TMS x PONTO ============ */
   .motbar{margin:0;align-items:flex-end}
@@ -640,7 +641,7 @@
   <!-- ===== MULTAS / INFRAÇÕES ===== -->
   <section class="view" id="view-multas">
     <div class="grid kpis" id="multaKpis"></div>
-    <div class="sec-title"><h2>Multas / Infrações</h2><span>auditoria do documento × placa/operação × jornada × identificação da câmera</span>
+    <div class="sec-title"><h2>Multas / Infrações</h2><span>escopo atual: velocidade + celular · auditoria do documento × placa/operação × jornada × câmera</span>
       <button class="btn" id="expMultas" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">⬇️ Exportar CSV</button></div>
     <div class="card" style="padding:12px 16px;margin-bottom:12px">
       <div class="filterbar motbar">
@@ -660,7 +661,7 @@
         </select></div>
         <button class="btn" id="multaLimpar" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Limpar filtros da multa</button>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:8px">Regras atuais: <b>dia 01 = descontada</b> · <b>velocidade/celular = conduta do motorista</b>. A fonte atual não possui valor monetário; por isso valores financeiros permanecem como <b>—</b>.</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px">Escopo padrão atual: <b>somente multas de Velocidade e Celular</b>. Regras: <b>dia 01 = descontada</b> · <b>velocidade/celular = conduta do motorista</b>. A fonte atual não possui valor monetário; por isso valores financeiros permanecem como <b>—</b>.</div>
     </div>
     <div class="tblwrap"><table id="multaTbl" style="min-width:1700px">
       <thead><tr>
@@ -2198,10 +2199,12 @@ function renderFicha(){
   const temNiv = alR.real && alR.niveis && (alR.niveis.ALTO||alR.niveis.MEDIO||alR.niveis.BAIXO);
   const sevTot = temNiv ? ((alR.niveis.ALTO||0)+(alR.niveis.MEDIO||0)+(alR.niveis.BAIXO||0)) : 0;
   const sevLine = temNiv ? NIVEL_DEF.map(a=>`${a.ic} ${((alR.niveis&&alR.niveis[a.k])||0).toLocaleString('pt-BR')} ${a.lab.toLowerCase()}`).join(' · ') : '';
-  const alertaSubt = alR.real ? (totAl?('por tipo · total '+totAl.toLocaleString('pt-BR')+(temNiv?(' · <b>excesso de velocidade</b> por severidade ('+sevTot.toLocaleString('pt-BR')+'): '+sevLine):'')):'sem alertas no período') : '5 tipos monitorados (demo)';
+  const multaTipos = MULTAS ? multasCondutaPorTipo({motorista:nome,range:activeRange(),op:($('#fOp')&&$('#fOp').value)||''}) : {celular:0,velocidade:0,total:0};
+  const multaLinha = MULTAS ? (' · <b>multas de conduta</b>: '+multaTipos.total.toLocaleString('pt-BR')+' · '+multaTipos.celular.toLocaleString('pt-BR')+' celular · '+multaTipos.velocidade.toLocaleString('pt-BR')+' velocidade') : '';
+  const alertaSubt = alR.real ? (totAl?('por tipo · total '+totAl.toLocaleString('pt-BR')+(temNiv?(' · <b>excesso de velocidade</b> por severidade ('+sevTot.toLocaleString('pt-BR')+'): '+sevLine):'')+multaLinha):('sem alertas no período'+multaLinha)) : '5 tipos monitorados (demo)';
   const maxTipo = tiposArr.length?tiposArr[0][1]:0;
   const alertTiles = alR.real
-    ? (tiposArr.length ? tiposArr.map(([tp,n])=>`<div class="alert-tile ${n===maxTipo&&n>0?'hot':''}"><div class="n">${alertaIcon(tp)} ${n.toLocaleString('pt-BR')}</div><div class="l">${tipoLabel(tp)}</div></div>`).join('') : '<div class="empty" style="padding:16px">sem alertas no período</div>')
+    ? (tiposArr.length ? tiposArr.map(([tp,n])=>`<div class="alert-tile ${n===maxTipo&&n>0?'hot':''}"><div class="n">${alertaIcon(tp)} ${n.toLocaleString('pt-BR')}</div><div class="l">${tipoLabel(tp)}</div>${multaNotaAlerta(tp,multaTipos)}</div>`).join('') : '<div class="empty" style="padding:16px">sem alertas no período</div>')
     : ALERTA_DEF.map(a=>{ const n=(d.alertas&&d.alertas[a.k])||0; return `<div class="alert-tile ${n>=5?'hot':''}"><div class="n">${a.ic} ${n}</div><div class="l">${a.lab}</div></div>`; }).join('');
 
   $('#fichaBox').innerHTML = `
@@ -2370,8 +2373,9 @@ function exportFichaPDF(){
   // Alertas por tipo (mesmos tiles da ficha na tela): real = alR.tipos; demo = ALERTA_DEF
   const tiposArr = M.alR.real ? Object.entries(M.alR.tipos||{}).sort((a,b)=>b[1]-a[1]) : [];
   const maxTipo = tiposArr.length?tiposArr[0][1]:0;
+  const multaTiposPdf = MULTAS ? multasCondutaPorTipo({motorista:nome,range:activeRange(),op:($('#fOp')&&$('#fOp').value)||''}) : {celular:0,velocidade:0,total:0};
   const alertaTiles = M.alR.real
-    ? tiposArr.map(([tp,nv])=>`<div class="atile${nv===maxTipo&&nv>0?' hot':''}"><div class="an">${alertaIcon(tp)} ${nv.toLocaleString('pt-BR')}</div><div class="al">${pdfEsc(tipoLabel(tp))}</div></div>`).join('')
+    ? tiposArr.map(([tp,nv])=>{const n=norm(tp);const mv=n.includes('CELULAR')?multaTiposPdf.celular:(n.includes('VELOCIDADE')?multaTiposPdf.velocidade:null);return `<div class="atile${nv===maxTipo&&nv>0?' hot':''}"><div class="an">${alertaIcon(tp)} ${nv.toLocaleString('pt-BR')}</div><div class="al">${pdfEsc(tipoLabel(tp))}</div>${mv==null?'':`<div style="font-size:8.5px;color:#b45309;font-weight:700;margin-top:3px">${mv.toLocaleString('pt-BR')} multa${mv===1?'':'s'}</div>`}</div>`;}).join('')
     : ALERTA_DEF.map(a=>{ const nv=(M.d.alertas&&M.d.alertas[a.k])||0; return `<div class="atile${nv>=5?' hot':''}"><div class="an">${a.ic} ${nv}</div><div class="al">${a.lab}</div></div>`; }).join('');
   const alertaSub = M.alR.real ? (M.totAl?'por tipo · total '+M.totAl.toLocaleString('pt-BR'):'sem alertas no período') : '5 tipos monitorados (demo)';
   const alertasBloco = alertaTiles ? `<h2 class="sec">Alertas — ${alertaSub}</h2><div class="alertas">${alertaTiles}</div>` : '';
@@ -4156,7 +4160,20 @@ function multaDataHora(v){
   if(m)return {data:m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'),hora:m[4]!=null?m[4].padStart(2,'0')+':'+m[5]:'',raw};
   const d=isoDate(raw); const hm0=(raw.match(/(\d{1,2}:\d{2})/)||[])[1]||''; return {data:d,hora:hm0,raw};
 }
-function multaConduta(tipo){ const n=norm(tipo); return n.includes('VELOCIDADE')||n.includes('TELEFONE CELULAR')||n.includes('USO DE CELULAR')||n.includes('MANUSEANDO TELEFONE'); }
+function multaTipoClasse(tipo){ const n=norm(tipo); if(n.includes('CELULAR')||n.includes('TELEFONE'))return 'CELULAR'; if(n.includes('VELOCIDADE'))return 'VELOCIDADE'; return 'OUTRA'; }
+function multaConduta(tipo){ return multaTipoClasse(tipo)!=='OUTRA'; }
+function multaEscopoPadrao(m){ return !!(m&&m.condutaMotorista); }
+function multasCondutaPorTipo(opts){
+  opts=opts||{}; const range=opts.range||null,op=opts.op||'',nome=opts.motorista||''; let celular=0,velocidade=0,total=0;
+  for(const m of multaRangeList(range)){
+    if(!multaEscopoPadrao(m) || _multaCancelada(m))continue;
+    if(op&&multaOperacao(m)!==op)continue;
+    if(nome&&!multaDriverMatchDoc(m,nome))continue;
+    const c=multaTipoClasse(m.tipo); if(c==='CELULAR')celular++; else if(c==='VELOCIDADE')velocidade++; else continue; total++;
+  }
+  return {celular,velocidade,total};
+}
+function multaNotaAlerta(tp,counts){ const n=norm(tp); let v=null; if(n.includes('CELULAR'))v=counts&&counts.celular; else if(n.includes('VELOCIDADE'))v=counts&&counts.velocidade; return v==null?'':`<div class="multa-note">${v.toLocaleString('pt-BR')} multa${v===1?'':'s'}</div>`; }
 function multaRowNorm(row,source){
   const keys=Object.keys(row||{}); const get=(aliases)=>{for(const a of aliases){const na=norm(a);const k=keys.find(x=>norm(x)===na)||keys.find(x=>norm(x).includes(na));if(k)return row[k];}return '';};
   const numero=String(get(['Número','Numero'])||'').trim(), auto=String(get(['Número da Atuação','Numero da Atuacao','Número da Autuação','Numero da Autuacao','Auto de Infração','Auto de Infracao'])||'').trim();
@@ -4267,6 +4284,7 @@ function _multaRawStatus(m){if(_multaCancelada(m))return 'CANCELADA';if(m.descon
 function multasResumo(opts){
   opts=opts||{}; const range=opts.range||null,op=opts.op||'',nome=opts.motorista||''; let total=0,descontadas=0,pendentes=0,conduta=0,revisar=0,canceladas=0;
   for(const m of multaRangeList(range)){
+    if(!multaEscopoPadrao(m))continue;
     if(op&&multaOperacao(m)!==op)continue; if(nome&&!multaDriverMatchDoc(m,nome))continue;
     total++; const st=_multaRawStatus(m); if(st==='CANCELADA')canceladas++; else if(st==='DESCONTADA')descontadas++; else if(st==='PENDENTE')pendentes++; else revisar++; if(m.condutaMotorista&&st!=='CANCELADA')conduta++;
   }
@@ -4278,6 +4296,7 @@ function multaFiltered(){
   if(!MULTAS)return [];
   const rng=activeRange(),op=$('#fOp').value,mot=$('#fMot').value.trim(),q=norm($('#fBusca').value),resp=$('#multaResp')?$('#multaResp').value:'',aud=$('#multaAudit')?$('#multaAudit').value:''; const out=[];
   for(const m of multaRangeList(rng)){
+    if(!multaEscopoPadrao(m))continue;
     if(q){const hay=norm([m.numero,m.auto,m.placa,m.motorista,m.tipo,m.situacao].join(' '));if(!hay.includes(q))continue;}
     if(op&&multaOperacao(m)!==op)continue; if(mot&&!multaDriverMatchDoc(m,mot))continue;
     if(resp&&_multaRawStatus(m)!==resp)continue;
