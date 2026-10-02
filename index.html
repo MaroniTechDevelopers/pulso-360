@@ -352,7 +352,7 @@
   .alert-tile .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
   .alert-tile.hot .n{color:var(--crit-ink)}
   .alert-tile .l{font-size:11px;color:var(--muted);margin-top:2px}
-  .alert-tile .multa-note{font-size:10px;color:color-mix(in srgb,var(--warning) 72%,var(--muted));margin-top:4px;font-weight:700;letter-spacing:.01em}
+  .alert-tile .multa-note{display:inline-block;font-size:10px;color:color-mix(in srgb,var(--warning) 76%,var(--ink-2));background:color-mix(in srgb,var(--warning) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--warning) 20%,var(--border));border-radius:999px;padding:2px 6px;margin-top:5px;font-weight:700;letter-spacing:.01em}
 
   /* ============ MOTORISTAS — TMS x PONTO ============ */
   .motbar{margin:0;align-items:flex-end}
@@ -2181,7 +2181,8 @@ function renderFicha(){
   const P=fichaPontos(M);   // pontos críticos × positivos (mesma fonte do PDF)
   const PL=planoDeAcao(M);  // plano de ação concreto (o que fazer)
   const trats=tratList(nome);   // histórico de tratativas (Lista SharePoint ou local)
-  const multaR = MULTAS ? multasResumo({motorista:nome,range:activeRange()}) : null;
+  const multaOpts = {motorista:nome,range:activeRange(),op:(($('#fOp')&&$('#fOp').value)||'')};
+  const multaR = MULTAS ? multasResumo(multaOpts) : null;
   // se logado no M365 e ainda não puxou o banco compartilhado, sincroniza e re-renderiza (1x)
   if(TRAT_CACHE===null && !_tratSyncTried){ _tratSyncTried=true; tratSyncFromSP(false).then(ok=>{ if(ok && fichaAtual===nome) renderFicha(); }); }
   // este motorista rodou em outras operações fora do filtro atual? (evita o "só apareceu 1 dia")
@@ -2199,7 +2200,7 @@ function renderFicha(){
   const temNiv = alR.real && alR.niveis && (alR.niveis.ALTO||alR.niveis.MEDIO||alR.niveis.BAIXO);
   const sevTot = temNiv ? ((alR.niveis.ALTO||0)+(alR.niveis.MEDIO||0)+(alR.niveis.BAIXO||0)) : 0;
   const sevLine = temNiv ? NIVEL_DEF.map(a=>`${a.ic} ${((alR.niveis&&alR.niveis[a.k])||0).toLocaleString('pt-BR')} ${a.lab.toLowerCase()}`).join(' · ') : '';
-  const multaTipos = MULTAS ? multasCondutaPorTipo({motorista:nome,range:activeRange(),op:($('#fOp')&&$('#fOp').value)||''}) : {celular:0,velocidade:0,total:0};
+  const multaTipos = MULTAS ? multasCondutaPorTipo(multaOpts) : {celular:0,velocidade:0,total:0};
   const multaLinha = MULTAS ? (' · <b>multas de conduta</b>: '+multaTipos.total.toLocaleString('pt-BR')+' · '+multaTipos.celular.toLocaleString('pt-BR')+' celular · '+multaTipos.velocidade.toLocaleString('pt-BR')+' velocidade') : '';
   const alertaSubt = alR.real ? (totAl?('por tipo · total '+totAl.toLocaleString('pt-BR')+(temNiv?(' · <b>excesso de velocidade</b> por severidade ('+sevTot.toLocaleString('pt-BR')+'): '+sevLine):'')+multaLinha):('sem alertas no período'+multaLinha)) : '5 tipos monitorados (demo)';
   const maxTipo = tiposArr.length?tiposArr[0][1]:0;
@@ -2252,7 +2253,7 @@ function renderFicha(){
       <div class="card kpi"><div class="accent" style="background:var(--s4)"></div>
         <div class="lab">Dias com movimentação</div><div class="val tnum">${(diasComMov||0).toLocaleString('pt-BR')}</div><div class="sub">${hDec(hCondAudit||0)} de condução no período</div></div>
       ${multaR?`<div class="card kpi"><div class="accent" style="background:${multaR.pendentes?'var(--warning)':'var(--s2)'}"></div>
-        <div class="lab">Multas</div><div class="val tnum">${multaR.total.toLocaleString('pt-BR')}</div><div class="sub">${multaR.descontadas.toLocaleString('pt-BR')} descontada(s) · ${multaR.pendentes.toLocaleString('pt-BR')} pendente(s)<br>R$ — pendente · R$ — descontado</div></div>`:''}
+        <div class="lab">Multas</div><div class="val tnum">${multaR.total.toLocaleString('pt-BR')}</div><div class="sub"><b>${multaTipos.celular.toLocaleString('pt-BR')} celular</b> · <b>${multaTipos.velocidade.toLocaleString('pt-BR')} velocidade</b><br>${multaR.descontadas.toLocaleString('pt-BR')} descontada(s) · ${multaR.pendentes.toLocaleString('pt-BR')} pendente(s)<br>R$ — pendente · R$ — descontado</div></div>`:''}
       <div class="card kpi"><div class="accent" style="background:${restMinF!=null&&restMinF<CFG.interjornadaMin?'var(--critical)':(restMinF!=null?'var(--good)':'var(--muted)')}"></div>
         <div class="lab">Descanso entre jornadas</div><div class="val tnum">${restMinF==null?'—':hDec(restMinF)}</div><div class="sub">${interjViol>0?('⚠ '+interjViol+' dia(s) < 11h'):(restMinF!=null?'menor descanso · mín 11h ✓':'sem dados')}</div></div>
       <div class="card kpi"><div class="accent" style="background:${(alR.niveis&&alR.niveis.ALTO)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
