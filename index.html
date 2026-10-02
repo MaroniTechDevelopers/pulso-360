@@ -293,10 +293,10 @@
   .cap-id{flex:1;min-width:0}
   .cap-id b{font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cap-id small{color:var(--muted);font-size:11px}
-  .cap-metrics{display:flex;gap:8px}
-  .cap-metrics .cm{flex:1;background:var(--surface-2);border-radius:8px;padding:6px 8px;text-align:center}
-  .cap-metrics .cm span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-  .cap-metrics .cm b{font-size:15px;font-variant-numeric:tabular-nums}
+  .cap-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
+  .cap-metrics .cm{min-width:0;background:var(--surface-2);border-radius:8px;padding:7px 8px;text-align:center;overflow:hidden}
+  .cap-metrics .cm span{display:block;font-size:9.5px;line-height:1.15;text-transform:uppercase;letter-spacing:.035em;color:var(--muted);white-space:normal}
+  .cap-metrics .cm b{display:block;margin-top:2px;font-size:15px;line-height:1.1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
   .cap-metrics .cm b.ok{color:var(--good-ink)} .cap-metrics .cm b.bad{color:var(--crit-ink)} .cap-metrics .cm b.warn{color:var(--warning)}
   .cap-foot{display:flex;flex-direction:column;gap:8px}
   .cap-alerts{display:inline-flex;gap:4px;flex-wrap:wrap}
@@ -1026,7 +1026,7 @@ let ADMISSAO_CANON=null, ADMISSAO_NOMECPF=null, ADMISSAO_CANONCPF=null;
 let ADMISSAO_PRESENTES=null, ADMISSAO_PRESENTES_CANON=null, ADMISSAO_DIAG=null;
 let MOTORISTAS_TMS=null, MOTORISTAS_TMS_N=0;   // cadastro mestre do Relatório de Motoristas (TMS): ativo/inativo/cargo/centro
 let MULTAS=null, MULTAS_N=0, MULTAS_DIAG=null, MULTAS_REV=0;   // base de multas/infrações
-let MULTAS_BY_DATE=Object.create(null), MULTAS_BY_DRIVER_N=Object.create(null), MULTA_CTX_CACHE=new Map(), MULTA_OP_REV=-1, MULTA_OP_BY_PD=Object.create(null), MULTA_ROWS=[];
+let MULTAS_BY_DATE=Object.create(null), MULTAS_BY_DRIVER_N=Object.create(null), MULTAS_BY_DRIVER_CANON=Object.create(null), MULTAS_BY_DRIVER_CPF=Object.create(null), MULTA_CTX_CACHE=new Map(), MULTA_OP_REV=-1, MULTA_OP_BY_PD=Object.create(null), MULTA_ROWS=[];
 let MOTORISTAS_IDX={byCpf:{},byNome:{},byCanon:{},canonAmb:{}};
 function nomeTokens(s){ return nomeCanon(s).split(/\s+/).filter(Boolean); }
 function rebuildMotoristasIdx(){
@@ -1665,7 +1665,7 @@ function resumoRankCmp(a,b){
   return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
 }
 function semanaAgg(rows){
-  const cacheKey=(rows===FILTER_CACHE_ROWS?FILTER_CACHE_KEY:('rows:'+rows.length+':'+DATA_REV))+'|semana';
+  const cacheKey=(rows===FILTER_CACHE_ROWS?FILTER_CACHE_KEY:('rows:'+rows.length+':'+DATA_REV))+'|semana|M'+MULTAS_REV;
   if(SEMANA_AGG_CACHE_MAP.has(cacheKey)){
     const hit=SEMANA_AGG_CACHE_MAP.get(cacheKey); SEMANA_AGG_CACHE_MAP.delete(cacheKey); SEMANA_AGG_CACHE_MAP.set(cacheKey,hit); return hit;
   }
@@ -1782,23 +1782,17 @@ function fechaMin(f){ return (Math.round((Date.parse(f.end)-Date.parse(f.start))
 
 function multaTimelineEvents(nome,start,total){
   if(!MULTAS||!nome||!start||!total)return [];
-  const out=[], dayCount=Math.ceil(total/1440), nn=norm(nome);
-  for(let di=0;di<dayCount;di++){
-    const data=new Date(Date.parse(start)+di*86400000).toISOString().slice(0,10);
-    const arr=MULTAS_BY_DATE[data]||[];
-    for(const m of arr){
-      if(!multaEscopoPadrao(m)||_multaCancelada(m))continue;
-      const ctx=multaContext(m);
-      const doc=multaDriverMatchDoc(m,nome);
-      const ponto=norm(ctx.motPonto||'')===nn||nomeCanon(ctx.motPonto||'')===nomeCanon(nome);
-      const cam=norm(ctx.motCam||'')===nn||nomeCanon(ctx.motCam||'')===nomeCanon(nome);
-      if(!(doc||ponto||cam))continue;
-      const hm0=toMin(m.hora||''); if(hm0==null)continue;
-      const cls=multaTipoClasse(m.tipo);
-      out.push({t:di*1440+hm0,tipo:cls,placa:m.placa||'',auto:m.auto||m.numero||'',doc:m.motorista||'',cam:ctx.motCam||'',audit:ctx.audit||'',situacao:m.situacao||''});
-    }
+  const dayCount=Math.ceil(total/1440); const end=new Date(Date.parse(start)+(dayCount-1)*86400000).toISOString().slice(0,10);
+  const arr=multasCondutaMotoristaList(nome,{de:start,ate:end}), out=[];
+  for(const m of arr){
+    const di=Math.round((Date.parse(m.data)-Date.parse(start))/86400000); if(di<0||di>=dayCount)continue;
+    const hmRaw=toMin(m.hora||''), semHora=hmRaw==null, hm0=semHora?12*60:hmRaw; const ctx=multaContext(m), cls=multaTipoClasse(m.tipo);
+    out.push({t:di*1440+hm0,tipo:cls,placa:m.placa||'',auto:m.auto||m.numero||'',doc:m.motorista||'',cam:ctx.motCam||'',audit:ctx.audit||'',situacao:m.situacao||'',semHora});
   }
   return out;
+}
+function multaSyntheticRecord(nome,m){
+  const wi=weekInfo(m.data); return {motoristaEscala:nome,data:m.data,semKey:wi.key,semana:wi.label,mesKey:wi.mesKey,mesLabel:wi.mesLabel,operacao:'—',placa:m.placa||'',placas:m.placa?[m.placa]:[],punches:[],seqP:[],mov:[],movimento:[],movUnid:[],segs:[],horasPonto:0,horaExtra:0,horasMov:0,horasDedoDuro:0,ddReal:0,km:0,interjornada:null,sev:'conforme',flags:[],_multaOnly:true};
 }
 function multaTimelineIcon(t){ return t==='CELULAR'?'📱':t==='VELOCIDADE'?'🚨':'🧾'; }
 function multaTimelineLabel(t){ return t==='CELULAR'?'Multa · celular':t==='VELOCIDADE'?'Multa · velocidade':'Multa'; }
@@ -1860,7 +1854,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
         <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
         ${(ident.length||feriasDays.length)?`<div class="track"><span class="tlab">Identificação</span><div class="lane" data-k="ident"></div></div>`:''}
         ${(alertas.length||feriasDays.length)?`<div class="track"><span class="tlab">Alertas</span><div class="lane lane-al" data-k="alertas"></div></div>`:''}
-        ${multas.length?`<div class="track"><span class="tlab">Multas</span><div class="lane lane-multa" data-k="multas"></div></div>`:''}
+        ${multas.length?`<div class="track"><span class="tlab">Multas (${multas.length})</span><div class="lane lane-multa" data-k="multas"></div></div>`:''}
       </div>
       <div class="wtl-hint">🖱️ role o mouse sobre a linha para <b>zoom</b> (${zoomTxt}) · arraste p/ navegar · duplo-clique reseta</div>
     </div>`;
@@ -1982,7 +1976,7 @@ function renderZoom(id){
   const laneAl=el.querySelector('.lane[data-k="alertas"]');
   if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const cls=al.niv==='A'?'alto':al.niv==='M'?'medio':'baixo'; return `<span class="amark ${cls}" style="left:${p}%" title="${hm(al.t%1440)} · ${tipoLabel(al.tipo)} · ${nivName(al.niv)}"><i>${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
   const laneMulta=el.querySelector('.lane[data-k="multas"]');
-  if(laneMulta){ laneMulta.innerHTML=vacationBg+gl+(st.multas||[]).map(m=>{ const p=pos(m.t); if(p<-1||p>101)return ''; const who=m.doc?(' · doc: '+firstName(m.doc)):''; const cam=m.cam?(' · câmera: '+firstName(m.cam)):''; const audit=m.audit==='DIVERGE'?' · ⚠ divergência':m.audit==='CONFERE'?' · confere':''; const ttl=hm(m.t%1440)+' · '+multaTimelineLabel(m.tipo)+(m.placa?' · '+m.placa:'')+(m.auto?' · auto '+m.auto:'')+who+cam+audit; return `<span class="mmark" style="left:${p}%" title="${pdfEsc(ttl)}"><i>${multaTimelineIcon(m.tipo)}</i></span>`; }).join(''); }
+  if(laneMulta){ laneMulta.innerHTML=vacationBg+gl+(st.multas||[]).map(m=>{ const p=pos(m.t); if(p<-1||p>101)return ''; const who=m.doc?(' · doc: '+firstName(m.doc)):''; const cam=m.cam?(' · câmera: '+firstName(m.cam)):''; const audit=m.audit==='DIVERGE'?' · ⚠ divergência':m.audit==='CONFERE'?' · confere':''; const ttl=(m.semHora?'hora não informada':hm(m.t%1440))+' · '+multaTimelineLabel(m.tipo)+(m.placa?' · '+m.placa:'')+(m.auto?' · auto '+m.auto:'')+who+cam+audit; return `<span class="mmark" style="left:${p}%" title="${pdfEsc(ttl)}"><i>${multaTimelineIcon(m.tipo)}</i></span>`; }).join(''); }
   const laneId=el.querySelector('.lane[data-k="ident"]');
   if(laneId){ laneId.innerHTML=vacationBg+gl+(st.ident||[]).map(s=>{ const cls=s.div?'iddiv':(s.ok?'idok':'idbad'); const lab=hm(s.a%1440)+'–'+hm(s.b%1440)+(s.div?(' · ⚠ câmera: '+firstName(s.who||'?')):(s.ok?' · identificado':' · SEM identificação')); return seg(cls,s.a,s.b,lab); }).join(''); }
 }
@@ -2214,7 +2208,11 @@ function renderFicha(){
   const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF}=M;
   const fichaRisco=M.risco;
   const weeks=GLOBAL_WEEKS.length?GLOBAL_WEEKS:Object.values(recs.reduce((a,r)=>{if(r.semKey&&!a[r.semKey])a[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};return a;},{})).sort((a,b)=>a.key<b.key?-1:1);
-  const _dayF=dayFilter(); const _recsEvid=_dayF?recs.filter(r=>r.data===_dayF):recs;
+  const _dayF=dayFilter(); let _recsEvid=(_dayF?recs.filter(r=>r.data===_dayF):recs).slice();
+  // A capa e a evidência usam a mesma lista oficial de multas do documento.
+  // Se houver multa em dia sem ponto/movimento, cria apenas um card sintético para que ela não desapareça da timeline.
+  const _multaList=multasCondutaMotoristaList(nome,activeRange()); const _evidDays=new Set(_recsEvid.map(r=>r.data));
+  for(const _m of _multaList){ if(_dayF&&_m.data!==_dayF)continue; if(!_m.data||_evidDays.has(_m.data))continue; _recsEvid.push(multaSyntheticRecord(nome,_m)); _evidDays.add(_m.data); }
   const strip=farolStripHTML(porSemana, weeks, {showHours:true});
   const evidJob=++FICHA_EVID_JOB;
   const P=fichaPontos(M);   // pontos críticos × positivos (mesma fonte do PDF)
@@ -2303,7 +2301,7 @@ function renderFicha(){
     <div class="grid" id="fichaEvidBox"><div class="empty">Preparando evidência…</div></div>
   `;
   // A ficha fica utilizável imediatamente; a timeline (parte mais pesada) entra no ciclo seguinte.
-  const _runEvid=()=>{ if(evidJob!==FICHA_EVID_JOB||fichaAtual!==nome)return; const wk=buildWeekCards(_recsEvid,'fztl',12,false,_dayF?'dia':'week'); const eb=$('#fichaEvidBox'); if(!eb)return; eb.innerHTML=wk.html||'<div class="empty">Sem dias.</div>'; setupZoomLazy(wk.ids); };
+  const _runEvid=()=>{ if(evidJob!==FICHA_EVID_JOB||fichaAtual!==nome)return; const wk=buildWeekCards(_recsEvid,'fztl',60,false,_dayF?'dia':'week'); const eb=$('#fichaEvidBox'); if(!eb)return; eb.innerHTML=wk.html||'<div class="empty">Sem dias.</div>'; setupZoomLazy(wk.ids); };
   if('requestIdleCallback' in window)requestIdleCallback(_runEvid,{timeout:220});else setTimeout(_runEvid,0);
   const verTodas=$('#fichaVerTodas'); if(verTodas) verTodas.onclick=(ev)=>{ ev.preventDefault(); $('#fOp').value=''; renderAll(); };
   $$('.trat-del').forEach(btn=>{ btn.onclick=async()=>{ const uid=decodeURIComponent(btn.dataset.uid||''); if(uid) await excluirTratativa(nome,uid); }; });
@@ -2724,7 +2722,7 @@ function renderAll(){
   const rowViews=new Set(['semana','aderencia','linha','diverg','media','tabela']);
   const rng=activeRange();
   let viewKey;
-  if(rowViews.has(view)) viewKey=DATA_REV+'|M'+MULTAS_REV+'|'+fkey+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'');
+  if(rowViews.has(view)) viewKey=DATA_REV+'|M'+MULTAS_REV+'|'+fkey+(view==='semana'?'|R'+SEMANA_RANK_MODE:'')+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'');
   else if(view==='motoristas') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+(rng?(rng.de+'|'+rng.ate):'*');
   else if(view==='semid') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+CFG.sem;
   else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view;
@@ -4206,19 +4204,36 @@ function multasCondutaPorTipo(opts){
 }
 
 const MULTAS_CAP_COUNT_CACHE=new Map();
-function multasCondutaMotoristaCount(nome,range){
-  if(!MULTAS||!nome)return 0;
-  const nn=norm(nome), de=range&&range.de||'', ate=range&&range.ate||'';
-  const key=[MULTAS_REV,nn,de,ate].join('|');
-  if(MULTAS_CAP_COUNT_CACHE.has(key))return MULTAS_CAP_COUNT_CACHE.get(key);
-  const arr=MULTAS_BY_DRIVER_N[nn]||[]; let n=0;
+const MULTAS_DRIVER_LIST_CACHE=new Map();
+function _multaDocCandidates(nome){
+  const nn=norm(nome||''); if(!nn)return [];
+  const cpf=(NOME2CPF&&NOME2CPF[nn])||''; const cn=nomeCanon(nome||'');
+  const pools=[]; if(cpf&&MULTAS_BY_DRIVER_CPF[cpf])pools.push(MULTAS_BY_DRIVER_CPF[cpf]);
+  if(MULTAS_BY_DRIVER_N[nn])pools.push(MULTAS_BY_DRIVER_N[nn]);
+  if(cn&&MULTAS_BY_DRIVER_CANON[cn])pools.push(MULTAS_BY_DRIVER_CANON[cn]);
+  if(!pools.length)return [];
+  const seen=new Set(), out=[]; for(const a of pools)for(const m of a){if(!seen.has(m)){seen.add(m);out.push(m);}} return out;
+}
+function multasCondutaMotoristaList(nome,range){
+  if(!MULTAS||!nome)return [];
+  const nn=norm(nome), de=range&&range.de||'', ate=range&&range.ate||''; const key=[MULTAS_REV,nn,de,ate].join('|');
+  if(MULTAS_DRIVER_LIST_CACHE.has(key))return MULTAS_DRIVER_LIST_CACHE.get(key);
+  const arr=_multaDocCandidates(nome), out=[];
   for(const m of arr){
     if(!multaEscopoPadrao(m)||_multaCancelada(m))continue;
-    if(de&&m.data&&m.data<de)continue;
-    if(ate&&m.data&&m.data>ate)continue;
-    n++;
+    if(de&&m.data&&m.data<de)continue; if(ate&&m.data&&m.data>ate)continue;
+    if(!multaDriverMatchDoc(m,nome))continue;
+    out.push(m);
   }
-  MULTAS_CAP_COUNT_CACHE.set(key,n);
+  out.sort((a,b)=>(a.dataHora||'').localeCompare(b.dataHora||''));
+  MULTAS_DRIVER_LIST_CACHE.set(key,out); if(MULTAS_DRIVER_LIST_CACHE.size>2000){const it=MULTAS_DRIVER_LIST_CACHE.keys().next();if(!it.done)MULTAS_DRIVER_LIST_CACHE.delete(it.value);}
+  return out;
+}
+function multasCondutaMotoristaCount(nome,range){
+  if(!MULTAS||!nome)return 0;
+  const nn=norm(nome), de=range&&range.de||'', ate=range&&range.ate||''; const key=[MULTAS_REV,nn,de,ate].join('|');
+  if(MULTAS_CAP_COUNT_CACHE.has(key))return MULTAS_CAP_COUNT_CACHE.get(key);
+  const n=multasCondutaMotoristaList(nome,range).length; MULTAS_CAP_COUNT_CACHE.set(key,n);
   if(MULTAS_CAP_COUNT_CACHE.size>2000){const it=MULTAS_CAP_COUNT_CACHE.keys().next();if(!it.done)MULTAS_CAP_COUNT_CACHE.delete(it.value);}
   return n;
 }
@@ -4260,11 +4275,15 @@ async function loadMultasFiles(files){
 
 
 function rebuildMultasIndex(){
-  MULTAS_BY_DATE=Object.create(null); MULTAS_BY_DRIVER_N=Object.create(null); MULTAS_CAP_COUNT_CACHE.clear();
+  MULTAS_BY_DATE=Object.create(null); MULTAS_BY_DRIVER_N=Object.create(null); MULTAS_BY_DRIVER_CANON=Object.create(null); MULTAS_BY_DRIVER_CPF=Object.create(null); MULTAS_CAP_COUNT_CACHE.clear(); MULTAS_DRIVER_LIST_CACHE.clear();
   for(const m of (MULTAS||[])){
     if(m.data)(MULTAS_BY_DATE[m.data]=MULTAS_BY_DATE[m.data]||[]).push(m);
-    const nn=norm(m.motorista||''); if(nn)(MULTAS_BY_DRIVER_N[nn]=MULTAS_BY_DRIVER_N[nn]||[]).push(m);
+    const nn=norm(m.motorista||''), cn=nomeCanon(m.motorista||''), cpf=m.motoristaCpf||'';
+    if(nn)(MULTAS_BY_DRIVER_N[nn]=MULTAS_BY_DRIVER_N[nn]||[]).push(m);
+    if(cn)(MULTAS_BY_DRIVER_CANON[cn]=MULTAS_BY_DRIVER_CANON[cn]||[]).push(m);
+    if(cpf)(MULTAS_BY_DRIVER_CPF[cpf]=MULTAS_BY_DRIVER_CPF[cpf]||[]).push(m);
   }
+  SEMANA_AGG_CACHE_KEY=''; SEMANA_AGG_CACHE=null; SEMANA_AGG_CACHE_MAP.clear(); SUMMARY_DOM_CACHE.clear(); VIEW_RENDER_KEYS['semana']='';
 }
 function _isoBaseMin(d){ const m=String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m?Date.UTC(+m[1],+m[2]-1,+m[3])/60000:null; }
 function _multaMinute(m){ const b=_isoBaseMin(m&&m.data); if(b==null)return null; const h=toMin(m.hora||'00:00'); return b+(h==null?0:h); }
@@ -4748,14 +4767,15 @@ $('#dadosLogout').onclick=async()=>{ try{ if(_msal) await _msal.logoutPopup({});
 applyDadosGate();
 // A abertura é controlada por bootPulso360() no final do arquivo para evitar cargas e renders duplicados.
 // filtros
-['#fFecha','#fOp','#fDia','#fDe','#fAte','#fStatus'].forEach(s=>$(s).addEventListener('change',renderAll));
+const onTopFilterChange=()=>{ saveTopFilterState(CURRENT_FILTER_TAB); VIEW_RENDER_KEYS[activeViewName()]=''; renderAll(); };
+['#fFecha','#fOp','#fDia','#fDe','#fAte','#fStatus'].forEach(s=>$(s).addEventListener('change',onTopFilterChange));
 $('#fMot').addEventListener('focus',openMotMenu);
 $('#fMot').addEventListener('click',openMotMenu);
-$('#fMot').addEventListener('input',()=>{ openMotMenu(); renderMotMenu(); renderAllDebounced(); });
+$('#fMot').addEventListener('input',()=>{ openMotMenu(); renderMotMenu(); saveTopFilterState(CURRENT_FILTER_TAB); renderAllDebounced(); });
 $('#fMotArrow').addEventListener('mousedown',e=>{ e.preventDefault(); const c=$('#fMotCombo'); c.classList.contains('open')?closeMotMenu():(openMotMenu(),$('#fMot').focus()); });
 $('#fMot').addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeMotMenu(); $('#fMot').blur(); } else if(e.key==='Enter'){ const b=$('#fMotMenu .combo-opt.match')||$('#fMotMenu .combo-opt'); if(b){ e.preventDefault(); $('#fMot').value=decodeURIComponent(b.dataset.mot); closeMotMenu(); renderAll(); } } });
 document.addEventListener('mousedown',e=>{ const c=$('#fMotCombo'); if(c&&!c.contains(e.target)) closeMotMenu(); });
-$('#fBusca').addEventListener('input',renderAllDebounced);
+$('#fBusca').addEventListener('input',()=>{ saveTopFilterState(CURRENT_FILTER_TAB); renderAllDebounced(); });
 $('#clearFilters').onclick=()=>{
   let changed=false;
   for(const id of TOP_FILTER_FIELDS){ const el=document.getElementById(id); if(el&&el.value){el.value='';changed=true;} }
@@ -4780,7 +4800,7 @@ if(_semRankSeg)_semRankSeg.addEventListener('click',e=>{
   const b=e.target.closest('button[data-rank]'); if(!b)return;
   SEMANA_RANK_MODE=b.dataset.rank||'all';
   _semRankSeg.querySelectorAll('button[data-rank]').forEach(x=>x.classList.toggle('active',x===b));
-  if(ACTIVE_TAB==='semana')renderSemana(filtered());
+  if(activeViewName()==='semana'){ VIEW_RENDER_KEYS['semana']=''; renderAll(); }
 });
 
 bindCfg('#cfgTol','tol'); bindCfg('#cfgSem','sem'); bindCfg('#cfgFora','fora'); bindCfg('#cfgMovMin','movMin'); bindCfg('#cfgFarol','farolAmareloMax'); bindCfg('#cfgMeta','meta'); bindCfg('#cfgPreco','precoLitro'); bindCfg('#cfgJornadaMin','jornadaMin'); bindCfg('#cfgInterjornada','interjornadaMin');
