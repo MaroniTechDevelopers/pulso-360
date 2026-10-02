@@ -371,6 +371,8 @@
   .alert-tile .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
   .alert-tile.hot .n{color:var(--crit-ink)}
   .alert-tile .l{font-size:11px;color:var(--muted);margin-top:2px}
+  .alert-tile .msub{font-size:10.5px;color:var(--ink-2);margin-top:5px;font-weight:700}
+  .alert-tile .msub.zero{color:var(--muted);font-weight:600}
 
   /* ============ MOTORISTAS — TMS x PONTO ============ */
   .motbar{margin:0;align-items:flex-end}
@@ -1746,7 +1748,7 @@ function capinha(m,weeks){
       ${MEDIA_OFF?'':`<div class="cm"><span>Média</span><b class="${medaOk?'ok':'bad'}">${medaTxt}</b></div>`}
       <div class="cm"><span>Fora da jornada</span><b class="${m.ddReal>0?'bad':''}" title="horas de condução fora do horário do ponto${m.aj!=null?' · aderência de jornada '+m.aj+'%':''}">${m.ddReal>0?hDec(m.ddReal):'0h'}</b></div>
       <div class="cm"><span>Alertas</span><b class="${totAl>=5?'bad':''}">${totAl}</b></div>
-      ${MULTAS_N?`<div class="cm"><span>Multas</span><b class="${multaTot>0?'warn':''}" title="Celular + velocidade no período">${multaTot}</b></div>`:''}
+      ${MULTAS_N?`<div class="cm"><span>Multas</span><b class="${multaTot>0?'warn':''}" title="Celular + velocidade com evidência operacional no período">${multaTot}</b></div>`:''}
     </div>
     <div class="cap-foot">
       ${strip}
@@ -2216,10 +2218,10 @@ function renderFicha(){
   const fichaRisco=M.risco;
   const weeks=GLOBAL_WEEKS.length?GLOBAL_WEEKS:Object.values(recs.reduce((a,r)=>{if(r.semKey&&!a[r.semKey])a[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};return a;},{})).sort((a,b)=>a.key<b.key?-1:1);
   const _dayF=dayFilter(); let _recsEvid=(_dayF?recs.filter(r=>r.data===_dayF):recs).slice();
-  // A capa e a evidência usam a mesma lista oficial de multas do documento.
-  // Se houver multa em dia sem ponto/movimento, cria apenas um card sintético para que ela não desapareça da timeline.
-  const _multaList=multasCondutaMotoristaList(nome,activeRange()); const _evidDays=new Set(_recsEvid.map(r=>r.data));
-  for(const _m of _multaList){ if(_dayF&&_m.data!==_dayF)continue; if(!_m.data||_evidDays.has(_m.data))continue; _recsEvid.push(multaSyntheticRecord(nome,_m)); _evidDays.add(_m.data); }
+  // Multas obedecem ao mesmo período operacional da Jornada/Movimentação/Trimble.
+  // Sem evidência operacional no dia, a multa não entra na capa, KPI nem timeline.
+  const _multaRange=activeRange();
+  const _multaList=multasCondutaMotoristaList(nome,_multaRange);
   const strip=farolStripHTML(porSemana, weeks, {showHours:true});
   const evidJob=++FICHA_EVID_JOB;
   const P=fichaPontos(M);   // pontos críticos × positivos (mesma fonte do PDF)
@@ -2244,18 +2246,15 @@ function renderFicha(){
   const sevLine = temNiv ? NIVEL_DEF.map(a=>`${a.ic} ${((alR.niveis&&alR.niveis[a.k])||0).toLocaleString('pt-BR')} ${a.lab.toLowerCase()}`).join(' · ') : '';
   const alertaSubt = alR.real ? (totAl?('por tipo · total '+totAl.toLocaleString('pt-BR')+(temNiv?(' · <b>excesso de velocidade</b> por severidade ('+sevTot.toLocaleString('pt-BR')+'): '+sevLine):'')):'sem alertas no período') : '5 tipos monitorados (demo)';
   const maxTipo = tiposArr.length?tiposArr[0][1]:0;
+  const _multaByTipo={CELULAR:_multaCel||0,VELOCIDADE:_multaVel||0};
+  const _multaSub=(tp)=>{ const c=multaTipoClasse(tp), n=_multaByTipo[c]||0; return (c==='CELULAR'||c==='VELOCIDADE')?`<div class="msub ${n?'':'zero'}">${n.toLocaleString('pt-BR')} multa${n===1?'':'s'}</div>`:''; };
   const alertTiles = alR.real
-    ? (tiposArr.length ? tiposArr.map(([tp,n])=>`<div class="alert-tile ${n===maxTipo&&n>0?'hot':''}"><div class="n">${alertaIcon(tp)} ${n.toLocaleString('pt-BR')}</div><div class="l">${tipoLabel(tp)}</div></div>`).join('') : '<div class="empty" style="padding:16px">sem alertas no período</div>')
-    : ALERTA_DEF.map(a=>{ const n=(d.alertas&&d.alertas[a.k])||0; return `<div class="alert-tile ${n>=5?'hot':''}"><div class="n">${a.ic} ${n}</div><div class="l">${a.lab}</div></div>`; }).join('');
+    ? (tiposArr.length ? tiposArr.map(([tp,n])=>`<div class="alert-tile ${n===maxTipo&&n>0?'hot':''}"><div class="n">${alertaIcon(tp)} ${n.toLocaleString('pt-BR')}</div><div class="l">${tipoLabel(tp)}</div>${_multaSub(tp)}</div>`).join('') : '<div class="empty" style="padding:16px">sem alertas no período</div>')
+    : ALERTA_DEF.map(a=>{ const n=(d.alertas&&d.alertas[a.k])||0; return `<div class="alert-tile ${n>=5?'hot':''}"><div class="n">${a.ic} ${n}</div><div class="l">${a.lab}</div>${_multaSub(a.lab)}</div>`; }).join('');
 
-  // A seção de multas usa EXATAMENTE a mesma lista que alimenta o número da capa.
-  // Assim: capa = N => ficha lista N registros no mesmo período.
-  const multaRowsHTML = _multaList.map(m=>{
-    const ctx=multaContext(m), cls=multaTipoClasse(m.tipo), tipoTxt=cls==='CELULAR'?'Celular':'Velocidade';
-    const audit=ctx.audit||''; const auditTxt=audit==='CONFERE'?'Câmera confere':audit==='DIVERGE'?('Câmera: '+(ctx.motCam||'outro condutor')):(ctx.motCam?('Câmera: '+ctx.motCam):'Sem identificação no horário');
-    const auditCls=audit==='CONFERE'?'ok':audit==='DIVERGE'?'bad':'muted';
-    return `<li><span class="mdate">${brDate(m.data)}${m.hora?' · '+pdfEsc(m.hora):''}</span><span class="mtype ${cls==='CELULAR'?'cel':'vel'}">${cls==='CELULAR'?'📱':'🚨'} ${tipoTxt}</span><span class="mplate">${pdfEsc(m.placa||'—')}</span><span>Auto ${pdfEsc(m.auto||m.numero||'—')}</span><span class="maudit ${auditCls}">${pdfEsc(auditTxt)}</span></li>`;
-  }).join('');
+  const _multaCel=_multaList.filter(m=>multaTipoClasse(m.tipo)==='CELULAR').length;
+  const _multaVel=_multaList.filter(m=>multaTipoClasse(m.tipo)==='VELOCIDADE').length;
+
 
   $('#fichaBox').innerHTML = `
     <div class="card" style="margin-bottom:14px">
@@ -2305,12 +2304,11 @@ function renderFicha(){
         <div class="lab">Descanso entre jornadas</div><div class="val tnum">${restMinF==null?'—':hDec(restMinF)}</div><div class="sub">${interjViol>0?('⚠ '+interjViol+' dia(s) < 11h'):(restMinF!=null?'menor descanso · mín 11h ✓':'sem dados')}</div></div>
       <div class="card kpi"><div class="accent" style="background:${(alR.niveis&&alR.niveis.ALTO)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
         <div class="lab">Alertas (total)</div><div class="val tnum">${totAl.toLocaleString('pt-BR')}</div><div class="sub">todos os tipos${alR.niveis&&alR.niveis.ALTO?' · '+alR.niveis.ALTO+' veloc. em nível alto':''}</div></div>
+      ${MULTAS_N?`<div class="card kpi"><div class="accent" style="background:${_multaList.length?'var(--warning)':'var(--muted)'}"></div>
+        <div class="lab">Multas</div><div class="val tnum">${_multaList.length.toLocaleString('pt-BR')}</div><div class="sub">${_multaCel} celular · ${_multaVel} velocidade · período operacional</div></div>`:''}
     </div>
 
-    ${MULTAS_N?`<div class="sec-title"><h2>Multas do período (${_multaList.length})</h2><span>mesma base usada na capa · celular + velocidade · canceladas excluídas</span></div>
-    <div class="card">${_multaList.length?`<ul class="multalist">${multaRowsHTML}</ul>`:'<div class="empty" style="padding:18px">Nenhuma multa de celular/velocidade neste período.</div>'}</div>`:''}
-
-    <div class="sec-title"><h2>Alertas</h2><span>${alertaSubt}</span></div>
+    <div class="sec-title"><h2>Alertas</h2><span>${alertaSubt}${MULTAS_N?` · multas no período: ${_multaList.length}`:''}</span></div>
     <div class="card"><div class="alert-row">${alertTiles}</div></div>
 
     <div class="sec-title"><h2>Farol semanal — jornada</h2><span>semanas agrupadas por mês</span></div>
@@ -4233,15 +4231,53 @@ function _multaDocCandidates(nome){
   if(!pools.length)return [];
   const seen=new Set(), out=[]; for(const a of pools)for(const m of a){if(!seen.has(m)){seen.add(m);out.push(m);}} return out;
 }
+function multaOperationalEvidence(nome,m,range){
+  if(!m||!m.data)return null;
+  const nn=norm(nome), recs=RECORDS_BY_DRIVER_N[nn]||[];
+  if(!recs.length)return null;
+  const op=(range&&range.op)||'';
+  const finePlate=placaKey(m.placa||'');
+  let fallback=null;
+  for(const r of recs){
+    if(!r||r.data!==m.data)continue;
+    if(op&&r.operacao!==op)continue;
+    const hasOperational=!!((r.punches&&r.punches.length)||(r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.segs&&r.segs.length));
+    if(!hasOperational)continue;
+    if(!fallback)fallback=r;
+    if(!finePlate)return r;
+    const plates=((r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[])).map(placaKey);
+    if(plates.includes(finePlate))return r;
+  }
+  // Se a placa da multa não casar, ainda exige evidência do motorista no mesmo dia.
+  // O desacordo de placa permanece auditável pelo contexto, mas multa fora do período/dia operacional não entra.
+  return fallback;
+}
+function multaOperationalRange(nome,range){
+  const recs=RECORDS_BY_DRIVER_N[norm(nome)]||[]; let lo='',hi='';
+  const op=(range&&range.op)||'';
+  for(const r of recs){
+    if(!r||!r.data)continue; if(op&&r.operacao!==op)continue;
+    const hasOperational=!!((r.punches&&r.punches.length)||(r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.segs&&r.segs.length));
+    if(!hasOperational)continue;
+    if(!lo||r.data<lo)lo=r.data; if(!hi||r.data>hi)hi=r.data;
+  }
+  if(!lo||!hi)return null;
+  let de=lo,ate=hi;
+  if(range&&range.de&&range.de>de)de=range.de;
+  if(range&&range.ate&&range.ate<ate)ate=range.ate;
+  return de<=ate?{de,ate,op}:null;
+}
 function multasCondutaMotoristaList(nome,range){
   if(!MULTAS||!nome)return [];
-  const nn=norm(nome), de=range&&range.de||'', ate=range&&range.ate||''; const key=[MULTAS_REV,nn,de,ate].join('|');
+  const eff=multaOperationalRange(nome,range); if(!eff)return [];
+  const nn=norm(nome), de=eff.de, ate=eff.ate, op=eff.op||''; const key=[MULTAS_REV,DATA_REV,nn,de,ate,op].join('|');
   if(MULTAS_DRIVER_LIST_CACHE.has(key))return MULTAS_DRIVER_LIST_CACHE.get(key);
   const arr=_multaDocCandidates(nome), out=[];
   for(const m of arr){
     if(!multaEscopoPadrao(m)||_multaCancelada(m))continue;
-    if(de&&m.data&&m.data<de)continue; if(ate&&m.data&&m.data>ate)continue;
+    if(!m.data||m.data<de||m.data>ate)continue;
     if(!multaDriverMatchDoc(m,nome))continue;
+    const ev=multaOperationalEvidence(nome,m,eff); if(!ev)continue;
     out.push(m);
   }
   out.sort((a,b)=>(a.dataHora||'').localeCompare(b.dataHora||''));
@@ -4250,7 +4286,7 @@ function multasCondutaMotoristaList(nome,range){
 }
 function multasCondutaMotoristaCount(nome,range){
   if(!MULTAS||!nome)return 0;
-  const nn=norm(nome), de=range&&range.de||'', ate=range&&range.ate||''; const key=[MULTAS_REV,nn,de,ate].join('|');
+  const nn=norm(nome), de=range&&range.de||'', ate=range&&range.ate||'', op=range&&range.op||''; const key=[MULTAS_REV,DATA_REV,nn,de,ate,op].join('|');
   if(MULTAS_CAP_COUNT_CACHE.has(key))return MULTAS_CAP_COUNT_CACHE.get(key);
   const n=multasCondutaMotoristaList(nome,range).length; MULTAS_CAP_COUNT_CACHE.set(key,n);
   if(MULTAS_CAP_COUNT_CACHE.size>2000){const it=MULTAS_CAP_COUNT_CACHE.keys().next();if(!it.done)MULTAS_CAP_COUNT_CACHE.delete(it.value);}
