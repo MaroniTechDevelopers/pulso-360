@@ -1119,12 +1119,40 @@ function tipoLabel(t){ return String(t||'').replace(/_/g,' ').toLowerCase().repl
 function alertasReais(nome){ const nn=norm(nome); const b=BOL&&BOL[nn], a=ALERTS&&ALERTS[nn];
   if(b) return {nome, total:b.total, tipos:b.tipos||{}, niveis:(a&&a.niveis)||{}, semanas:(a&&a.semanas)||{}};
   return a||null; }
+function alertaEhVelocidade(tp){ return norm(tp).indexOf('VELOC')>=0; }
+function aplicaResumoVelocidade(nn, range, v){
+  if(!v) return v;
+  const tipos=Object.assign({},v.tipos||{});
+  let tipoTotal=0;
+  Object.keys(tipos).forEach(k=>{ if(alertaEhVelocidade(k)) tipoTotal+=(+tipos[k]||0); });
+  let evtTotal=0,alto=0,medio=0,baixo=0,semNivel=0;
+  const evs=(AL_TL&&AL_TL[nn])||[];
+  if(evs.length){
+    for(const e of evs){
+      if(range && (e[0]<range.de || e[0]>range.ate)) continue;
+      if(!alertaEhVelocidade(e[3]||'')) continue;
+      evtTotal++;
+      if(e[2]==='A')alto++; else if(e[2]==='M')medio++; else if(e[2]==='B')baixo++; else semNivel++;
+    }
+  }
+  // Quando há eventos detalhados de velocidade, eles viram a fonte única do total
+  // e da severidade. Assim: total velocidade >= alto e os números sempre fecham.
+  const velTotal=evtTotal>0?evtTotal:tipoTotal;
+  if(evtTotal>0){
+    let old=0;
+    Object.keys(tipos).forEach(k=>{ if(alertaEhVelocidade(k)){ old+=(+tipos[k]||0); delete tipos[k]; } });
+    tipos['Excesso Velocidade']=evtTotal;
+    v=Object.assign({},v,{tipos,total:Math.max(0,(+v.total||0)-old+evtTotal)});
+  } else v=Object.assign({},v,{tipos});
+  v.velocidade={total:velTotal,alto,medio,baixo,semNivel,detalhado:evtTotal>0};
+  return v;
+}
 // resumo de alertas de um motorista — usa o relatório real se carregado; senão o cadastro demo
 function alertasResumo(nome, range){
   const nn=norm(nome);
   const ck=DATA_REV+'|'+nn+'|'+(range?(range.de+'|'+range.ate):'*');
   if(ALERT_SUM_CACHE.has(ck)) return ALERT_SUM_CACHE.get(ck);
-  const done=v=>{ ALERT_SUM_CACHE.set(ck,v); return v; };
+  const done=v=>{ v=aplicaResumoVelocidade(nn,range,v); ALERT_SUM_CACHE.set(ck,v); return v; };
   // com filtro de data: conta por dia (Boletim) ou por evento (Alertas/AL_TL)
   if(range){
     if(BOL_DAY){ let total=0; const tipos={}; const dm=BOL_DAY[nn]||{}; for(const d in dm){ if(d>=range.de && d<=range.ate){ total+=dm[d].t; const tp=dm[d].tipos; for(const k in tp) tipos[k]=(tipos[k]||0)+tp[k]; } } return done({total, badges:[], real:true, niveis:{}, tipos}); }
@@ -1651,7 +1679,7 @@ function riscoComposto(m, alR){
   const reasons=[]; let grave=false;
   if(m.ident!=null && m.ident<CFG.sem){ reasons.push('identificação '+m.ident+'%'); if(m.ident<50) grave=true; }
   if(!MEDIA_OFF && m.media!=null && m.meta && m.media<m.meta) reasons.push('média '+m.media.toFixed(2).replace('.',',')+' < meta '+m.meta.toFixed(2).replace('.',','));
-  const alto=(alR&&alR.niveis&&alR.niveis.ALTO)||0; if(alto>0){ reasons.push(alto+' excesso de velocidade grave'); if(alto>=5) grave=true; }
+  const alto=(alR&&alR.velocidade&&alR.velocidade.alto)||0; if(alto>0){ reasons.push(alto+' excesso de velocidade grave'); if(alto>=5) grave=true; }
   const ddH=(m.ddReal||0)/60; if(ddH>=2) reasons.push(hDec(m.ddReal)+' fora da jornada');
   const n=reasons.length;
   const cls = (n>=2||grave) ? 'vermelho' : (n===1 ? 'amarelo' : 'verde');
@@ -1665,7 +1693,7 @@ function resumoRankCmp(a,b){
   const rk={vermelho:0,amarelo:1,verde:2};
   let d=(rk[(a.risco&&a.risco.cls)||'verde']??2)-(rk[(b.risco&&b.risco.cls)||'verde']??2); if(d)return d;
   d=((b.risco&&b.risco.n)||0)-((a.risco&&a.risco.n)||0); if(d)return d;
-  const ah=(a._alR&&a._alR.niveis&&a._alR.niveis.ALTO)||0, bh=(b._alR&&b._alR.niveis&&b._alR.niveis.ALTO)||0; d=bh-ah; if(d)return d;
+  const ah=(a._alR&&a._alR.velocidade&&a._alR.velocidade.alto)||0, bh=(b._alR&&b._alR.velocidade&&b._alR.velocidade.alto)||0; d=bh-ah; if(d)return d;
   const aaj=a.aj==null?101:a.aj, baj=b.aj==null?101:b.aj; d=aaj-baj; if(d)return d;
   d=(b.ddReal||0)-(a.ddReal||0); if(d)return d;
   const aid=a.ident==null?101:a.ident, bid=b.ident==null?101:b.ident; d=aid-bid; if(d)return d;
@@ -2188,7 +2216,7 @@ function fichaPontos(M){
   if(M.ddRealTotal>=120) crit.push(`Aderência de jornada <b>${M.aderJornadaVal!=null?M.aderJornadaVal+'%':'—'}</b> — <b>${hDec(M.ddRealTotal)}</b> de condução fora do horário do ponto.`);
   else if(M.ddRealTotal>0) crit.push(`<b>${hDec(M.ddRealTotal)}</b> de condução fora da jornada (aderência ${M.aderJornadaVal!=null?M.aderJornadaVal+'%':'—'}) — vale conferir.`);
   else pos.push(`Jornada certinha${M.aderJornadaVal!=null?' ('+M.aderJornadaVal+'%)':''}: condução dentro do horário do ponto.`);
-  const alto=(M.alR.niveis&&M.alR.niveis.ALTO)||0;
+  const alto=(M.alR.velocidade&&M.alR.velocidade.alto)||0;
   if(alto>0) crit.push(`<b>${alto}</b> excesso(s) de velocidade em nível alto no período.`);
   if(M.totAl<=2 && M.alR.real) pos.push(`Poucos alertas no período (${M.totAl}).`);
   if(M.mediaR!=null){
@@ -2211,7 +2239,7 @@ function planoDeAcao(M){
   if(M.condDiv>0) acoes.push({ic:'🪪',t:'Corrigir vínculo condutor × placa',d:`Câmera reconheceu outro condutor em ${M.condDiv} dia(s) — acertar a escala/atribuição da viagem no TMS.`});
   if(M.ddRealTotal>=120) acoes.push({ic:'🕵️',t:'Apurar uso fora da jornada',d:`${hDec(M.ddRealTotal)} de movimento fora do ponto — apurar com o motorista e registrar justificativa/autorização.`});
   else if(M.ddRealTotal>0) acoes.push({ic:'🕵️',t:'Conferir movimento fora da jornada',d:`${hDec(M.ddRealTotal)} fora do ponto — confirmar se foi manobra/pátio ou algo a alinhar com o motorista.`});
-  const alto=(M.alR.niveis&&M.alR.niveis.ALTO)||0;
+  const alto=(M.alR.velocidade&&M.alR.velocidade.alto)||0;
   if(alto>0) acoes.push({ic:'🎓',t:'Feedback / direção segura',d:`${alto} excesso(s) de velocidade em nível alto — dar feedback ao condutor e acompanhar na próxima semana.`});
   if(M.mediaR!=null && !M.medaOk) acoes.push({ic:'⛽',t:'Plano de consumo',d:`Média ${nf(M.mediaR)} < meta ${nf(M.metaFicha)} — orientar direção econômica e comparar na próxima medição.`});
   if(M.hexTotal>0) acoes.push({ic:'⏱️',t:'Ajustar escala',d:`${hDec(M.hexTotal)} de hora extra em ${M.diasHex} dia(s) — validar/adequar a jornada com a operação.`});
@@ -2249,10 +2277,10 @@ function renderFicha(){
 
   // tiles de alertas: relatório real → por severidade (Alto/Médio/Baixo); demo → 5 tipos
   const tiposArr = alR.real ? Object.entries(alR.tipos||{}).sort((a,b)=>b[1]-a[1]) : [];
-  const temNiv = alR.real && alR.niveis && (alR.niveis.ALTO||alR.niveis.MEDIO||alR.niveis.BAIXO);
-  const sevTot = temNiv ? ((alR.niveis.ALTO||0)+(alR.niveis.MEDIO||0)+(alR.niveis.BAIXO||0)) : 0;
-  const sevLine = temNiv ? NIVEL_DEF.map(a=>`${a.ic} ${((alR.niveis&&alR.niveis[a.k])||0).toLocaleString('pt-BR')} ${a.lab.toLowerCase()}`).join(' · ') : '';
-  const alertaSubt = alR.real ? (totAl?('por tipo · total '+totAl.toLocaleString('pt-BR')+(temNiv?(' · <b>excesso de velocidade</b> por severidade ('+sevTot.toLocaleString('pt-BR')+'): '+sevLine):'')):'sem alertas no período') : '5 tipos monitorados (demo)';
+  const velR=alR.velocidade||{total:0,alto:0,medio:0,baixo:0,semNivel:0,detalhado:false};
+  const temNiv = alR.real && velR.detalhado && (velR.alto||velR.medio||velR.baixo||velR.semNivel);
+  const sevLine = temNiv ? `🔴 ${velR.alto.toLocaleString('pt-BR')} alto · 🟠 ${velR.medio.toLocaleString('pt-BR')} médio · 🟡 ${velR.baixo.toLocaleString('pt-BR')} baixo${velR.semNivel?' · '+velR.semNivel.toLocaleString('pt-BR')+' sem nível':''}` : '';
+  const alertaSubt = alR.real ? (totAl?('por tipo · total '+totAl.toLocaleString('pt-BR')+(velR.total?(' · <b>excesso de velocidade</b> total '+velR.total.toLocaleString('pt-BR')+(temNiv?(': '+sevLine):'')):'')):'sem alertas no período') : '5 tipos monitorados (demo)';
   const maxTipo = tiposArr.length?tiposArr[0][1]:0;
   const _multaCel=_multaList.filter(m=>multaTipoClasse(m.tipo)==='CELULAR').length;
   const _multaVel=_multaList.filter(m=>multaTipoClasse(m.tipo)==='VELOCIDADE').length;
@@ -2309,8 +2337,8 @@ function renderFicha(){
         <div class="lab">Dias com movimentação</div><div class="val tnum">${(diasComMov||0).toLocaleString('pt-BR')}</div><div class="sub">${hDec(hCondAudit||0)} de condução no período</div></div>
       <div class="card kpi"><div class="accent" style="background:${restMinF!=null&&restMinF<CFG.interjornadaMin?'var(--critical)':(restMinF!=null?'var(--good)':'var(--muted)')}"></div>
         <div class="lab">Descanso entre jornadas</div><div class="val tnum">${restMinF==null?'—':hDec(restMinF)}</div><div class="sub">${interjViol>0?('⚠ '+interjViol+' dia(s) < 11h'):(restMinF!=null?'menor descanso · mín 11h ✓':'sem dados')}</div></div>
-      <div class="card kpi"><div class="accent" style="background:${(alR.niveis&&alR.niveis.ALTO)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
-        <div class="lab">Alertas (total)</div><div class="val tnum">${totAl.toLocaleString('pt-BR')}</div><div class="sub">todos os tipos${alR.niveis&&alR.niveis.ALTO?' · '+alR.niveis.ALTO+' veloc. em nível alto':''}</div></div>
+      <div class="card kpi"><div class="accent" style="background:${(velR.alto)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
+        <div class="lab">Alertas (total)</div><div class="val tnum">${totAl.toLocaleString('pt-BR')}</div><div class="sub">todos os tipos${velR.alto?' · '+velR.alto+' veloc. em nível alto':''}</div></div>
       ${MULTAS_N?`<div class="card kpi"><div class="accent" style="background:${_multaList.length?'var(--warning)':'var(--muted)'}"></div>
         <div class="lab">Multas</div><div class="val tnum">${_multaList.length.toLocaleString('pt-BR')}</div><div class="sub">${_multaCel} celular · ${_multaVel} velocidade · período operacional</div></div>`:''}
     </div>
@@ -2413,7 +2441,7 @@ function exportFichaPDF(){
   const nome=fichaAtual; if(!nome){ toast('Abra a ficha de um motorista primeiro'); return; }
   const M=fichaMetrics(nome), P=fichaPontos(M);
   const nf=v=>v==null?'—':v.toFixed(2).replace('.',',');
-  const alto=(M.alR.niveis&&M.alR.niveis.ALTO)||0;
+  const alto=(M.alR.velocidade&&M.alR.velocidade.alto)||0;
   // Mesma regra da ficha: multas de celular + velocidade, canceladas fora,
   // somente dentro do período operacional e da operação atualmente filtrada.
   const multaRangePDF=Object.assign({},activeRange()||{}, {op:($('#fOp').value||'')});
