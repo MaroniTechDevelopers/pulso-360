@@ -1204,6 +1204,7 @@ let BDV = null, BDV_N = 0;       // Boletim do Veículo: placa(key) → {dias,di
 let PED_OP = null, PED_DRV = null, PED_N = 0;   // Pedidos: placa|dia → centro de resultado (operação) e CPF do condutor planejado
 let CPF2NOME = null, NOME2CPF = null;           // de-para CPF ↔ nome (do Boletim/jornada)
 let DATA_UPDATED_AT = (RAW&&RAW._savedAt)?+RAW._savedAt:0; // data/hora real da ultima atualizacao/publicacao da base
+let PUBLISHED_AT_LOADED = 0; // identifica exatamente qual publicação remota está carregada; não confundir com rascunho local
 function cpfKey(v){
   let d=String(v==null?'':v).replace(/\D+/g,'');
   // Excel pode entregar CPF numerico sem o zero inicial. CPF brasileiro tem 11 digitos.
@@ -2767,11 +2768,16 @@ function fmtDataAtualizacao(ts){
   if(!ts)return '';
   try{return new Date(+ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).replace(',', '');}catch(e){return '';}
 }
+function dataCoverageRange(){
+  const ds=(typeof RECORD_DATE_KEYS!=='undefined'&&RECORD_DATE_KEYS&&RECORD_DATE_KEYS.length)?RECORD_DATE_KEYS:[];
+  return ds.length?{min:ds[0],max:ds[ds.length-1]}:{min:'',max:''};
+}
 function atualizaDataMode(){
   const pill=$('#dataModePill'),txt=$('#dataModeTxt'); if(!pill||!txt)return;
   if(REAL){
     pill.classList.add('real');
     let t='dados reais · '+RECORDS.length.toLocaleString('pt-BR')+' registros';
+    const cov=dataCoverageRange(); if(cov.max)t+=' · dados até '+brDate(cov.max);
     const dh=fmtDataAtualizacao(DATA_UPDATED_AT||(RAW&&RAW._savedAt));
     if(dh)t+=' · atualizado em '+dh;
     txt.textContent=t;
@@ -4707,7 +4713,7 @@ async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
 function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
-function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
+function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
 async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();return true;}catch(e){return false;}}
 async function idbGet(k){try{const db=await idbOpen();const v=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly'),rq=tx.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});db.close();return v;}catch(e){return null;}}
@@ -4736,10 +4742,15 @@ async function cacheRestaurar(){
 function _baixarBlob(blob,nome){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
 async function gerarDadosPublicacao(){
   if(!REAL||!RAW){toast('Importe os relatórios antes de gerar os dados');return;}
-  const btn=$('#btnSnapshot'), old=btn?btn.textContent:''; if(btn){btn.disabled=true;btn.textContent='⏳ Preparando pacote…';}
+  const btn=$('#btnSnapshot'), old=btn?btn.textContent:''; if(btn){btn.disabled=true;btn.textContent='⏳ Finalizando importações…';}
   try{
     if(typeof JSZip==='undefined') throw new Error('Biblioteca ZIP não carregou. Verifique a conexão e tente novamente.');
-    const S=snapshotState(); S.publishedAt=Date.now();
+    // CRÍTICO: na aba Dados a análise é adiada para ganhar performance. Antes de publicar,
+    // força a consolidação para o ZIP nunca sair com RECORDS antigos.
+    if(IMPORT_DIRTY_ANALYZE||IMPORT_DIRTY_FILTERS){ flushImportChanges(false); await uiYield(); }
+    if(!RECORDS||!RECORDS.length) throw new Error('A base consolidada está vazia. Reimporte Jornada e Movimentação.');
+    const cov=dataCoverageRange();
+    const S=snapshotState(); S.publishedAt=Date.now(); S.dataMin=cov.min||''; S.dataMax=cov.max||'';
     const raw=new TextEncoder().encode(JSON.stringify(S));
     if(btn)btn.textContent='⏳ Compactando dados…';
     const packed=await _gz(raw), bytes=packed.b;
@@ -4749,12 +4760,12 @@ async function gerarDadosPublicacao(){
       const end=Math.min(off+PART_SIZE,bytes.length), part=bytes.slice(off,end), name='parte-'+String(i).padStart(3,'0')+'.bin';
       folder.file(name,part,{binary:true,compression:'STORE'}); parts.push({file:name,bytes:part.byteLength});
     }
-    const manifest={v:1,snapshotVersion:3,publishedAt:S.publishedAt,compression:packed.gz?'gzip':'none',rawBytes:raw.byteLength,packedBytes:bytes.byteLength,parts};
+    const manifest={v:1,snapshotVersion:3,publishedAt:S.publishedAt,dataMin:S.dataMin||'',dataMax:S.dataMax||'',records:RECORDS.length,compression:packed.gz?'gzip':'none',rawBytes:raw.byteLength,packedBytes:bytes.byteLength,parts};
     folder.file('manifesto.json',JSON.stringify(manifest,null,2));
     if(btn)btn.textContent='⏳ Montando ZIP…';
     const blob=await zip.generateAsync({type:'blob',compression:'STORE'});
     _baixarBlob(blob,'pulso360-dados-publicacao.zip');
-    mostrarPublicacao((raw.byteLength/1048576).toFixed(1),(bytes.byteLength/1048576).toFixed(1),parts.length,S.publishedAt);
+    mostrarPublicacao((raw.byteLength/1048576).toFixed(1),(bytes.byteLength/1048576).toFixed(1),parts.length,S.publishedAt); toast('Pacote pronto · '+RECORDS.length.toLocaleString('pt-BR')+' registros'+(S.dataMax?' · dados até '+brDate(S.dataMax):''));
   }catch(e){toast('Erro ao gerar dados: '+(e.message||e));}
   finally{if(btn){btn.disabled=false;btn.textContent=old||'📦 Gerar dados para publicação';}}
 }
@@ -4763,8 +4774,10 @@ async function _lerSnapshotMultipart(){
   // quando a publicação mudou; quando não mudou, o cache/IndexedDB já restaurado é reutilizado.
   const mr=await fetch('dados/manifesto.json?_='+Date.now(),{cache:'no-store'}); if(!mr.ok)return null;
   const M=await mr.json(); if(!M||M.v!==1||!Array.isArray(M.parts)||!M.parts.length)throw new Error('Manifesto de dados inválido');
-  const pub=+(M.publishedAt||0), atual=+(DATA_UPDATED_AT||(RAW&&RAW._savedAt)||0);
-  if(REAL&&atual&&pub&&atual>=pub) return {__cached:true,publishedAt:pub};
+  const pub=+(M.publishedAt||0);
+  // Só pula o download se ESTE manifesto já estiver carregado. Timestamp de importação local
+  // não pode ser tratado como versão publicada.
+  if(REAL&&pub&&PUBLISHED_AT_LOADED===pub) return {__cached:true,publishedAt:pub,dataMax:M.dataMax||'',records:M.records||0};
   const ver=encodeURIComponent(String(M.publishedAt||M.packedBytes||M.rawBytes||1));
   const arr=await Promise.all(M.parts.map(async p=>{
     const r=await fetch('dados/'+encodeURIComponent(p.file)+'?v='+ver,{cache:'force-cache'});
@@ -4779,7 +4792,7 @@ async function _lerSnapshotLegado(){ try{const r=await fetch('dados-pulso360.jso
 async function carregarDadosPublicados(){
   try{
     let S=null; try{S=await _lerSnapshotMultipart();}catch(e){console.warn('Pulso 360: falha na publicação multipart',e);}
-    if(S&&S.__cached){ DATA_UPDATED_AT=+(S.publishedAt||DATA_UPDATED_AT||0); atualizaDataMode(); return true; }
+    if(S&&S.__cached){ PUBLISHED_AT_LOADED=+(S.publishedAt||PUBLISHED_AT_LOADED||0); DATA_UPDATED_AT=+(S.publishedAt||DATA_UPDATED_AT||0); atualizaDataMode(); return true; }
     if(!S)S=await _lerSnapshotLegado();
     if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3)return false;
     const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);
