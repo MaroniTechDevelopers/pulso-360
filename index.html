@@ -3328,6 +3328,33 @@ function splitDT(v){ // "dd/mm/yyyy HH:MM" | "HH:MM" | "yyyy-mm-dd HH:MM"
   return { date:d?isoDate(d[0]):'', time:t?t[1]:'' }; }
 
 let pending={ponto:null,mov:null};
+// Cobertura efetiva das fontes operacionais importadas. Serve para impedir a
+// publicação de um snapshot cortado sem o usuário perceber.
+let SOURCE_COVERAGE={ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};
+function coverageReset(k){ SOURCE_COVERAGE[k]={min:'',max:'',rows:0}; }
+function coverageTouch(k,d,n=1){
+  d=isoDate(d); if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return;
+  const g=SOURCE_COVERAGE[k]||(SOURCE_COVERAGE[k]={min:'',max:'',rows:0});
+  if(!g.min||d<g.min)g.min=d; if(!g.max||d>g.max)g.max=d; g.rows+=(n||0);
+}
+function jornadaCoverage(rows){
+  coverageReset('ponto');
+  for(const row of (rows||[])){
+    const cD=col(row,['dia','data']); if(!cD)continue;
+    const d=isoDate(splitDT(row[cD]).date||row[cD]); if(!d)continue;
+    // Cobertura operacional do ponto: só conta linhas que realmente possuem batida.
+    let has=false;
+    for(let n=1;n<=8&&!has;n++){
+      const ce=col(row,['entrada '+n]), cs=col(row,['saida '+n,'saída '+n]);
+      if((ce&&/(\d{1,2}:\d{2})/.test(String(row[ce]||'')))||(cs&&/(\d{1,2}:\d{2})/.test(String(row[cs]||''))))has=true;
+    }
+    if(!has){const cH=col(row,['hora','horario','batida']);has=!!(cH&&/(\d{1,2}:\d{2})/.test(String(row[cH]||'')));}
+    if(has)coverageTouch('ponto',d,1);
+  }
+  return SOURCE_COVERAGE.ponto;
+}
+function coverageLabel(k){const g=SOURCE_COVERAGE[k];return g&&g.max?(' · até '+brDate(g.max)):'';}
+function maxIso(...xs){return xs.filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(String(x||''))).sort().pop()||'';}
 function numBR(v){ v=String(v==null?'':v).trim(); if(v.indexOf(',')>=0) return parseFloat(v.replace(/\./g,'').replace(',','.'))||0; return parseFloat(v)||0; }
 
 let MOV_N=0;
@@ -3443,6 +3470,7 @@ function accMov(rows, movRaw, roster){
     const di=cIni?splitDT(row[cIni]):{date:'',time:''}, df=cFim?splitDT(row[cFim]):{date:'',time:''};
     const data=di.date||(cD?isoDate(splitDT(row[cD]).date||row[cD]):''); const ini=toMin(di.time), fim=toMin(df.time);
     if(!data||ini==null||fim==null) return;
+    coverageTouch('mov',data,1);
     const dataFim=df.date||data;
     let tsIni=Date.parse(data)+ini*60000, tsFim=Date.parse(dataFim)+fim*60000;
     if(!isFinite(tsIni)||!isFinite(tsFim)) return;
@@ -3488,6 +3516,7 @@ function accMovText(text, movRaw, roster){
     const di=iIni>=0?splitDT(c[iIni]):{date:'',time:''}, df=iFim>=0?splitDT(c[iFim]):{date:'',time:''};
     const data=di.date||(iD>=0?isoDate(splitDT(c[iD]).date||c[iD]):''), ini=toMin(di.time), fim=toMin(df.time);
     if(!data||ini==null||fim==null)continue;
+    coverageTouch('mov',data,1);
     const dataFim=df.date||data; let tsIni=Date.parse(data)+ini*60000, tsFim=Date.parse(dataFim)+fim*60000;
     if(!isFinite(tsIni)||!isFinite(tsFim))continue; if(tsFim<tsIni)tsFim+=86400000;
     const placa=iP>=0?placaKey(c[iP]):'';
@@ -3523,6 +3552,7 @@ async function accMovTextAsync(text, movRaw, roster){
     const nome=iM>=0?String(c[iM]||'').trim():'';
     const di=iIni>=0?splitDT(c[iIni]):{date:'',time:''},df=iFim>=0?splitDT(c[iFim]):{date:'',time:''};
     const data=di.date||(iD>=0?isoDate(splitDT(c[iD]).date||c[iD]):''),ini=toMin(di.time),fim=toMin(df.time);if(!data||ini==null||fim==null)continue;
+    coverageTouch('mov',data,1);
     const dataFim=df.date||data;let tsIni=Date.parse(data)+ini*60000,tsFim=Date.parse(dataFim)+fim*60000;if(!isFinite(tsIni)||!isFinite(tsFim))continue;if(tsFim<tsIni)tsFim+=86400000;
     const placa=iP>=0?placaKey(c[iP]):'';
     if(placa){let cur=tsIni;while(cur<tsFim){const d=new Date(cur),day=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()),dayEnd=day+86400000,e=Math.min(tsFim,dayEnd),iso=new Date(day).toISOString().slice(0,10),a=Math.round((cur-day)/60000),b=Math.round((e-day)/60000),dur=Math.max(0,b-a),pk=placa+'|'+iso;MOV_TOT[pk]=(MOV_TOT[pk]||0)+dur;if(nome)MOV_IDN[pk]=(MOV_IDN[pk]||0)+dur;else{const arr=(MOV_UNSEG[pk]=MOV_UNSEG[pk]||[]);if(arr.length<300)arr.push([a,b]);}cur=e;}}
@@ -3609,7 +3639,7 @@ function finalizeRecords(jor, movRaw, movRows, pontoRows){
   PLACA_MOV={}; for(const k in MOV_TOT){ const s=k.indexOf('|'), pk=k.slice(0,s), d=k.slice(s+1); const g=(PLACA_MOV[pk]=PLACA_MOV[pk]||{tot:0,idn:0,dias:0,diasId:0,ult:''}); g.tot+=MOV_TOT[k]; const idn=MOV_IDN[k]||0; g.idn+=idn; g.dias++; if(idn>0)g.diasId++; if(d>g.ult)g.ult=d; }
   MOV_UNSEG_STORE={}; let unTot=0; const GAPU=Math.max(CFG.movMin,10);
   for(const k in MOV_UNSEG){ if(unTot>25000) break; const arr=MOV_UNSEG[k].slice().sort((a,b)=>a[0]-b[0]); const m=[]; arr.forEach(s=>{ const last=m[m.length-1]; if(last && s[0]-last[1]<=GAPU) last[1]=Math.max(last[1],s[1]); else { m.push([s[0],s[1]]); unTot++; } }); if(m.length) MOV_UNSEG_STORE[k]=m; }
-  RAW={ schema:3, records, bases:{ponto:!!pontoRows,mov:!!movRows,trim:false}, counts:{ponto:pontoRows,mov:movRows,alertas:ALERTS_N}, ferias:Object.assign({},JORNADA_FERIAS) };
+  RAW={ schema:3, records, bases:{ponto:!!pontoRows,mov:!!movRows,trim:false}, counts:{ponto:pontoRows,mov:movRows,alertas:ALERTS_N}, ferias:Object.assign({},JORNADA_FERIAS), sourceCoverage:JSON.parse(JSON.stringify(SOURCE_COVERAGE)) };
   if(ALERTS) RAW.alertas=ALERTS; if(PLACA_UO) RAW.placaUO=PLACA_UO; if(PLACA_MOV) RAW.placaId=PLACA_MOV; if(MOV_UNSEG_STORE) RAW.movUnseg=MOV_UNSEG_STORE;
   REAL=true;
   // A análise completa é adiada enquanto a aba Dados estiver aberta.
@@ -3618,7 +3648,7 @@ function finalizeRecords(jor, movRaw, movRows, pontoRows){
 function ingest(){
   const P=pending.ponto||[], M=pending.mov||[];
   if(!P.length && !M.length){ toast('Carregue a jornada (ponto) e a movimentação'); return; }
-  MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={};
+  MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; coverageReset('mov');
   const jor=parseJornada(P); const movRaw={}; const n=accMov(M, movRaw, jor.roster);
   finalizeRecords(jor, movRaw, M.length, P.length);
   toast('Cruzado ✓ '+((RAW&&RAW.records)?RAW.records.length:0)+' motorista-dias · '+jor.roster.size+' motoristas');
@@ -3627,7 +3657,7 @@ function ingest(){
 function ingestMovZip(file){
   if(!(pending.ponto&&pending.ponto.length)){ toast('Carregue primeiro a jornada (ponto)'); return; }
   if(typeof JSZip==='undefined'){ toast('Sem internet p/ abrir .zip'); return; }
-  MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={};
+  MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; coverageReset('mov');
   const jor=parseJornada(pending.ponto); const movRaw={}; let movRows=0, files=0;
   const rd=new FileReader();
   rd.onload=e=>{ JSZip.loadAsync(e.target.result).then(zip=>{
@@ -3747,7 +3777,7 @@ function mergeAlertas(dst, src){ dst.n=(dst.n||0)+(src.n||0);
 async function loadMovLocais(files){
   if(!(pending.ponto&&pending.ponto.length)){ toast('Carregue primeiro a jornada (ponto)'); return; }
   if(typeof JSZip==='undefined' && [...files].some(f=>/\.zip$/i.test(f.name||''))){ toast('Biblioteca ZIP não carregou'); return; }
-  MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={};
+  MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; coverageReset('mov');
   const jor=parseJornada(pending.ponto),movRaw={}; let movRows=0,done=0,fail=0,parts=0;
   const arr=[...files].filter(f=>f&&!/^~\$/.test(f.name||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'));
   if(!arr.length){toast('Nenhum arquivo válido selecionado');return;}
@@ -4456,7 +4486,9 @@ function updateDropStatus(){
   const opc=['#drop-alertas','#drop-tms','#drop-abast','#drop-metas','#drop-boletim','#drop-pedidos','#drop-saude','#drop-bdv','#drop-motoristas','#drop-multas'];
   const set=(id,n,dropId,unit,zero)=>{ $(id).textContent = n? (n.toLocaleString('pt-BR')+' '+(unit||'linhas')+' ✓') : (zero||(opc.includes(dropId)?'nenhum arquivo':'nenhum arquivo — usando demonstração')); $(dropId).classList.toggle('loaded',!!n); };
   set('#stPonto', (pending.ponto&&pending.ponto.length)||(RAW&&RAW.counts&&RAW.counts.ponto)||0, '#drop-ponto');
+  if(SOURCE_COVERAGE.ponto&&SOURCE_COVERAGE.ponto.max&&$('#stPonto')) $('#stPonto').textContent+=coverageLabel('ponto');
   set('#stMov',   (pending.mov&&pending.mov.length)  ||(RAW&&RAW.counts&&RAW.counts.mov)  ||0, '#drop-mov');
+  if(SOURCE_COVERAGE.mov&&SOURCE_COVERAGE.mov.max&&$('#stMov')) $('#stMov').textContent+=coverageLabel('mov');
   set('#stAlertas', ALERTS_N||(RAW&&RAW.counts&&RAW.counts.alertas)||0, '#drop-alertas', 'alertas');
   set('#stTms', TMS_N, '#drop-tms', 'veículos');
   set('#stAbast', ABAST_N, '#drop-abast', 'motoristas');
@@ -4713,7 +4745,7 @@ async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
 function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
-function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
+function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
 async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();return true;}catch(e){return false;}}
 async function idbGet(k){try{const db=await idbOpen();const v=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly'),rq=tx.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});db.close();return v;}catch(e){return null;}}
@@ -4750,7 +4782,14 @@ async function gerarDadosPublicacao(){
     if(IMPORT_DIRTY_ANALYZE||IMPORT_DIRTY_FILTERS){ flushImportChanges(false); await uiYield(); }
     if(!RECORDS||!RECORDS.length) throw new Error('A base consolidada está vazia. Reimporte Jornada e Movimentação.');
     const cov=dataCoverageRange();
-    const S=snapshotState(); S.publishedAt=Date.now(); S.dataMin=cov.min||''; S.dataMax=cov.max||'';
+    // Validação de cobertura: se a própria Jornada/Movimentação importada chega mais longe
+    // que o consolidado, não deixa publicar uma fotografia cortada.
+    const srcMax=maxIso(SOURCE_COVERAGE.ponto&&SOURCE_COVERAGE.ponto.max,SOURCE_COVERAGE.mov&&SOURCE_COVERAGE.mov.max);
+    if(srcMax && cov.max && srcMax>cov.max){
+      const pmax=(SOURCE_COVERAGE.ponto&&SOURCE_COVERAGE.ponto.max)||'—', mmax=(SOURCE_COVERAGE.mov&&SOURCE_COVERAGE.mov.max)||'—';
+      throw new Error('Cobertura inconsistente: Jornada até '+(pmax==='—'?'—':brDate(pmax))+' · Movimentação até '+(mmax==='—'?'—':brDate(mmax))+' · consolidado só até '+brDate(cov.max)+'. Reimporte/corrija antes de publicar.');
+    }
+    const S=snapshotState(); S.publishedAt=Date.now(); S.dataMin=cov.min||''; S.dataMax=cov.max||''; S.sourceCoverage=JSON.parse(JSON.stringify(SOURCE_COVERAGE));
     const raw=new TextEncoder().encode(JSON.stringify(S));
     if(btn)btn.textContent='⏳ Compactando dados…';
     const packed=await _gz(raw), bytes=packed.b;
@@ -4929,7 +4968,7 @@ $('#fileDir').addEventListener('change', async e=>{
   const pick=re=>all.filter(f=>re.test(rel(f))).sort((a,b)=>rel(a).localeCompare(rel(b)));
   const CSVZIP=/\.(csv|txt|zip)$/i, CSVTXT=/\.(csv|txt)$/i;
   try{
-    if(t==='ponto'){ const fs=pick(CSVTXT); if(!fs.length){toast('Nenhum CSV na pasta');return;} toast('Lendo jornada ('+fs.length+' arq)…'); pending.ponto=parseCSV(await combinarFilesTexto(fs)); updateDropStatus(); if(pending.mov) ingest(); toast('Jornada ✓ '+pending.ponto.length.toLocaleString('pt-BR')+' linhas · '+fs.length+' arquivo(s)'); }
+    if(t==='ponto'){ const fs=all.filter(f=>/\.(csv|txt|xlsx|xls)$/i.test(rel(f))&&!/^~\$/i.test(f.name||'')).sort((a,b)=>rel(a).localeCompare(rel(b),'pt-BR')); if(!fs.length){toast('Nenhuma planilha/CSV de Jornada na pasta');return;} toast('Lendo jornada ('+fs.length+' arq)…'); const res=await readJornadaFiles(fs,(i,n,name)=>{const st=$('#stPonto');if(st)st.textContent='processando '+i+'/'+n+' · '+name;}); if(!res.rows.length){toast('Jornada: nenhum registro válido');return;} pending.ponto=res.rows; jornadaCoverage(res.rows); updateDropStatus(); if(pending.mov) ingest(); toast('Jornada ✓ '+pending.ponto.length.toLocaleString('pt-BR')+' linhas'+coverageLabel('ponto')+' · '+res.ok.length+'/'+res.total+' arquivo(s)'); }
     else if(t==='mov'){ if(!pending.ponto){toast('Carregue primeiro a jornada (ponto)');return;} const fs=pick(CSVZIP); if(!fs.length){toast('Nenhum arquivo na pasta');return;} toast('Movimentação ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadMovLocais(fs),30); }
     else if(t==='alertas'){ const fs=pick(CSVZIP); if(!fs.length){toast('Nenhum arquivo na pasta');return;} toast('Alertas ('+fs.length+' arq, aguarde)…'); setTimeout(()=>loadAlertasLocais(fs),30); }
     else if(t==='boletim'){ const fs=pick(CSVZIP); if(!fs.length){toast('Nenhum arquivo na pasta');return;} toast('Boletim ('+fs.length+' arq)…'); setTimeout(()=>loadBoletimFilesFast(fs),20); }
@@ -4954,9 +4993,9 @@ $('#filePonto').addEventListener('change',e=>{ const fs=[...e.target.files]; e.t
       const nomes=res.fail.slice(0,3).map(x=>x.name).join(', ');
       toast('Jornada: nenhum registro válido'+(nomes?' · confira '+nomes:'')); return;
     }
-    pending.ponto=res.rows; updateDropStatus(); if(pending.mov)ingest();
+    pending.ponto=res.rows; jornadaCoverage(res.rows); updateDropStatus(); if(pending.mov)ingest();
     const extra=res.fail.length?(' · '+res.fail.length+' arquivo(s) ignorado(s)'):'';
-    toast('Jornada ✓ '+res.rows.length.toLocaleString('pt-BR')+' linhas · '+res.ok.length+'/'+res.total+' arquivo(s)'+extra);
+    toast('Jornada ✓ '+res.rows.length.toLocaleString('pt-BR')+' linhas'+coverageLabel('ponto')+' · '+res.ok.length+'/'+res.total+' arquivo(s)'+extra);
     if(res.fail.length) console.warn('Jornada — arquivos ignorados',res.fail);
   }),20);
 });
@@ -4975,8 +5014,8 @@ $('#fileBdv').addEventListener('change',e=>{ const fs=[...e.target.files]; e.tar
 $('#fileMotoristas').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Motoristas: '+fs.length+' arquivo(s) na fila…'); setTimeout(()=>runSourceImport('motoristas','Relatório de Motoristas',fs,loadMotoristasFiles),20); });
 $('#fileMultas').addEventListener('change',e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length)return; toast('Multas: '+fs.length+' arquivo(s) na fila…'); setTimeout(()=>runSourceImport('multas','Multas / Infrações',fs,loadMultasFiles),20); });
 $('#recalc').onclick=()=>{ ingest(); };
-$('#resetDemo').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Voltou à demonstração'); };
-$('#clearData').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Bases removidas'); };
+$('#resetDemo').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; SOURCE_COVERAGE={ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}}; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Voltou à demonstração'); };
+$('#clearData').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; SOURCE_COVERAGE={ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}}; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Bases removidas'); };
 
 // INIT
 if(RAW&&RAW.alertas){ ALERTS=RAW.alertas; ALERTS_N=(RAW.counts&&RAW.counts.alertas)||0; PLACA_UO=RAW.placaUO||null; }
