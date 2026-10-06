@@ -181,7 +181,9 @@
   .track .tlab{width:84px;flex:none;text-align:right;font-size:11px;color:var(--muted);font-weight:600}
   .track .lane{position:relative;flex:1;height:20px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;overflow:hidden}
   .lane .gl{position:absolute;top:0;bottom:0;width:1px;background:var(--grid);z-index:1}
-  .lane .vac-bg{position:absolute;top:0;bottom:0;background:rgba(176,137,102,.13);border-left:1px solid rgba(152,111,77,.12);border-right:1px solid rgba(152,111,77,.12);pointer-events:none;z-index:0}
+  .lane .vac-bg{position:absolute;top:0;bottom:0;background:rgba(226,64,96,.12);border-left:1px solid rgba(226,64,96,.16);border-right:1px solid rgba(226,64,96,.16);pointer-events:none;z-index:0}
+  .wtl .vac-ribbon{position:absolute;right:-10px;top:34px;width:88px;height:26px;overflow:hidden;pointer-events:none;z-index:8}
+  .wtl .vac-ribbon span{position:absolute;right:-22px;top:3px;display:block;width:110px;padding:4px 0;text-align:center;font-size:10px;font-weight:800;letter-spacing:.08em;color:#fff;background:linear-gradient(180deg,#c24673,#a52f5d);box-shadow:0 2px 6px rgba(165,47,93,.25);transform:rotate(45deg)}
   .lane .seg{z-index:2}
   .seg{position:absolute;top:2px;bottom:2px;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;font-size:10px;font-weight:600;color:#fff;padding:0 5px;min-width:2px}
   .seg.ponto{background:color-mix(in srgb,var(--track-ponto) 82%,#000 4%);color:#3a2e00}
@@ -204,14 +206,14 @@
   .wtl-ruler .tick{position:absolute;top:0;transform:translateX(-50%);font-size:9.5px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
   .wtl-ruler .tick.day{color:var(--ink-2);font-weight:600}
   .wtl-ruler .tick.feriado{color:var(--critical);font-weight:700}
-  .wtl-ruler .tick.ferias{color:#8b6d55;font-weight:700}
+  .wtl-ruler .tick.ferias{color:#c24673;font-weight:700}
   .wtl-ruler .tick i{position:absolute;top:13px;left:50%;width:1px;height:6px;background:var(--baseline)}
   /* rótulo do dia (fixo, centralizado sobre as horas) — aparece ao dar zoom num dia */
   .wtl-day{position:relative;height:0;display:none}
   .wtl-day.on{display:block;height:34px}
   .wtl-day > span{position:absolute;left:calc(50% + 42px);transform:translateX(-50%);top:0;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 10px 5px 12px;white-space:nowrap;z-index:6;box-shadow:0 1px 3px rgba(0,0,0,.08);max-width:calc(100% - 110px);overflow-x:auto}
   .wtl-day > span.feriado{color:var(--critical);border-color:color-mix(in srgb,var(--critical) 40%,var(--border))}
-  .wtl-day > span.ferias{color:#765945;background:#f7f1eb;border-color:#e4d5c8;box-shadow:0 1px 3px rgba(93,66,45,.08)}
+  .wtl-day > span.ferias{color:#a52f5d;background:#fff3f6;border-color:#f1c7d4;box-shadow:0 1px 3px rgba(165,47,93,.10)}
   .wtl-day .daystats{display:flex;align-items:center;gap:6px;margin-left:1px}
   .wtl-day .daystat{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--ink-2);background:color-mix(in srgb,var(--surface) 68%, #fff 32%);border:1px solid color-mix(in srgb,var(--border) 82%, transparent);border-radius:999px;padding:3px 8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
   .wtl-day .daystat .lbl{color:var(--muted);font-weight:700}
@@ -1886,6 +1888,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
       : `<div class="tl-head"><div class="who"><b>${g.label}</b><small>${[...placas].join(', ')||'—'}</small></div>${meta}</div>`;
     return `<div class="card wtl-card">${head}
       <div class="wtl" id="${id}">
+        ${feriasDays.length?`<div class="vac-ribbon" title="Motorista com férias no período"><span>FÉRIAS</span></div>`:''}
         <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
         <div class="track"><span class="tlab">Ponto</span><div class="lane lane-pt" data-k="ponto"></div></div>
@@ -2770,7 +2773,15 @@ function fmtDataAtualizacao(ts){
 }
 function dataCoverageRange(){
   const ds=(typeof RECORD_DATE_KEYS!=='undefined'&&RECORD_DATE_KEYS&&RECORD_DATE_KEYS.length)?RECORD_DATE_KEYS:[];
-  return ds.length?{min:ds[0],max:ds[ds.length-1]}:{min:'',max:''};
+  let out=ds.length?{min:ds[0],max:ds[ds.length-1]}:{min:'',max:''};
+  // Durante a curta janela entre importação e consolidação, RAW já contém os dias novos.
+  // Usa essa cobertura apenas para diagnóstico visual; o pacote continua exigindo flush completo.
+  if(IMPORT_DIRTY_ANALYZE && RAW && Array.isArray(RAW.records) && RAW.records.length){
+    let mn='',mx='';
+    for(const r of RAW.records){const d=String(r&&r.data||'');if(!/^\d{4}-\d{2}-\d{2}$/.test(d))continue;if(!mn||d<mn)mn=d;if(!mx||d>mx)mx=d;}
+    if(mx && (!out.max||mx>out.max))out={min:mn||out.min,max:mx};
+  }
+  return out;
 }
 function atualizaDataMode(){
   const pill=$('#dataModePill'),txt=$('#dataModeTxt'); if(!pill||!txt)return;
@@ -3104,6 +3115,7 @@ function exportMedia(){
    ============================================================ */
 let IMPORT_DIRTY_ANALYZE=false, IMPORT_DIRTY_FILTERS=false;
 let BULK_IMPORT_ACTIVE=false, BULK_IMPORT_CANCEL=false;
+let IMPORT_AUTO_FLUSH_TIMER=0;
 function activeTabName(){ const b=document.querySelector('#tabs button.active'); return b?b.dataset.tab:''; }
 function markImportDirty(reanalyze=true, filters=true){
   if(reanalyze) IMPORT_DIRTY_ANALYZE=true;
@@ -3116,18 +3128,39 @@ function flushImportChanges(render=true){
   if(needA) build(true);
   if(needF||needA) fillFilters();
   updateDropStatus();
+  atualizaDataMode();
+  // Só grava/cacheia a fotografia depois que RECORDS já representa a importação nova.
+  if((needA||needF) && RAW) saveData();
   if(render) renderAll();
+}
+function scheduleImportAutoFlush(){
+  clearTimeout(IMPORT_AUTO_FLUSH_TIMER);
+  IMPORT_AUTO_FLUSH_TIMER=setTimeout(()=>{
+    if(BULK_IMPORT_ACTIVE){ scheduleImportAutoFlush(); return; }
+    if(activeTabName()!=='dados') return;
+    if(!(IMPORT_DIRTY_ANALYZE||IMPORT_DIRTY_FILTERS)) return;
+    const txt=$('#dataModeTxt'); if(txt)txt.textContent='dados reais · consolidando novas importações…';
+    // Dá um frame para o status aparecer antes do cálculo pesado.
+    setTimeout(()=>{
+      try{
+        flushImportChanges(false);
+        const cov=dataCoverageRange();
+        toast('Base consolidada ✓'+(cov.max?' dados até '+brDate(cov.max):''));
+      }catch(e){ console.error('Falha ao consolidar importação',e); toast('Erro ao consolidar as novas importações'); }
+    },30);
+  },700);
 }
 function afterImportChange(opts){
   opts=opts||{};
   const reanalyze=opts.reanalyze!==false, filters=opts.filters!==false;
   // Importação em lote: não persiste/recalcula a cada fonte. Faz tudo uma única vez no final.
   if(BULK_IMPORT_ACTIVE){ markImportDirty(reanalyze,filters); updateDropStatus(); return; }
-  if(opts.persist!==false && RAW) saveData();
+  // Marca ANTES de qualquer persistência para impedir cache de RECORDS antigos.
   markImportDirty(reanalyze,filters);
   updateDropStatus();
-  // Na aba Dados não redesenha nem reanalisa a base inteira após cada fonte.
-  if(activeTabName()==='dados') return;
+  // Na aba Dados não renderiza as demais visões, mas consolida automaticamente
+  // após um pequeno intervalo. Assim o selo/cache deixam de ficar presos na fotografia anterior.
+  if(activeTabName()==='dados'){ scheduleImportAutoFlush(); return; }
   flushImportChanges(opts.render!==false);
 }
 function uiYield(){ return new Promise(r=>setTimeout(r,0)); }
