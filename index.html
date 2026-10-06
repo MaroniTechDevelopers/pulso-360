@@ -2209,13 +2209,17 @@ function renderZoom(id){
   if(laneP){ const imk=(st.interj||[]).filter(s=>s.viol).map(s=>{ const p=pos(s.b); if(p<-1||p>101) return ''; const ttl='Interjornada '+hDec(s.min)+' (< 11h · CLT) · '+brDate(s.day); return `<span class="imark" style="left:${p}%" title="${ttl}"><i>🛌</i></span>`; }).join('');
     laneP.innerHTML=vacationBg+gl+(st.ponto||[]).map(p=>seg('ponto',p[0],p[1],hm(p[0]%1440)+'–'+hm(p[1]%1440))).join('')+imk; }
   const laneM=el.querySelector('.lane[data-k="mov"]');
-  if(laneM) laneM.innerHTML=vacationBg+gl+(st.mov||[]).map(s=>{ const hr=hm(s.a%1440)+'–'+hm(s.b%1440); const lab=s.lab||((s.placa?s.placa+' · ':'')+hr); const ttl=lab+' · '+hm(s.b-s.a)+(s.unid?' · SEM identificação':' de condução')+(s.km?' · '+Math.round(s.km)+'km':''); const cls=s.color?'mov driver-mov':'mov'; const sty=s.color?'--drv-color:'+s.color+';':''; return seg(cls,s.a,s.b,lab,s.unid?'unid':(s.fora?'fora':''),ttl,sty); }).join('');
+  // Limpeza visual: conduções de até 1 minuto continuam nos dados/cálculos,
+  // mas não são desenhadas na timeline para evitar microblocos sem valor analítico.
+  if(laneM) laneM.innerHTML=vacationBg+gl+(st.mov||[]).filter(s=>(s.b-s.a)>1).map(s=>{ const hr=hm(s.a%1440)+'–'+hm(s.b%1440); const lab=s.lab||((s.placa?s.placa+' · ':'')+hr); const ttl=lab+' · '+hm(s.b-s.a)+(s.unid?' · SEM identificação':' de condução')+(s.km?' · '+Math.round(s.km)+'km':''); const cls=s.color?'mov driver-mov':'mov'; const sty=s.color?'--drv-color:'+s.color+';':''; return seg(cls,s.a,s.b,lab,s.unid?'unid':(s.fora?'fora':''),ttl,sty); }).join('');
   const laneAl=el.querySelector('.lane[data-k="alertas"]');
   if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const cls=al.niv==='A'?'alto':al.niv==='M'?'medio':'baixo'; return `<span class="amark ${cls}" style="left:${p}%" title="${hm(al.t%1440)} · ${tipoLabel(al.tipo)} · ${nivName(al.niv)}"><i>${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
   const laneMulta=el.querySelector('.lane[data-k="multas"]');
   if(laneMulta){ laneMulta.innerHTML=vacationBg+gl+(st.multas||[]).map(m=>{ const p=pos(m.t); if(p<-1||p>101)return ''; const who=m.doc?(' · doc: '+firstName(m.doc)):''; const cam=m.cam?(' · câmera: '+firstName(m.cam)):''; const audit=m.audit==='DIVERGE'?' · ⚠ divergência':m.audit==='CONFERE'?' · confere':''; const ttl=(m.semHora?'hora não informada':hm(m.t%1440))+' · '+multaTimelineLabel(m.tipo)+(m.placa?' · '+m.placa:'')+(m.auto?' · auto '+m.auto:'')+who+cam+audit; return `<span class="mmark" style="left:${p}%" title="${pdfEsc(ttl)}"><i>${multaTimelineIcon(m.tipo)}</i></span>`; }).join(''); }
   const laneId=el.querySelector('.lane[data-k="ident"]');
-  if(laneId){ laneId.innerHTML=vacationBg+gl+(st.ident||[]).map(s=>{ if(!s.ok){const lab=hm(s.a%1440)+'–'+hm(s.b%1440)+' · SEM identificação'; return seg('idbad',s.a,s.b,lab);} const nm=s.drv||s.who||''; const cls=s.color?('driver'+(s.div?' iddiv':'')):(s.div?'iddiv':'idok'); const lab=hm(s.a%1440)+'–'+hm(s.b%1440)+(nm?' · '+firstName(nm):' · identificado')+(s.div?' · ⚠ divergência':''); const sty=s.color?'--drv-color:'+s.color+';':''; return seg(cls,s.a,s.b,lab,'',lab,sty); }).join(''); }
+  // Identificação mantém a semântica original: verde = condutor identificado corretamente; vermelho = divergência.
+  // As cores individuais dos condutores ficam restritas à condução/legenda da timeline, sem substituir o status da identificação.
+  if(laneId){ laneId.innerHTML=vacationBg+gl+(st.ident||[]).map(s=>{ if(!s.ok){const lab=hm(s.a%1440)+'–'+hm(s.b%1440)+' · SEM identificação'; return seg('idbad',s.a,s.b,lab);} const nm=s.drv||s.who||''; const cls=s.div?'iddiv':'idok'; const lab=hm(s.a%1440)+'–'+hm(s.b%1440)+(nm?' · '+firstName(nm):' · identificado')+(s.div?' · ⚠ divergência':''); return seg(cls,s.a,s.b,lab,'',lab); }).join(''); }
 }
 let ZTL_IO=null;
 function resetZoomObserver(){ if(ZTL_IO){try{ZTL_IO.disconnect();}catch(e){} ZTL_IO=null;} }
@@ -5104,7 +5108,11 @@ function focusRecord(mot, dia){ setTabFilterState('linha',{fMot:mot||'',fDia:dia
 // clicar num apontamento das Divergências → linha do tempo daquele motorista+dia
 $('#divList').addEventListener('click',e=>{ const c=e.target.closest('.divcard'); if(!c)return; focusRecord(decodeURIComponent(c.dataset.mot), c.dataset.dia); });
 $('#fTipoDiv').addEventListener('change',()=>renderDiverg(filtered()));
-$('#fCondTimeline').addEventListener('change',()=>{VIEW_RENDER_KEYS.linha='';renderAll();});
+$('#fCondTimeline').addEventListener('change',()=>{
+  // Filtro exclusivo da Linha do Tempo: não recalcula nem altera o Resumo semanal.
+  VIEW_RENDER_KEYS.linha='';
+  renderTimelines(filtered());
+});
 // clicar numa operação na aba Aderência → Resumo dessa operação
 $('#aderBox').addEventListener('click',e=>{
   const gp=e.target.closest('[data-goplacas]'); if(gp){ const st=readTopFilterState(); st.fOp=decodeURIComponent(gp.dataset.goplacas); st.fBusca=''; setTabFilterState('semid',st,true); goTab('semid'); return; }
