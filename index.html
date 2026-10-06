@@ -182,8 +182,11 @@
   .track .lane{position:relative;flex:1;height:20px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;overflow:hidden}
   .lane .gl{position:absolute;top:0;bottom:0;width:1px;background:var(--grid);z-index:1}
   .lane .vac-bg{position:absolute;top:0;bottom:0;background:rgba(226,64,96,.12);border-left:1px solid rgba(226,64,96,.16);border-right:1px solid rgba(226,64,96,.16);pointer-events:none;z-index:0}
-  .wtl .vac-ribbon{position:absolute;right:-10px;top:34px;width:88px;height:26px;overflow:hidden;pointer-events:none;z-index:8}
-  .wtl .vac-ribbon span{position:absolute;right:-22px;top:3px;display:block;width:110px;padding:4px 0;text-align:center;font-size:10px;font-weight:800;letter-spacing:.08em;color:#fff;background:linear-gradient(180deg,#c24673,#a52f5d);box-shadow:0 2px 6px rgba(165,47,93,.25);transform:rotate(45deg)}
+  .wtl-tracks{position:relative}
+  .wtl .vac-ribbon{position:absolute;right:-1px;top:5px;bottom:5px;width:38px;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:8;background:linear-gradient(180deg,#cf4275,#b92d61);border-radius:8px 0 0 8px;box-shadow:-3px 0 10px rgba(185,45,97,.18);overflow:visible}
+  .wtl .vac-ribbon:before,.wtl .vac-ribbon:after{content:'';position:absolute;left:-9px;width:0;height:0;border-right:9px solid #c4396d;border-top:9px solid transparent;border-bottom:9px solid transparent}
+  .wtl .vac-ribbon:before{top:0}.wtl .vac-ribbon:after{bottom:0}
+  .wtl .vac-ribbon span{position:static;display:block;width:auto;padding:0;background:none;box-shadow:none;font-size:10px;font-weight:850;letter-spacing:.12em;color:#fff;writing-mode:vertical-rl;transform:rotate(180deg);text-align:center}
   .lane .seg{z-index:2}
   .seg{position:absolute;top:2px;bottom:2px;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;font-size:10px;font-weight:600;color:#fff;padding:0 5px;min-width:2px}
   .seg.ponto{background:color-mix(in srgb,var(--track-ponto) 82%,#000 4%);color:#3a2e00}
@@ -295,6 +298,10 @@
   .cap-id{flex:1;min-width:0}
   .cap-id b{font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cap-id small{color:var(--muted);font-size:11px}
+  .rank-score{flex:none;min-width:47px;padding:4px 6px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);text-align:center;font-variant-numeric:tabular-nums}
+  .rank-score small{display:block;font-size:8px;line-height:1;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .rank-score b{display:block;margin-top:2px;font-size:13px;line-height:1;color:var(--ink)}
+  .rank-score.good b{color:var(--good-ink)} .rank-score.warn b{color:var(--warning)} .rank-score.bad b{color:var(--crit-ink)}
   .cap-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
   .cap-metrics .cm{min-width:0;background:var(--surface-2);border-radius:8px;padding:7px 8px;text-align:center;overflow:hidden}
   .cap-metrics .cm span{display:block;font-size:9.5px;line-height:1.15;text-transform:uppercase;letter-spacing:.035em;color:var(--muted);white-space:normal}
@@ -522,7 +529,7 @@
           <button type="button" data-rank="worst">10 piores</button>
           <button type="button" data-rank="best">20 melhores</button>
         </div>
-        <span class="sem-rankhint">ranking exige movimentação · 10 piores: atividade real · 20 melhores: atividade + ponto + identificação completos</span>
+        <span class="sem-rankhint">nota 0–100 · identificação + jornada + ponto + alertas + multas + descanso + hora extra + média · sem movimentação não ranqueia</span>
       </div>
       <div class="legend">
         <span class="lg"><b>Farol de risco (composto):</b></span>
@@ -1692,32 +1699,89 @@ function riscoComposto(m, alR){
    RENDER — RESUMO SEMANAL (Capivara: por operação + farol)
    ============================================================ */
 let SEMANA_RANK_MODE='all';
-// Ranking rigoroso: ausência de atividade não é bom desempenho.
-function resumoRankElegivel(m){ return !!m && ((m.mov||0)>0 || (m._movDays||0)>0); }
+// Ranking comparativo auditável (0–100). Ausência de atividade nunca vira bom desempenho.
+function rankClamp(v,a=0,b=100){v=+v;return Number.isFinite(v)?Math.max(a,Math.min(b,v)):null;}
+function rankMinMovDays(){
+  const r=activeRange(); if(!r||!r.de||!r.ate||r.de<'1000-01-01'||r.ate>'9000-01-01')return 3;
+  const n=Math.max(1,Math.round((Date.parse(r.ate)-Date.parse(r.de))/86400000)+1);
+  return n<=7?1:n<=14?2:n<=31?3:5;
+}
+function resumoRankElegivel(m){ const p=m&&m._rankProfile; return !!(p&&p.movDays>0&&p.hCond>0); }
 function resumoRankMelhorElegivel(m){
-  return resumoRankElegivel(m) && (m.ponto||0)>0 && m.aj!=null && m.ident!=null && (m.pend||0)===0;
+  const p=m&&m._rankProfile; if(!resumoRankElegivel(m)||!p)return false;
+  if(p.movDays<rankMinMovDays())return false;
+  if(BASES&&BASES.ponto && (p.pontoDays<=0||p.aj==null||p.pointCoverage<=0))return false;
+  if(p.identCam==null||p.identMot==null)return false;
+  if(!MEDIA_OFF && p.media==null)return false;
+  return (p.pend||0)===0;
+}
+function rankLowerPercentile(values,v){
+  const a=(values||[]).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length||!Number.isFinite(v))return 0;
+  if(a.length===1||a[0]===a[a.length-1])return 100;
+  let lo=0,eq=0; for(const x of a){if(x<v)lo++;else if(x===v)eq++;}
+  const avg=lo+Math.max(0,eq-1)/2; return rankClamp(100*(1-avg/(a.length-1)));
+}
+function rankAlertSummary(nome,recs){
+  const nn=norm(nome), dias=new Set((recs||[]).filter(r=>r&&r.data&&((r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.horasMov||0)>0)).map(r=>r.data));
+  if(!dias.size)return {total:0,niveis:{},tipos:{},real:true,badges:[]};
+  if(AL_TL){let total=0;const tipos={},niveis={};for(const e of (AL_TL[nn]||[])){if(!dias.has(e[0]))continue;total++;const tp=e[3]||'ALERTA';tipos[tp]=(tipos[tp]||0)+1;const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':'';if(nv)niveis[nv]=(niveis[nv]||0)+1;}return {total,niveis,tipos,real:true,badges:[]};}
+  if(BOL_DAY){let total=0;const tipos={};const dm=BOL_DAY[nn]||{};for(const d of dias){const x=dm[d];if(!x)continue;total+=x.t||0;for(const k in (x.tipos||{}))tipos[k]=(tipos[k]||0)+(x.tipos[k]||0);}return {total,niveis:{},tipos,real:true,badges:[]};}
+  return alertasResumo(nome,activeRange());
+}
+function rankProfile(nome,recs){
+  const audit=auditMetrics(recs), alR=rankAlertSummary(nome,recs), movDays=audit.diasMov||0, pontoDays=audit.diasPonto||0, hCond=audit.hCond||0, hPonto=audit.hPonto||0;
+  const identCam=aderRecs(recs), identMot=aderMotoristaRecs(recs), aj=aderJornada(recs);
+  const pointCoverage=movDays?rankClamp(pontoDays/movDays*100):null;
+  const interjDays=new Set((recs||[]).filter(r=>r.interjornada!=null&&r.interjornada<CFG.interjornadaMin).map(r=>r.data)).size;
+  const interjScore=movDays?rankClamp(100*(1-interjDays/movDays)):null;
+  const extraScore=hPonto>0?rankClamp(100*(1-Math.min(1,(audit.hExtra||0)/hPonto))):null;
+  const nv=(alR&&alR.niveis)||{}, alto=+nv.ALTO||0, medio=+nv.MEDIO||0, baixo=+nv.BAIXO||0, total=+(alR&&alR.total)||0, conhecido=alto+medio+baixo, desconhecido=Math.max(0,total-conhecido);
+  const alertRisk=alto*4+medio*2+baixo+desconhecido*1.5, hCondH=Math.max(hCond/60,0.01), alertRate=alertRisk*10/hCondH;
+  const datas=(recs||[]).map(r=>r.data).filter(Boolean).sort(), opF=$('#fOp').value; let multaRange=null;
+  if(datas.length||opF)multaRange=Object.assign(datas.length?{de:datas[0],ate:datas[datas.length-1]}:{},opF?{op:opF}:{});
+  const multaTot=MULTAS_N?multasCondutaMotoristaCount(nome,multaRange):0, multaRate=multaTot*100/hCondH;
+  const d=drv(nome), litros=(recs||[]).reduce((s,r)=>s+(+r.litros||0),0), ab=ABAST&&ABAST[norm(nome)];
+  const media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(litros>0?audit.km/litros:d.media));
+  const rr=(recs||[]).find(r=>r.placa)||{}, meta=metaVeic(rr.placa||'',(recs&&recs[0]&&recs[0].operacao)||'');
+  const mediaScore=(!MEDIA_OFF&&media!=null&&meta>0)?rankClamp(media/meta*100):null;
+  const pend=(recs||[]).filter(r=>r.sev==='pendente').length, idDiv=(recs||[]).filter(r=>r.idDivergente||r.condutorDivergente).length;
+  return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
+}
+function applyResumoRankScores(data,rows){
+  const by=Object.create(null); (rows||[]).forEach(r=>{const k=norm(r.motoristaEscala||'');if(k)(by[k]=by[k]||[]).push(r);});
+  const profiles=Object.create(null); for(const k in by){const nm=(by[k][0]&&by[k][0].motoristaEscala)||k;profiles[k]=rankProfile(nm,by[k]);}
+  const elig=Object.values(profiles).filter(p=>p.movDays>0&&p.hCond>0), alertRates=elig.map(p=>p.alertRate).filter(Number.isFinite), multaRates=elig.map(p=>p.multaRate).filter(Number.isFinite);
+  const hasAlerts=!!(ALERTS||BOL||AL_TL), hasMultas=!!MULTAS_N, hasMedia=!MEDIA_OFF;
+  for(const p of Object.values(profiles)){
+    const comps=[]; const add=(k,lab,w,val,active=true)=>{if(!active||w<=0)return;const vv=rankClamp(val==null?0:val);comps.push({k,lab,w,v:vv,pts:w*vv/100});};
+    // Identificação: motorista correto vale mais; cobertura da câmera continua influenciando como qualidade da evidência.
+    add('identMot','Identificação motorista',15,p.identMot,true);
+    add('identCam','Cobertura câmera',5,p.identCam,true);
+    add('jornada','Aderência jornada',15,p.aj,!!(BASES&&BASES.ponto));
+    add('ponto','Cobertura ponto',10,p.pointCoverage,!!(BASES&&BASES.ponto));
+    add('alertas','Alertas/severidade',20,rankLowerPercentile(alertRates,p.alertRate),hasAlerts);
+    add('multas','Multas conduta',10,rankLowerPercentile(multaRates,p.multaRate),hasMultas);
+    add('interj','Interjornada',10,p.interjScore,!!(BASES&&BASES.ponto));
+    add('extra','Hora extra',5,p.extraScore,!!(BASES&&BASES.ponto));
+    add('media','Média × meta',10,p.mediaScore,hasMedia);
+    const W=comps.reduce((s,c)=>s+c.w,0), P=comps.reduce((s,c)=>s+c.pts,0); let score=W?P/W*100:0;
+    // Divergência explícita de condutor é uma falha independente e não pode sumir dentro de uma média.
+    if(p.idDiv>0)score-=Math.min(12,p.idDiv*2);
+    p.score=rankClamp(score); p.scoreDisplay=Math.round(p.score); p.components=comps;
+    p.scoreTitle=comps.map(c=>c.lab+': '+Math.round(c.v)+'%').join(' · ')+(p.idDiv?' · divergências de condutor: '+p.idDiv:'');
+  }
+  (data||[]).forEach(g=>g.list.forEach(m=>{const p=profiles[norm(m.nome||'')];m._rankProfile=p||null;m._rankScore=p?p.score:null;m._rankScoreTitle=p?p.scoreTitle:'';}));
+  return profiles;
 }
 function resumoRankCmp(a,b){
-  const ea=resumoRankElegivel(a), eb=resumoRankElegivel(b);
-  // No modo Todos, quem não dirigiu fica fora da classificação, depois dos ranqueáveis.
-  if(ea!==eb) return ea?-1:1;
-  if(!ea&&!eb) return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
-  // Falta de evidência em quem dirigiu é risco, nunca benefício.
-  const aMiss=((a.ponto||0)<=0?1:0)+(a.aj==null?1:0)+(a.ident==null?1:0)+((a.pend||0)>0?1:0);
-  const bMiss=((b.ponto||0)<=0?1:0)+(b.aj==null?1:0)+(b.ident==null?1:0)+((b.pend||0)>0?1:0);
-  let d=bMiss-aMiss; if(d)return d;
-  const rk={vermelho:0,amarelo:1,verde:2};
-  d=(rk[(a.risco&&a.risco.cls)||'verde']??2)-(rk[(b.risco&&b.risco.cls)||'verde']??2); if(d)return d;
-  d=((b.risco&&b.risco.n)||0)-((a.risco&&a.risco.n)||0); if(d)return d;
-  const ah=(a._alR&&a._alR.velocidade&&a._alR.velocidade.alto)||0, bh=(b._alR&&b._alR.velocidade&&b._alR.velocidade.alto)||0; d=bh-ah; if(d)return d;
-  const aaj=a.aj==null?-1:a.aj, baj=b.aj==null?-1:b.aj; d=aaj-baj; if(d)return d;
-  d=(b.ddReal||0)-(a.ddReal||0); if(d)return d;
-  const aid=a.ident==null?-1:a.ident, bid=b.ident==null?-1:b.ident; d=aid-bid; if(d)return d;
-  d=(b._multaTot||0)-(a._multaTot||0); if(d)return d;
-  d=((b._alR&&b._alR.total)||0)-((a._alR&&a._alR.total)||0); if(d)return d;
-  // Em empate, mais dias reais de condução fica melhor (vem depois no pior→melhor).
-  d=(a._movDays||0)-(b._movDays||0); if(d)return d;
-  return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
+  const ea=resumoRankElegivel(a), eb=resumoRankElegivel(b); if(ea!==eb)return ea?-1:1;
+  if(!ea&&!eb)return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
+  let d=(a._rankScore??-1)-(b._rankScore??-1); if(d)return d; // pior → melhor
+  const pa=a._rankProfile||{},pb=b._rankProfile||{}; d=(pb.alertRate||0)-(pa.alertRate||0);if(d)return d; d=(pb.multaRate||0)-(pa.multaRate||0);if(d)return d;
+  d=(pa.movDays||0)-(pb.movDays||0);if(d)return d; return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
+}
+function resumoRankUnique(list){
+  const mp=new Map(); for(const m of (list||[])){const k=norm(m.nome||'');if(!k)continue;const prev=mp.get(k);const hm=m.mov||0;const hp=prev&&(prev.mov||0);if(!prev||hm>hp)mp.set(k,m);} return [...mp.values()];
 }
 function semanaAgg(rows){
   const cacheKey=(rows===FILTER_CACHE_ROWS?FILTER_CACHE_KEY:('rows:'+rows.length+':'+DATA_REV))+'|semana|M'+MULTAS_REV;
@@ -1747,6 +1811,7 @@ function semanaAgg(rows){
     list.sort(resumoRankCmp);
     return {op:og.op,list,dd:og.dd,aj:aderJornada(og.opRows),motsDedo:og.motsDedo.size};
   });
+  applyResumoRankScores(data,rows);
   const out={weeks,ultima,data}; SEMANA_AGG_CACHE_KEY=cacheKey; SEMANA_AGG_CACHE=out;
   SEMANA_AGG_CACHE_MAP.set(cacheKey,out); while(SEMANA_AGG_CACHE_MAP.size>8)SEMANA_AGG_CACHE_MAP.delete(SEMANA_AGG_CACHE_MAP.keys().next().value);
   return out;
@@ -1756,9 +1821,10 @@ function renderSemana(rows){
   if(!rows.length){ box.innerHTML='<div class="empty">Nenhum registro para o filtro atual.</div>'; return; }
   const {weeks,data}=semanaAgg(rows);
   const global=[]; data.forEach(g=>g.list.forEach(m=>global.push(m))); global.sort(resumoRankCmp);
-  const ranked=global.filter(resumoRankElegivel);
-  const bestEligible=ranked.filter(resumoRankMelhorElegivel);
-  ranked.forEach((m,i)=>{m._rankPos=i+1;m._rankTotal=ranked.length;});
+  // Ranking é por motorista único. Se ele passou por mais de uma operação, a capa usada no ranking é a de maior atividade.
+  const ranked=resumoRankUnique(global.filter(resumoRankElegivel)).sort(resumoRankCmp);
+  const bestEligible=ranked.filter(resumoRankMelhorElegivel).sort(resumoRankCmp);
+  [...ranked].sort((a,b)=>resumoRankCmp(b,a)).forEach((m,i)=>{m._rankPos=i+1;m._rankTotal=ranked.length;});
   global.filter(m=>!resumoRankElegivel(m)).forEach(m=>{m._rankPos=null;m._rankTotal=ranked.length;});
   let chosen=null;
   if(SEMANA_RANK_MODE==='worst') chosen=new Set(ranked.slice(0,10));
@@ -1788,13 +1854,14 @@ function capinha(m,weeks){
   const alR = m._alR || alertasResumo(m.nome,rng); const totAl = alR.total;
   const multaTot = m._multaTot!=null ? m._multaTot : (MULTAS_N ? multasCondutaMotoristaCount(m.nome,rng) : 0);
   const rankOk=resumoRankElegivel(m), bestOk=resumoRankMelhorElegivel(m);
-  const rankColor=rankOk?FAROL_COR[m.farolUlt]:'#cbd5e1';
-  const rankTitle=rankOk?(`Risco: ${(m.risco&&m.risco.cls)||'—'}${m.risco&&m.risco.reasons.length?' — '+m.risco.reasons.join(' · '):' — sem sinais'}`):'Não elegível para ranking: sem movimentação no período';
+  const rankColor=rankOk?(m._rankScore>=80?'var(--good)':m._rankScore>=60?'var(--warning)':'var(--critical)'):'#cbd5e1';
+  const rankTitle=rankOk?(`Nota ranking ${Math.round(m._rankScore||0)}/100 · ${m._rankScoreTitle||''}`):'Não elegível para ranking: sem movimentação no período';
   const alBadges = alR.badges.slice(0,3).map(b=>`<span class="abadge ${b.hot?'hot':''}" title="${b.lab}">${b.ic}${b.n}</span>`).join('') || '<span class="abadge ok">sem alertas</span>';
   return `<button class="capinha" data-mot="${encodeURIComponent(m.nome)}">
     <div class="cap-top">
       <span class="avatar" style="background:${rankColor}">${iniciais(m.nome)}</span>
       <div class="cap-id"><b>${firstName(m.nome)}</b><small>${tempoDeCasa(m.admissao)} de casa</small></div>
+      ${rankOk?`<span class="rank-score ${m._rankScore>=80?'good':m._rankScore>=60?'warn':'bad'}" title="${String(m._rankScoreTitle||'').replace(/"/g,'&quot;')}"><small>Nota</small><b>${Math.round(m._rankScore||0)}</b></span>`:''}
       <span class="fdot" title="${rankTitle}" style="background:${rankColor}"></span>
     </div>
     <div class="cap-metrics">
@@ -1806,7 +1873,7 @@ function capinha(m,weeks){
     </div>
     <div class="cap-foot">
       ${strip}
-      <span class="cap-alerts">${!rankOk?'<span class="abadge pend" title="Sem movimentação no período">não elegível · sem movimentação</span>':(m.pend>0?`<span class="abadge pend" title="pendências (falta dado)">⚠ ${m.pend} pend.</span>`:(!bestOk&&SEMANA_RANK_MODE==='all'?'<span class="abadge pend" title="Tem movimentação, mas faltam dados completos para concorrer entre os melhores">elegível p/ risco · incompleto p/ melhores</span>':alBadges))}</span>
+      <span class="cap-alerts">${!rankOk?'<span class="abadge pend" title="Sem movimentação no período">não elegível · sem movimentação</span>':(m.pend>0?`<span class="abadge pend" title="pendências (falta dado)">⚠ ${m.pend} pend.</span>`:(!bestOk&&SEMANA_RANK_MODE==='all'?'<span class="abadge pend" title="Para os melhores: exige amostra mínima de movimentação, ponto, jornada e identificação completos">elegível p/ risco · incompleto p/ melhores</span>':alBadges))}</span>
     </div>
     <span class="cap-cta">ver detalhamento →</span>
   </button>`;
@@ -1911,13 +1978,15 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
       : `<div class="tl-head"><div class="who"><b>${g.label}</b><small>${[...placas].join(', ')||'—'}</small></div>${meta}</div>`;
     return `<div class="card wtl-card">${head}
       <div class="wtl" id="${id}">
-        ${feriasDays.length?`<div class="vac-ribbon" title="Motorista com férias no período"><span>FÉRIAS</span></div>`:''}
         <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
-        <div class="track"><span class="tlab">Ponto</span><div class="lane lane-pt" data-k="ponto"></div></div>
-        <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
-        ${(ident.length||feriasDays.length)?`<div class="track"><span class="tlab">Identificação</span><div class="lane" data-k="ident"></div></div>`:''}
-        ${(alertas.length||feriasDays.length)?`<div class="track"><span class="tlab">Alertas</span><div class="lane lane-al" data-k="alertas"></div></div>`:''}
+        <div class="wtl-tracks">
+          ${feriasDays.length?`<div class="vac-ribbon" title="Motorista com férias no período"><span>FÉRIAS</span></div>`:''}
+          <div class="track"><span class="tlab">Ponto</span><div class="lane lane-pt" data-k="ponto"></div></div>
+          <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
+          ${(ident.length||feriasDays.length)?`<div class="track"><span class="tlab">Identificação</span><div class="lane" data-k="ident"></div></div>`:''}
+          ${(alertas.length||feriasDays.length)?`<div class="track"><span class="tlab">Alertas</span><div class="lane lane-al" data-k="alertas"></div></div>`:''}
+        </div>
         ${multas.length?`<div class="track"><span class="tlab">Multas (${multas.length})</span><div class="lane lane-multa" data-k="multas"></div></div>`:''}
       </div>
       <div class="wtl-hint">🖱️ role o mouse sobre a linha para <b>zoom</b> (${zoomTxt}) · arraste p/ navegar · duplo-clique reseta</div>
