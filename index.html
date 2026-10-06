@@ -520,9 +520,9 @@
         <div class="sem-rankseg" id="semRankSeg" role="group" aria-label="Filtro do ranking semanal">
           <button type="button" class="active" data-rank="all">Todos</button>
           <button type="button" data-rank="worst">10 piores</button>
-          <button type="button" data-rank="best">10 melhores</button>
+          <button type="button" data-rank="best">20 melhores</button>
         </div>
-        <span class="sem-rankhint">ordem padrão: pior → melhor · farol + aderência + fora da jornada + identificação + alertas + multas</span>
+        <span class="sem-rankhint">ranking exige movimentação · 10 piores: atividade real · 20 melhores: atividade + ponto + identificação completos</span>
       </div>
       <div class="legend">
         <span class="lg"><b>Farol de risco (composto):</b></span>
@@ -1692,16 +1692,31 @@ function riscoComposto(m, alR){
    RENDER — RESUMO SEMANAL (Capivara: por operação + farol)
    ============================================================ */
 let SEMANA_RANK_MODE='all';
+// Ranking rigoroso: ausência de atividade não é bom desempenho.
+function resumoRankElegivel(m){ return !!m && ((m.mov||0)>0 || (m._movDays||0)>0); }
+function resumoRankMelhorElegivel(m){
+  return resumoRankElegivel(m) && (m.ponto||0)>0 && m.aj!=null && m.ident!=null && (m.pend||0)===0;
+}
 function resumoRankCmp(a,b){
+  const ea=resumoRankElegivel(a), eb=resumoRankElegivel(b);
+  // No modo Todos, quem não dirigiu fica fora da classificação, depois dos ranqueáveis.
+  if(ea!==eb) return ea?-1:1;
+  if(!ea&&!eb) return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
+  // Falta de evidência em quem dirigiu é risco, nunca benefício.
+  const aMiss=((a.ponto||0)<=0?1:0)+(a.aj==null?1:0)+(a.ident==null?1:0)+((a.pend||0)>0?1:0);
+  const bMiss=((b.ponto||0)<=0?1:0)+(b.aj==null?1:0)+(b.ident==null?1:0)+((b.pend||0)>0?1:0);
+  let d=bMiss-aMiss; if(d)return d;
   const rk={vermelho:0,amarelo:1,verde:2};
-  let d=(rk[(a.risco&&a.risco.cls)||'verde']??2)-(rk[(b.risco&&b.risco.cls)||'verde']??2); if(d)return d;
+  d=(rk[(a.risco&&a.risco.cls)||'verde']??2)-(rk[(b.risco&&b.risco.cls)||'verde']??2); if(d)return d;
   d=((b.risco&&b.risco.n)||0)-((a.risco&&a.risco.n)||0); if(d)return d;
   const ah=(a._alR&&a._alR.velocidade&&a._alR.velocidade.alto)||0, bh=(b._alR&&b._alR.velocidade&&b._alR.velocidade.alto)||0; d=bh-ah; if(d)return d;
-  const aaj=a.aj==null?101:a.aj, baj=b.aj==null?101:b.aj; d=aaj-baj; if(d)return d;
+  const aaj=a.aj==null?-1:a.aj, baj=b.aj==null?-1:b.aj; d=aaj-baj; if(d)return d;
   d=(b.ddReal||0)-(a.ddReal||0); if(d)return d;
-  const aid=a.ident==null?101:a.ident, bid=b.ident==null?101:b.ident; d=aid-bid; if(d)return d;
+  const aid=a.ident==null?-1:a.ident, bid=b.ident==null?-1:b.ident; d=aid-bid; if(d)return d;
   d=(b._multaTot||0)-(a._multaTot||0); if(d)return d;
   d=((b._alR&&b._alR.total)||0)-((a._alR&&a._alR.total)||0); if(d)return d;
+  // Em empate, mais dias reais de condução fica melhor (vem depois no pior→melhor).
+  d=(a._movDays||0)-(b._movDays||0); if(d)return d;
   return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
 }
 function semanaAgg(rows){
@@ -1715,8 +1730,9 @@ function semanaAgg(rows){
     if(r.semKey && !wkMap[r.semKey]) wkMap[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};
     const op=r.operacao||'—'; const og=(opMap[op]=opMap[op]||{op,dd:0,motsDedo:new Set(),mots:Object.create(null),opRows:[]});
     og.opRows.push(r); og.dd+=(r.ddReal||0); if((r.ddReal||0)>0)og.motsDedo.add(r.motoristaEscala);
-    const mn=r.motoristaEscala||'—'; const m=(og.mots[mn]=og.mots[mn]||{nome:mn,placa:'',dd:0,ddReal:0,dias:0,mov:0,ponto:0,km:0,litros:0,semanas:{},semelSum:0,semelN:0,recs:[],idDiv:0,pend:0});
+    const mn=r.motoristaEscala||'—'; const m=(og.mots[mn]=og.mots[mn]||{nome:mn,placa:'',dd:0,ddReal:0,dias:0,mov:0,ponto:0,km:0,litros:0,semanas:{},semelSum:0,semelN:0,recs:[],idDiv:0,pend:0,_movDaySet:new Set(),_movDays:0});
     m.dd+=r.horasDedoDuro; m.ddReal+=(r.ddReal||0); if(r.horasDedoDuro>0)m.dias++; m.mov+=r.horasMov; m.ponto+=r.horasPonto; m.km+=r.km||0; m.litros+=r.litros||0; if(r.placa)m.placa=r.placa;
+    if((r.horasMov||0)>0 || (r.mov&&r.mov.length)){ m._movDaySet.add(r.data); m._movDays=m._movDaySet.size; }
     m.semanas[r.semKey]=(m.semanas[r.semKey]||0)+(r.ddReal||0);
     if(r.semelhanca!=null){m.semelSum+=r.semelhanca;m.semelN++;}
     m.recs.push(r); if(r.idDivergente)m.idDiv++; if(r.sev==='pendente')m.pend++;
@@ -1740,17 +1756,21 @@ function renderSemana(rows){
   if(!rows.length){ box.innerHTML='<div class="empty">Nenhum registro para o filtro atual.</div>'; return; }
   const {weeks,data}=semanaAgg(rows);
   const global=[]; data.forEach(g=>g.list.forEach(m=>global.push(m))); global.sort(resumoRankCmp);
-  global.forEach((m,i)=>{m._rankPos=i+1;m._rankTotal=global.length;});
+  const ranked=global.filter(resumoRankElegivel);
+  const bestEligible=ranked.filter(resumoRankMelhorElegivel);
+  ranked.forEach((m,i)=>{m._rankPos=i+1;m._rankTotal=ranked.length;});
+  global.filter(m=>!resumoRankElegivel(m)).forEach(m=>{m._rankPos=null;m._rankTotal=ranked.length;});
   let chosen=null;
-  if(SEMANA_RANK_MODE==='worst') chosen=new Set(global.slice(0,10));
-  else if(SEMANA_RANK_MODE==='best') chosen=new Set(global.slice(-10));
+  if(SEMANA_RANK_MODE==='worst') chosen=new Set(ranked.slice(0,10));
+  else if(SEMANA_RANK_MODE==='best') chosen=new Set(bestEligible.slice(-20));
   const bestMode=SEMANA_RANK_MODE==='best';
   const html=[];
   data.forEach(g=>{
     let vis=chosen?g.list.filter(m=>chosen.has(m)):g.list.slice();
     if(bestMode)vis.sort((a,b)=>resumoRankCmp(b,a)); else vis.sort(resumoRankCmp);
     if(!vis.length)return;
-    const note=chosen?`<span class="op-ranknote">${vis.length} selecionado(s) de ${g.list.length}</span>`:'';
+    const eligOp=g.list.filter(resumoRankElegivel).length;
+    const note=chosen?`<span class="op-ranknote">${vis.length} selecionado(s) · ${eligOp} elegível(is) de ${g.list.length}</span>`:'';
     html.push(`<div class="card op-block">
       <div class="op-head"><h3>${g.op}${note}</h3>
         <div class="op-kpi"><span style="color:${ajColor(g.aj)}">${g.aj==null?'—':g.aj+'%'}</span> aderência de jornada · ${hDec(g.dd)} fora da jornada · <b>${g.motsDedo}</b> motorista(s) · ${g.list.length} no total</div></div>
@@ -1767,12 +1787,15 @@ function capinha(m,weeks){
   const rng=activeRange();
   const alR = m._alR || alertasResumo(m.nome,rng); const totAl = alR.total;
   const multaTot = m._multaTot!=null ? m._multaTot : (MULTAS_N ? multasCondutaMotoristaCount(m.nome,rng) : 0);
+  const rankOk=resumoRankElegivel(m), bestOk=resumoRankMelhorElegivel(m);
+  const rankColor=rankOk?FAROL_COR[m.farolUlt]:'#cbd5e1';
+  const rankTitle=rankOk?(`Risco: ${(m.risco&&m.risco.cls)||'—'}${m.risco&&m.risco.reasons.length?' — '+m.risco.reasons.join(' · '):' — sem sinais'}`):'Não elegível para ranking: sem movimentação no período';
   const alBadges = alR.badges.slice(0,3).map(b=>`<span class="abadge ${b.hot?'hot':''}" title="${b.lab}">${b.ic}${b.n}</span>`).join('') || '<span class="abadge ok">sem alertas</span>';
   return `<button class="capinha" data-mot="${encodeURIComponent(m.nome)}">
     <div class="cap-top">
-      <span class="avatar" style="background:${FAROL_COR[m.farolUlt]}">${iniciais(m.nome)}</span>
+      <span class="avatar" style="background:${rankColor}">${iniciais(m.nome)}</span>
       <div class="cap-id"><b>${firstName(m.nome)}</b><small>${tempoDeCasa(m.admissao)} de casa</small></div>
-      <span class="fdot" title="Risco: ${(m.risco&&m.risco.cls)||'—'}${m.risco&&m.risco.reasons.length?' — '+m.risco.reasons.join(' · '):' — sem sinais'}" style="background:${FAROL_COR[m.farolUlt]}"></span>
+      <span class="fdot" title="${rankTitle}" style="background:${rankColor}"></span>
     </div>
     <div class="cap-metrics">
       <div class="cm"><span>Identif.</span><b class="${m.ident==null?'':(m.ident>=CFG.sem?'ok':'bad')}">${m.ident==null?'—':m.ident+'%'}</b></div>
@@ -1783,7 +1806,7 @@ function capinha(m,weeks){
     </div>
     <div class="cap-foot">
       ${strip}
-      <span class="cap-alerts">${m.pend>0?`<span class="abadge pend" title="pendências (falta dado)">⚠ ${m.pend} pend.</span>`:alBadges}</span>
+      <span class="cap-alerts">${!rankOk?'<span class="abadge pend" title="Sem movimentação no período">não elegível · sem movimentação</span>':(m.pend>0?`<span class="abadge pend" title="pendências (falta dado)">⚠ ${m.pend} pend.</span>`:(!bestOk&&SEMANA_RANK_MODE==='all'?'<span class="abadge pend" title="Tem movimentação, mas faltam dados completos para concorrer entre os melhores">elegível p/ risco · incompleto p/ melhores</span>':alBadges))}</span>
     </div>
     <span class="cap-cta">ver detalhamento →</span>
   </button>`;
