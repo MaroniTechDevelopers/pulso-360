@@ -527,7 +527,7 @@
         <div class="sem-rankseg" id="semRankSeg" role="group" aria-label="Filtro do ranking semanal">
           <button type="button" class="active" data-rank="all">Todos</button>
           <button type="button" data-rank="worst">10 piores</button>
-          <button type="button" data-rank="best">20 melhores</button>
+          <button type="button" data-rank="best">10 melhores</button>
         </div>
         <span class="sem-rankhint">nota 0–100 · identificação + jornada + ponto + alertas + multas + descanso + hora extra + média · sem movimentação não ranqueia</span>
       </div>
@@ -1828,7 +1828,7 @@ function renderSemana(rows){
   global.filter(m=>!resumoRankElegivel(m)).forEach(m=>{m._rankPos=null;m._rankTotal=ranked.length;});
   let chosen=null;
   if(SEMANA_RANK_MODE==='worst') chosen=new Set(ranked.slice(0,10));
-  else if(SEMANA_RANK_MODE==='best') chosen=new Set(bestEligible.slice(-20));
+  else if(SEMANA_RANK_MODE==='best') chosen=new Set(bestEligible.slice(-10));
   const bestMode=SEMANA_RANK_MODE==='best';
   const html=[];
   data.forEach(g=>{
