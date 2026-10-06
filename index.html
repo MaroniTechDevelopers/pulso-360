@@ -1783,6 +1783,36 @@ function resumoRankCmp(a,b){
 function resumoRankUnique(list){
   const mp=new Map(); for(const m of (list||[])){const k=norm(m.nome||'');if(!k)continue;const prev=mp.get(k);const hm=m.mov||0;const hp=prev&&(prev.mov||0);if(!prev||hm>hp)mp.set(k,m);} return [...mp.values()];
 }
+// Quando o filtro resolve para um único motorista, consolida todas as operações em uma única capa.
+// Isso evita duplicar o mesmo condutor em blocos diferentes e mantém os KPIs no mesmo universo filtrado.
+function resumoMotoristaConsolidado(ms, rows){
+  ms=ms||[]; rows=rows||[]; if(!ms.length||!rows.length)return ms[0]||null;
+  const nome=(rows[0]&&rows[0].motoristaEscala)||(ms[0]&&ms[0].nome)||'—';
+  const audit=auditMetrics(rows), semanas=Object.create(null), placas=new Set(), ops=new Set();
+  let dd=0,ddReal=0,litros=0,idDiv=0,pend=0;
+  for(const r of rows){
+    if(r.semKey)semanas[r.semKey]=(semanas[r.semKey]||0)+(r.ddReal||0);
+    dd+=r.horasDedoDuro||0; ddReal+=r.ddReal||0; litros+=+r.litros||0;
+    if(r.placa)placas.add(r.placa); if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
+    if(r.idDivergente)idDiv++; if(r.sev==='pendente')pend++;
+  }
+  const p=(ms.find(x=>x&&x._rankProfile)||{})._rankProfile||null;
+  const d=drv(nome), ab=ABAST&&ABAST[norm(nome)];
+  const media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(litros>0?audit.km/litros:(p&&p.media!=null?p.media:d.media)));
+  const placa=[...placas][0]||'', opList=[...ops], meta=(p&&p.meta!=null)?p.meta:metaVeic(placa,opList[0]||'');
+  const alR=alertasResumo(nome,activeRange());
+  const multaTot=MULTAS_N?multasCondutaMotoristaCount(nome,activeRange()):0;
+  const m={
+    nome,placa,op:opList.join(' / ')||'—',operacoes:opList,
+    dd,ddReal,dias:0,mov:audit.hCond,ponto:audit.hPonto,km:audit.km,litros,semanas,
+    media,meta,alertas:d.alertas||{},admissao:admissaoDe(nome),semel:null,
+    ident:aderRecs(rows),aj:aderJornada(rows),idDiv,pend,recs:rows.slice(),
+    _movDays:audit.diasMov,_alR:alR,_multaTot:multaTot,
+    _rankProfile:p,_rankScore:p?p.score:null,_rankScoreTitle:p?p.scoreTitle:''
+  };
+  m.risco=riscoComposto(m,alR); m.farolUlt=m.risco.cls;
+  return m;
+}
 function semanaAgg(rows){
   const cacheKey=(rows===FILTER_CACHE_ROWS?FILTER_CACHE_KEY:('rows:'+rows.length+':'+DATA_REV))+'|semana|M'+MULTAS_REV;
   if(SEMANA_AGG_CACHE_MAP.has(cacheKey)){
@@ -1830,6 +1860,22 @@ function renderSemana(rows){
   if(SEMANA_RANK_MODE==='worst') chosen=new Set(ranked.slice(0,10));
   else if(SEMANA_RANK_MODE==='best') chosen=new Set(bestEligible.slice(-10));
   const bestMode=SEMANA_RANK_MODE==='best';
+
+  // Filtro explícito de motorista: uma única capa consolidada, mesmo que tenha rodado em várias operações.
+  const motFiltro=$('#fMot').value.trim(), motNomes=[...new Set((rows||[]).map(r=>r._nMot||norm(r.motoristaEscala||'')).filter(Boolean))];
+  if(motFiltro && motNomes.length===1){
+    const nk=motNomes[0], partes=global.filter(m=>norm(m.nome||'')===nk), recsMot=(rows||[]).filter(r=>(r._nMot||norm(r.motoristaEscala||''))===nk);
+    const mot=resumoMotoristaConsolidado(partes,recsMot);
+    if(mot){
+      const ops=(mot.operacoes&&mot.operacoes.length)?mot.operacoes.join(' · '):'—';
+      box.innerHTML=`<div class="card op-block motorista-unico">
+        <div class="op-head"><h3>Motorista selecionado</h3><div class="op-kpi">Operação${mot.operacoes&&mot.operacoes.length>1?'(ões)':''}: <b>${ops}</b> · indicadores consolidados do período filtrado</div></div>
+        <div class="capgrid">${capinha(mot,weeks)}</div>
+      </div>`;
+      return;
+    }
+  }
+
   const html=[];
   data.forEach(g=>{
     let vis=chosen?g.list.filter(m=>chosen.has(m)):g.list.slice();
