@@ -2005,7 +2005,7 @@ function timelineDriversFromRecs(recs){
     const ss=(r.segs||[]).filter(x=>x&&x.motorista&&x.ini!=null&&x.fim!=null);
     if(ss.length)ss.forEach(x=>actual.set(norm(x.motorista),x.motorista));
     else if(r.trimbleMot)actual.set(norm(r.trimbleMot),r.trimbleMot);
-    if(r.idDivergente||r.condutorDivergente)divergence=true;
+    if(r.idDivergente)divergence=true;
   });
   const unexpected=[...actual.keys()].some(k=>!expected.has(k));
   if(unexpected)divergence=true;
@@ -2108,7 +2108,7 @@ function buildPlacaCards(placaQ, prefix, cap){
     const camSegs=(r.segs||[]).filter(s=>s&&s.motorista&&s.ini!=null&&s.fim!=null);
     camSegs.forEach(s=>g.cam.push({ini:s.ini,fim:s.fim,drv:s.motorista,div:norm(s.motorista)!==norm(r.motoristaEscala),who:s.motorista}));
     r.mov.forEach(s=>{ let drv=r.trimbleMot||r.motoristaEscala; if(camSegs.length){ const mid=(s.ini+s.fim)/2, hit=camSegs.find(c=>mid>=c.ini&&mid<=c.fim)||camSegs.find(c=>Math.max(c.ini,s.ini)<Math.min(c.fim,s.fim)); if(hit)drv=hit.motorista; } g.id.push({ini:s.ini,fim:s.fim,km:s.km||0,drv,div:idDiv,who:idWho}); });
-    if(idDiv||r.condutorDivergente)g.div=true;
+    if(idDiv)g.div=true;
     if(!MOV_UNSEG_STORE&&r.movUnid)r.movUnid.forEach(s=>g.un.push([s.ini,s.fim])); }); });
   // sem identificação (do store por placa|dia — inclui placas sem NENHUM condutor identificado)
   if(MOV_UNSEG_STORE){ for(const key in MOV_UNSEG_STORE){ const i=key.indexOf('|'), pk=key.slice(0,i), d=key.slice(i+1); if(!pk.includes(pk0)) continue; if(!passDia(d)) continue; if(op){ const o=operacaoDaPlaca(pk); if(o && o!==op) continue; } const g=getPD(pk,d); MOV_UNSEG_STORE[key].forEach(s=>g.un.push(s)); } }
