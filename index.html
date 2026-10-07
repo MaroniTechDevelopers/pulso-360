@@ -3882,7 +3882,9 @@ async function accMovTextAsync(text, movRaw, roster){
 function finalizeRecords(jor, movRaw, movRows, pontoRows){
   const {roster,opBy}=jor; const shifts=(jor.shifts||[]).slice();
   JORNADA_FERIAS=Object.assign({},jor.ferias||{});
-  const GAP=Math.max(CFG.movMin,10), H=3600000;
+  // A movimentacao da Trimble e tratada como fonte temporal precisa: nao preenchemos lacunas entre eventos.
+  // CFG.movMin continua valendo para regras/alertas, mas nao para alongar ou unir trechos de conducao.
+  const H=3600000;
   const byDrv={};
   shifts.forEach(sh=>{ sh.baseTs=Date.parse(sh.data); sh.startTs=sh.baseTs+sh.startAbs*60000; sh.endTs=sh.baseTs+sh.endAbs*60000; (byDrv[sh.nn]=byDrv[sh.nn]||[]).push(sh); });
   for(const nn in byDrv){ const L=byDrv[nn].sort((a,b)=>a.startTs-b.startTs);
@@ -3918,10 +3920,25 @@ function finalizeRecords(jor, movRaw, movRows, pontoRows){
   } }
 
   function mergeAssigned(sh){
-    const arr=(sh.assigned||[]).map(s=>({ini:Math.round((s.tsIni-sh.baseTs)/60000),fim:Math.round((s.tsFim-sh.baseTs)/60000),km:s.km,litros:s.litros,placa:s.placa,tsIni:s.tsIni,tsFim:s.tsFim})).sort((a,b)=>a.ini-b.ini);
-    const merged=[]; arr.forEach(s=>{ const last=merged[merged.length-1];
-      if(last && s.ini-last.fim<=GAP){ last.fim=Math.max(last.fim,s.fim); last.tsFim=Math.max(last.tsFim,s.tsFim); last.km+=s.km; last.litros+=s.litros; if(s.placa&&last.placas.indexOf(s.placa)<0)last.placas.push(s.placa); }
-      else merged.push({ini:s.ini,fim:s.fim,tsIni:s.tsIni,tsFim:s.tsFim,km:s.km,litros:s.litros,placas:s.placa?[s.placa]:[]}); });
+    const arr=(sh.assigned||[])
+      .map(s=>({ini:Math.round((s.tsIni-sh.baseTs)/60000),fim:Math.round((s.tsFim-sh.baseTs)/60000),km:+s.km||0,litros:+s.litros||0,placa:placaKey(s.placa||''),tsIni:s.tsIni,tsFim:s.tsFim}))
+      .filter(s=>s.fim>=s.ini)
+      .sort((a,b)=>a.ini-b.ini||a.fim-b.fim||a.placa.localeCompare(b.placa));
+    const merged=[], seen=new Set();
+    arr.forEach(s=>{
+      // Elimina repeticao exata da mesma linha de movimento sem alterar eventos distintos.
+      const sig=s.placa+'|'+s.ini+'|'+s.fim+'|'+s.km+'|'+s.litros;
+      if(seen.has(sig))return; seen.add(sig);
+      const last=merged[merged.length-1];
+      const mesmaPlaca=!!(last&&last.placas&&last.placas.length===1&&last.placas[0]===s.placa);
+      // So une quando e a MESMA placa e os eventos se tocam ou se sobrepoem.
+      // Qualquer lacuna, mesmo de 1 minuto, permanece visivel e fora de H Conducao.
+      if(last && mesmaPlaca && s.ini<=last.fim){
+        last.fim=Math.max(last.fim,s.fim); last.tsFim=Math.max(last.tsFim,s.tsFim); last.km+=s.km; last.litros+=s.litros;
+      } else {
+        merged.push({ini:s.ini,fim:s.fim,tsIni:s.tsIni,tsFim:s.tsFim,km:s.km,litros:s.litros,placas:s.placa?[s.placa]:[]});
+      }
+    });
     return merged;
   }
 
@@ -3935,7 +3952,7 @@ function finalizeRecords(jor, movRaw, movRows, pontoRows){
     const d1=Date.UTC(new Date(sh.scopeHi).getUTCFullYear(),new Date(sh.scopeHi).getUTCMonth(),new Date(sh.scopeHi).getUTCDate());
     placas.forEach(p=>{ for(let day=d0;day<=d1;day+=86400000){ const iso=new Date(day).toISOString().slice(0,10), arr=MOV_UNSEG[placaKey(p)+'|'+iso]; if(!arr) continue;
       arr.forEach(x=>{ const a=day+x[0]*60000,b=day+x[1]*60000,mid=(a+b)/2; if(mid>=sh.scopeLo&&mid<sh.scopeHi) un.push([Math.round((a-sh.baseTs)/60000),Math.round((b-sh.baseTs)/60000)]); }); } });
-    un.sort((a,b)=>a[0]-b[0]); const mu=[]; un.forEach(x=>{ const last=mu[mu.length-1]; if(last&&x[0]-last[1]<=GAP) last[1]=Math.max(last[1],x[1]); else mu.push(x.slice()); });
+    un.sort((a,b)=>a[0]-b[0]); const mu=[]; un.forEach(x=>{ const last=mu[mu.length-1]; if(last&&x[0]<=last[1]) last[1]=Math.max(last[1],x[1]); else mu.push(x.slice()); });
     const movUnid=mu.map(x=>({ini:hm(x[0]),fim:hm(x[1])}));
 
     records.push({ operacao:(opBy[sh.nn]||''), data:sh.data, placa:placas[0]||'', placas, motoristaEscala:sh.nome,
@@ -3952,8 +3969,9 @@ function finalizeRecords(jor, movRaw, movRows, pontoRows){
   if(!records.length){ toast('Não consegui cruzar — confira as colunas na aba Dados'); return; }
   MOV_N=movRows;
   PLACA_MOV={}; for(const k in MOV_TOT){ const s=k.indexOf('|'), pk=k.slice(0,s), d=k.slice(s+1); const g=(PLACA_MOV[pk]=PLACA_MOV[pk]||{tot:0,idn:0,dias:0,diasId:0,ult:''}); g.tot+=MOV_TOT[k]; const idn=MOV_IDN[k]||0; g.idn+=idn; g.dias++; if(idn>0)g.diasId++; if(d>g.ult)g.ult=d; }
-  MOV_UNSEG_STORE={}; let unTot=0; const GAPU=Math.max(CFG.movMin,10);
-  for(const k in MOV_UNSEG){ if(unTot>25000) break; const arr=MOV_UNSEG[k].slice().sort((a,b)=>a[0]-b[0]); const m=[]; arr.forEach(s=>{ const last=m[m.length-1]; if(last && s[0]-last[1]<=GAPU) last[1]=Math.max(last[1],s[1]); else { m.push([s[0],s[1]]); unTot++; } }); if(m.length) MOV_UNSEG_STORE[k]=m; }
+  MOV_UNSEG_STORE={}; let unTot=0;
+  // Tambem preserva lacunas reais nos trechos sem identificacao; so consolida sobreposicao/continuidade exata.
+  for(const k in MOV_UNSEG){ if(unTot>25000) break; const arr=MOV_UNSEG[k].slice().sort((a,b)=>a[0]-b[0]); const m=[]; arr.forEach(s=>{ const last=m[m.length-1]; if(last && s[0]<=last[1]) last[1]=Math.max(last[1],s[1]); else { m.push([s[0],s[1]]); unTot++; } }); if(m.length) MOV_UNSEG_STORE[k]=m; }
   RAW={ schema:3, records, bases:{ponto:!!pontoRows,mov:!!movRows,trim:false}, counts:{ponto:pontoRows,mov:movRows,alertas:ALERTS_N}, ferias:Object.assign({},JORNADA_FERIAS), sourceCoverage:JSON.parse(JSON.stringify(SOURCE_COVERAGE)) };
   if(ALERTS) RAW.alertas=ALERTS; if(PLACA_UO) RAW.placaUO=PLACA_UO; if(PLACA_MOV) RAW.placaId=PLACA_MOV; if(MOV_UNSEG_STORE) RAW.movUnseg=MOV_UNSEG_STORE;
   REAL=true;
