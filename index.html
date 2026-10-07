@@ -182,10 +182,10 @@
   .track .lane{position:relative;flex:1;height:20px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;overflow:hidden}
   .lane .gl{position:absolute;top:0;bottom:0;width:1px;background:var(--grid);z-index:1}
   .lane .vac-bg{position:absolute;top:0;bottom:0;background:rgba(226,64,96,.12);border-left:1px solid rgba(226,64,96,.16);border-right:1px solid rgba(226,64,96,.16);pointer-events:none;z-index:0}
+  .lane .vac-label{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:9px;font-weight:800;letter-spacing:.06em;color:#a52f5d;background:#fff3f6;border:1px solid #f1c7d4;border-radius:999px;padding:0 7px;line-height:15px;white-space:nowrap;pointer-events:none;z-index:3}
   .wtl-tracks{position:relative}
   .wtl .vac-ribbon{position:absolute;right:-1px;top:5px;bottom:5px;width:38px;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:8;background:linear-gradient(180deg,#cf4275,#b92d61);border-radius:8px 0 0 8px;box-shadow:-3px 0 10px rgba(185,45,97,.18);overflow:visible}
-  .wtl .vac-ribbon:before,.wtl .vac-ribbon:after{content:'';position:absolute;left:-9px;width:0;height:0;border-right:9px solid #c4396d;border-top:9px solid transparent;border-bottom:9px solid transparent}
-  .wtl .vac-ribbon:before{top:0}.wtl .vac-ribbon:after{bottom:0}
+  .wtl .vac-ribbon:before,.wtl .vac-ribbon:after{content:none}
   .wtl .vac-ribbon span{position:static;display:block;width:auto;padding:0;background:none;box-shadow:none;font-size:10px;font-weight:850;letter-spacing:.12em;color:#fff;writing-mode:vertical-rl;transform:rotate(180deg);text-align:center}
   .lane .seg{z-index:2}
   .seg{position:absolute;top:2px;bottom:2px;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;font-size:10px;font-weight:600;color:#fff;padding:0 5px;min-width:2px}
@@ -2300,11 +2300,13 @@ function renderZoom(id){
   }
   const vacBg=()=>{ let out=''; for(const d of (st.ferias||[])){ const di=Math.round((Date.parse(d)-Date.parse(st.weekStart))/86400000), a=di*1440, b=a+1440, l=pos(a), r=pos(b); if(r<0||l>100)continue; const L=Math.max(0,l),R=Math.min(100,r); if(R>L)out+=`<div class="vac-bg" style="left:${L}%;width:${R-L}%" title="Férias · ${brDate(d)}"></div>`; } return out; };
   const vacationBg=vacBg();
+  // rótulo "FÉRIAS" centralizado no próprio dia (fica claro que é férias, não falta de dado) — some quando o dia fica muito estreito (zoom-out)
+  const vacLbl=()=>{ let out=''; for(const d of (st.ferias||[])){ const di=Math.round((Date.parse(d)-Date.parse(st.weekStart))/86400000), a=di*1440, b=a+1440, l=pos(a), r=pos(b); if(r<0||l>100)continue; const L=Math.max(0,l),R=Math.min(100,r); if(R-L>=4) out+=`<span class="vac-label" style="left:${(L+R)/2}%" title="Férias · ${brDate(d)}">🏖️ FÉRIAS</span>`; } return out; };
   const seg=(cls,a,b,lab,extra,ttl,styleExtra)=>{ const l=pos(a),r=pos(b); if(r<0||l>100) return ''; const L=Math.max(l,0),W=Math.max(Math.min(r,100)-L,0.3); return `<div class="seg ${cls} ${extra||''}" style="left:${L}%;width:${W}%;${styleExtra||''}" title="${ttl||lab||''}">${(r-l)>4?(lab||''):''}</div>`; };
   el.querySelector('.wtl-ruler').innerHTML=ruler;
   const laneP=el.querySelector('.lane[data-k="ponto"]');
   if(laneP){ const imk=(st.interj||[]).filter(s=>s.viol).map(s=>{ const p=pos(s.b); if(p<-1||p>101) return ''; const ttl='Interjornada '+hDec(s.min)+' (< 11h · CLT) · '+brDate(s.day); return `<span class="imark" style="left:${p}%" title="${ttl}"><i>🛌</i></span>`; }).join('');
-    laneP.innerHTML=vacationBg+gl+(st.ponto||[]).map(p=>seg('ponto',p[0],p[1],hm(p[0]%1440)+'–'+hm(p[1]%1440))).join('')+imk; }
+    laneP.innerHTML=vacationBg+gl+(st.ponto||[]).map(p=>seg('ponto',p[0],p[1],hm(p[0]%1440)+'–'+hm(p[1]%1440))).join('')+imk+vacLbl(); }
   const laneM=el.querySelector('.lane[data-k="mov"]');
   // Limpeza visual: conduções de até 1 minuto continuam nos dados/cálculos,
   // mas não são desenhadas na timeline para evitar microblocos sem valor analítico.
