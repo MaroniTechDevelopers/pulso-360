@@ -3916,7 +3916,11 @@ function finalizeRecords(jor, movRaw, movRows, pontoRows){
   }
   for(const nn in movRaw){ const L=byDrv[nn]||[], segs=(movRaw[nn].segs||[]).sort((a,b)=>a.tsIni-b.tsIni); for(const s of segs){
     const best=shiftForSegment(L,s);
-    if(best)best.assigned.push(s);else unassigned.push({nn,nome:movRaw[nn].nome,seg:s});
+    // Não absorver movimento de um dia ANTERIOR ao do shift: viraria tempo negativo e o analyze descartaria,
+    // fazendo o veículo "sumir". Vira "movimento sem ponto" no dia real (ex.: justificado mas dirigiu).
+    const segDay=new Date(s.tsIni).toISOString().slice(0,10);
+    if(best && segDay>=best.data) best.assigned.push(s);
+    else unassigned.push({nn,nome:movRaw[nn].nome,seg:s});
   } }
 
   function mergeAssigned(sh){
