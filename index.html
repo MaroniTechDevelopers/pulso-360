@@ -2194,7 +2194,7 @@ function buildPlacaCards(placaQ, prefix, cap){
     if(r.motoristaEscala)g.expected.set(norm(r.motoristaEscala),r.motoristaEscala);
     const camSegs=(r.segs||[]).filter(s=>s&&s.motorista&&s.ini!=null&&s.fim!=null);
     camSegs.forEach(s=>g.cam.push({ini:s.ini,fim:s.fim,drv:s.motorista,semelhanca:s.semelhanca,div:norm(s.motorista)!==norm(r.motoristaEscala),who:s.motorista}));
-    r.mov.forEach((s,ord)=>{ let drv=r.trimbleMot||r.motoristaEscala, hit=null; if(camSegs.length){ const mid=(s.ini+s.fim)/2; hit=camSegs.find(c=>mid>=c.ini&&mid<=c.fim)||camSegs.find(c=>Math.max(c.ini,s.ini)<Math.min(c.fim,s.fim)); if(hit)drv=hit.motorista; } const source=hit?'camera':(r.trimbleMot?'camera_resumo':'escala'); const semelhanca=hit?hit.semelhanca:r.semelhanca; g.id.push({ini:s.ini,fim:s.fim,km:s.km||0,drv,div:idDiv,who:idWho,source,semelhanca,_ord:ord}); });
+    r.mov.forEach((s,ord)=>{ if(!s.placa || !placaKey(s.placa).includes(pk0)) return; /* só os trechos DESTA placa (o registro do motorista pode ter 2+ placas no dia) */ let drv=r.trimbleMot||r.motoristaEscala, hit=null; if(camSegs.length){ const mid=(s.ini+s.fim)/2; hit=camSegs.find(c=>mid>=c.ini&&mid<=c.fim)||camSegs.find(c=>Math.max(c.ini,s.ini)<Math.min(c.fim,s.fim)); if(hit)drv=hit.motorista; } const source=hit?'camera':(r.trimbleMot?'camera_resumo':'escala'); const semelhanca=hit?hit.semelhanca:r.semelhanca; g.id.push({ini:s.ini,fim:s.fim,km:s.km||0,drv,div:idDiv,who:idWho,source,semelhanca,_ord:ord}); });
     if(idDiv)g.div=true;
     if(!MOV_UNSEG_STORE&&r.movUnid)r.movUnid.forEach(s=>g.un.push([s.ini,s.fim])); }); });
   // sem identificação (do store por placa|dia — inclui placas sem NENHUM condutor identificado)
