@@ -2015,7 +2015,7 @@ function timelineDriversFromRecs(recs){
 function timelineFilterOk(kind){ const el=$('#fCondTimeline'); const f=el?el.value:''; return !f||f===kind; }
 function driverLegendHtml(names,kind){
   const uniq=[]; const seen=new Set(); (names||[]).forEach(n=>{const k=norm(n);if(n&&k&&!seen.has(k)){seen.add(k);uniq.push(n);}});
-  const state=kind==='divergencia'?'<span class="driver-state divergencia">⚠ Divergência</span>':kind==='dupla'?'<span class="driver-state dupla">👥 Dupla identificada</span>':(uniq.length?'<span class="driver-state unico">● Motorista único</span>':'');
+  const state=kind==='divergencia'?'<span class="driver-state divergencia">⚠ Divergência</span>':kind==='dupla'?('<span class="driver-state dupla">👥 '+(uniq.length===2?'Dupla identificada':(uniq.length+' motoristas no período'))+'</span>'):(uniq.length?'<span class="driver-state unico">● Motorista único</span>':'');
   const chips=uniq.map(n=>`<span class="driver-chip"><i class="dot" style="--drv-color:${driverColor(n)}"></i>${firstName(n)}</span>`).join('');
   return (state||chips)?`<div class="driver-legend">${state}${chips}</div>`:'';
 }
@@ -2136,12 +2136,19 @@ function resolvePlateDirection(pd){
   const pts=[...cuts].sort((a,b)=>a-b), out=[];
   const ov=(s,a,b)=>Math.max(0,Math.min(s.fim,b)-Math.max(s.ini,a));
   const pickMov=(arr,a,b)=>{
-    const by=new Map();
-    arr.forEach(s=>{ const n=norm(s.drv||''); if(!n)return; const w=ov(s,a,b); if(w<=0)return; const x=by.get(n)||{drv:s.drv,w:0}; x.w+=w; by.set(n,x); });
-    const v=[...by.values()].sort((x,y)=>y.w-x.w);
-    if(!v.length) return '';
-    if(v.length>1 && Math.abs(v[0].w-v[1].w)<0.001) return '';
-    return v[0].drv;
+    // Fora de uma leitura pontual da camera, usa a melhor referencia disponivel
+    // do proprio registro da movimentacao. Nunca devolve "condutor nao confirmado"
+    // quando existe um motorista vinculado ao trecho.
+    const cand=[];
+    arr.forEach((s,i)=>{
+      const n=norm(s.drv||''); if(!n)return;
+      const w=ov(s,a,b); if(w<=0)return;
+      const pri=s.source==='camera_resumo'?2:1;
+      const conf=Number.isFinite(+s.semelhanca)?+s.semelhanca:-1;
+      cand.push({drv:s.drv,w,pri,conf,ord:Number.isFinite(+s._ord)?+s._ord:i});
+    });
+    cand.sort((x,y)=>y.pri-x.pri || y.conf-x.conf || y.w-x.w || y.ord-x.ord);
+    return cand.length?cand[0].drv:'';
   };
   for(let i=0;i+1<pts.length;i++){
     const a=pts[i], b=pts[i+1]; if(b<=a)continue;
@@ -2172,7 +2179,7 @@ function buildPlacaCards(placaQ, prefix, cap){
     if(r.motoristaEscala)g.expected.set(norm(r.motoristaEscala),r.motoristaEscala);
     const camSegs=(r.segs||[]).filter(s=>s&&s.motorista&&s.ini!=null&&s.fim!=null);
     camSegs.forEach(s=>g.cam.push({ini:s.ini,fim:s.fim,drv:s.motorista,semelhanca:s.semelhanca,div:norm(s.motorista)!==norm(r.motoristaEscala),who:s.motorista}));
-    r.mov.forEach(s=>{ let drv=r.trimbleMot||r.motoristaEscala; if(camSegs.length){ const mid=(s.ini+s.fim)/2, hit=camSegs.find(c=>mid>=c.ini&&mid<=c.fim)||camSegs.find(c=>Math.max(c.ini,s.ini)<Math.min(c.fim,s.fim)); if(hit)drv=hit.motorista; } g.id.push({ini:s.ini,fim:s.fim,km:s.km||0,drv,div:idDiv,who:idWho}); });
+    r.mov.forEach((s,ord)=>{ let drv=r.trimbleMot||r.motoristaEscala, hit=null; if(camSegs.length){ const mid=(s.ini+s.fim)/2; hit=camSegs.find(c=>mid>=c.ini&&mid<=c.fim)||camSegs.find(c=>Math.max(c.ini,s.ini)<Math.min(c.fim,s.fim)); if(hit)drv=hit.motorista; } const source=hit?'camera':(r.trimbleMot?'camera_resumo':'escala'); const semelhanca=hit?hit.semelhanca:r.semelhanca; g.id.push({ini:s.ini,fim:s.fim,km:s.km||0,drv,div:idDiv,who:idWho,source,semelhanca,_ord:ord}); });
     if(idDiv)g.div=true;
     if(!MOV_UNSEG_STORE&&r.movUnid)r.movUnid.forEach(s=>g.un.push([s.ini,s.fim])); }); });
   // sem identificação (do store por placa|dia — inclui placas sem NENHUM condutor identificado)
@@ -2184,7 +2191,7 @@ function buildPlacaCards(placaQ, prefix, cap){
     if(dayF){ start=pd.data; total=1440; label=brDate(pd.data); gk=pd.data; }
     else { const f=fechamento(pd.data)||{key:pd.data.slice(0,7),start:pd.data,end:pd.data,label:pd.data}; start=f.start; total=f.start?fechaMin(f):WEEK; label=f.label; gk=f.key; }
     const k=pd.placa+'|'+gk; const g=(grp[k]=grp[k]||{placa:pd.placa,start,total,label,days:[]}); g.days.push(pd); });
-  const groups=Object.values(grp).filter(g=>{ const actual=new Map(),expected=new Map(); let div=false; g.days.forEach(pd=>{pd.expected&&pd.expected.forEach((v,k)=>expected.set(k,v)); (pd.cam||[]).forEach(s=>actual.set(norm(s.drv),s.drv)); if(pd.div)div=true;}); const unexpected=[...actual.keys()].some(k=>!expected.has(k)); const kind=(div||unexpected)?'divergencia':(actual.size>=2?'dupla':'unico'); g._drvInfo={actual:[...actual.values()],expected:[...expected.values()],kind}; return timelineFilterOk(kind); }).sort((a,b)=> a.label<b.label?1:a.label>b.label?-1:a.placa.localeCompare(b.placa));
+  const groups=Object.values(grp).filter(g=>{ const actual=new Map(),expected=new Map(); let div=false; g.days.forEach(pd=>{pd.expected&&pd.expected.forEach((v,k)=>expected.set(k,v)); const src=(pd.cam&&pd.cam.length)?pd.cam:(pd.id||[]); src.forEach(s=>{if(s&&s.drv)actual.set(norm(s.drv),s.drv);}); if(pd.div)div=true;}); const unexpected=[...actual.keys()].some(k=>!expected.has(k)); const kind=(div||unexpected)?'divergencia':(actual.size>=2?'dupla':'unico'); g._drvInfo={actual:[...actual.values()],expected:[...expected.values()],kind}; return timelineFilterOk(kind); }).sort((a,b)=> a.label<b.label?1:a.label>b.label?-1:a.placa.localeCompare(b.placa));
   const shown=groups.slice(0,cap); const ids=[];
   const html=shown.map((g,idx)=>{
     const id=prefix+idx; ids.push(id); const mov=[],ident=[]; let km=0,idMin=0,unMin=0; const drivers=new Set(), dias=new Set();
@@ -2194,12 +2201,15 @@ function buildPlacaCards(placaQ, prefix, cap){
       const dirSegs=resolvePlateDirection(pd);
       dirSegs.forEach(s=>{
         if(s.drv)drivers.add(s.drv);
-        const lab=s.drv?(firstName(s.drv)+' · '+hm(s.ini%1440)+'–'+hm(s.fim%1440)):('condutor não confirmado · '+hm(s.ini%1440)+'–'+hm(s.fim%1440));
-        mov.push({a:off+s.ini,b:off+s.fim,km:0,drv:s.drv||'',color:s.drv?driverColor(s.drv):'',lab,unid:!!s.unid});
+        if(!s.drv)return;
+        const lab=firstName(s.drv)+' · '+hm(s.ini%1440)+'–'+hm(s.fim%1440);
+        mov.push({a:off+s.ini,b:off+s.fim,km:0,drv:s.drv,color:driverColor(s.drv),lab,unid:false});
       });
       const cams=resolvePlateCamera(pd);
       cams.forEach(s=>{ if(s.drv)drivers.add(s.drv); ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:s.drv,color:s.drv?driverColor(s.drv):'',div:false,who:s.who||s.drv}); idMin+=(s.fim-s.ini); });
-      pd.un.forEach(s=>{ mov.push({a:off+s[0],b:off+s[1],lab:'sem ID · '+hm(s[0]%1440)+'–'+hm(s[1]%1440),unid:true}); ident.push({a:off+s[0],b:off+s[1],ok:false}); unMin+=(s[1]-s[0]); });
+      // Movimento sem leitura de camera continua sinalizado somente na faixa de Identificacao.
+      // Nao cria um falso "condutor nao identificado" na faixa Direcao.
+      pd.un.forEach(s=>{ ident.push({a:off+s[0],b:off+s[1],ok:false}); unMin+=(s[1]-s[0]); });
     });
     ZTL[id]={weekStart:g.start, ponto:[], mov, alertas:[], ident, t0:0, t1:g.total, total:g.total};
     const ader = (idMin+unMin)>0? Math.round(idMin/(idMin+unMin)*100) : null;
