@@ -2091,6 +2091,41 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
   }).join('') + (groups.length>cap?`<div class="empty">Mostrando ${cap} de ${groups.length} ${noun} — filtre para focar.</div>`:'');
   return {html, ids};
 }
+// Normaliza a direção por placa/dia: um veículo só pode ter um condutor por instante.
+// A identificação da câmera tem prioridade. Se houver conflito sem evidência suficiente,
+// o trecho fica como "condutor não confirmado" em vez de exibir dois motoristas sobrepostos.
+function resolvePlateDirection(pd){
+  const raw=((pd&&pd.id)||[]).filter(s=>s&&Number.isFinite(+s.ini)&&Number.isFinite(+s.fim)&&+s.fim>+s.ini)
+    .map(s=>Object.assign({},s,{ini:+s.ini,fim:+s.fim}));
+  if(!raw.length) return [];
+  const cams=((pd&&pd.cam)||[]).filter(s=>s&&s.drv&&Number.isFinite(+s.ini)&&Number.isFinite(+s.fim)&&+s.fim>+s.ini)
+    .map(s=>Object.assign({},s,{ini:+s.ini,fim:+s.fim}));
+  const cuts=new Set();
+  raw.forEach(s=>{cuts.add(s.ini);cuts.add(s.fim);});
+  cams.forEach(s=>{cuts.add(s.ini);cuts.add(s.fim);});
+  const pts=[...cuts].sort((a,b)=>a-b), out=[];
+  const ov=(s,a,b)=>Math.max(0,Math.min(s.fim,b)-Math.max(s.ini,a));
+  const pick=(arr,a,b)=>{
+    const by=new Map();
+    arr.forEach(s=>{ const n=norm(s.drv||''); if(!n)return; const w=ov(s,a,b); if(w<=0)return; const x=by.get(n)||{drv:s.drv,w:0}; x.w+=w; by.set(n,x); });
+    const v=[...by.values()].sort((x,y)=>y.w-x.w);
+    if(!v.length) return '';
+    if(v.length>1 && Math.abs(v[0].w-v[1].w)<0.001) return ''; // conflito real: não escolhe arbitrariamente
+    return v[0].drv;
+  };
+  for(let i=0;i+1<pts.length;i++){
+    const a=pts[i], b=pts[i+1]; if(b<=a)continue;
+    const mov=raw.filter(s=>ov(s,a,b)>0); if(!mov.length)continue;
+    const cam=cams.filter(s=>ov(s,a,b)>0);
+    let drv=pick(cam,a,b);
+    if(!drv) drv=pick(mov,a,b);
+    const unid=!drv;
+    const last=out[out.length-1];
+    if(last && last.fim===a && norm(last.drv||'')===norm(drv||'') && !!last.unid===unid){ last.fim=b; continue; }
+    out.push({ini:a,fim:b,drv,unid,km:0});
+  }
+  return out;
+}
 // MODO PLACA: agrupa a linha do tempo por PLACA (todos os condutores) — mostra a movimentação da placa
 function buildPlacaCards(placaQ, prefix, cap){
   for(const k in ZTL) if(k.indexOf(prefix)===0) delete ZTL[k];
@@ -2124,7 +2159,14 @@ function buildPlacaCards(placaQ, prefix, cap){
   const html=shown.map((g,idx)=>{
     const id=prefix+idx; ids.push(id); const mov=[],ident=[]; let km=0,idMin=0,unMin=0; const drivers=new Set(), dias=new Set();
     g.days.forEach(pd=>{ const dIdx=Math.round((Date.parse(pd.data)-Date.parse(g.start))/86400000); const off=dIdx*1440; dias.add(pd.data);
-      pd.id.forEach(s=>{ if(s.drv)drivers.add(s.drv); mov.push({a:off+s.ini,b:off+s.fim,km:s.km,drv:s.drv,color:s.drv?driverColor(s.drv):'',lab:(s.drv?firstName(s.drv):'condutor')+' · '+hm(s.ini%1440)+'–'+hm(s.fim%1440)}); km+=s.km; });
+      // KM permanece calculado pela base original; somente a faixa visual de Direção é normalizada.
+      pd.id.forEach(s=>{ if(s.drv)drivers.add(s.drv); km+=s.km||0; });
+      const dirSegs=resolvePlateDirection(pd);
+      dirSegs.forEach(s=>{
+        if(s.drv)drivers.add(s.drv);
+        const lab=s.drv?(firstName(s.drv)+' · '+hm(s.ini%1440)+'–'+hm(s.fim%1440)):('condutor não confirmado · '+hm(s.ini%1440)+'–'+hm(s.fim%1440));
+        mov.push({a:off+s.ini,b:off+s.fim,km:0,drv:s.drv||'',color:s.drv?driverColor(s.drv):'',lab,unid:!!s.unid});
+      });
       const cams=(pd.cam&&pd.cam.length)?pd.cam:pd.id;
       cams.forEach(s=>{ if(s.drv)drivers.add(s.drv); ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:s.drv,color:s.drv?driverColor(s.drv):'',div:!!s.div,who:s.who||s.drv}); idMin+=(s.fim-s.ini); });
       pd.un.forEach(s=>{ mov.push({a:off+s[0],b:off+s[1],lab:'sem ID · '+hm(s[0]%1440)+'–'+hm(s[1]%1440),unid:true}); ident.push({a:off+s[0],b:off+s[1],ok:false}); unMin+=(s[1]-s[0]); });
