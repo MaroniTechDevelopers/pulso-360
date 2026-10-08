@@ -352,8 +352,13 @@
   .planotag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
   /* ===== BONIFICAÇÃO ===== */
   .bonif-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
-  .bonif-card{text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:10px;padding:13px 15px;transition:transform .12s,box-shadow .12s,border-color .12s}
-  .bonif-card:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--gold)}
+  .bonif-card{text-align:left;display:flex;flex-direction:column;gap:10px;padding:13px 15px;transition:box-shadow .12s,border-color .12s}
+  .bonif-card:hover{box-shadow:var(--shadow);border-color:color-mix(in srgb,var(--gold) 55%,var(--border))}
+  .bonif-acts{display:flex;gap:8px;margin-top:2px}
+  .bonif-act{flex:1;border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:9px;padding:7px 9px;font:inherit;font-size:12px;font-weight:650;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+  .bonif-act:hover{border-color:var(--gold);background:var(--surface-2)}
+  .bonif-act.primary{background:var(--gold);color:#1a1a1a;border-color:transparent}
+  .bonif-act.primary:hover{filter:brightness(.97)}
   .bonif-head{display:flex;align-items:center;gap:10px}
   .bonif-id{flex:1;min-width:0}
   .bonif-id b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -490,15 +495,24 @@
   .sc-sec .sc-hint{font-size:12px;color:var(--muted);margin:0 0 12px}
   .sc-chart{width:100%;height:auto;display:block;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:6px}
   .sc-nochart{background:var(--surface-2);border:1px dashed var(--border);border-radius:14px;padding:22px;text-align:center;color:var(--muted);font-size:13px}
-  .sc-comps{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .sc-comp{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
-  .sc-comp .ic{font-size:18px;flex:0 0 auto}
+  .sc-comps{display:grid;grid-template-columns:1fr;gap:10px}
+  .sc-comp{display:flex;align-items:flex-start;gap:11px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:11px 13px}
+  .sc-comp .ic{font-size:18px;flex:0 0 auto;margin-top:1px}
   .sc-comp .mid{flex:1;min-width:0}
-  .sc-comp .mid .cl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px}
-  .sc-comp .mid .cl .w{color:var(--muted);font-size:11px;font-weight:600}
-  .sc-comp .bar{height:7px;background:color-mix(in srgb,var(--ink) 9%,transparent);border-radius:999px;overflow:hidden;margin-top:6px}
+  .sc-comp .mid .cl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}
+  .sc-comp .mid .cl b{font-size:13px}
+  .sc-comp .mid .cl .pts{font-weight:800;white-space:nowrap}
+  .sc-comp .mid .cl .pts small{font-weight:600;color:var(--muted);font-size:10.5px}
+  .sc-comp .expl{font-size:11px;color:var(--muted);line-height:1.35;margin:3px 0 7px}
+  .sc-comp .bar{height:7px;background:color-mix(in srgb,var(--ink) 9%,transparent);border-radius:999px;overflow:hidden}
   .sc-comp .bar i{display:block;height:100%;border-radius:999px}
-  .sc-comp .tr{flex:0 0 auto;font-size:12px;font-weight:700;width:52px;text-align:right}
+  .sc-comp .meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--ink-2);align-items:center}
+  .sc-comp .meta b{color:var(--ink)}
+  .sc-comp .tr{font-weight:700;font-size:11px}
+  .sc-total{margin-top:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px 14px}
+  .sc-total .row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0}
+  .sc-total .row.pen{color:var(--critical)}
+  .sc-total .row.fin{border-top:1px dashed var(--border);margin-top:5px;padding-top:8px;font-size:15px;font-weight:800}
   .sc-trat{display:flex;flex-direction:column}
   .sc-tline{display:flex;gap:12px;padding:0 0 14px;position:relative}
   .sc-tline:before{content:'';position:absolute;left:7px;top:4px;bottom:-4px;width:2px;background:var(--border)}
@@ -1870,8 +1884,12 @@ function rankProfile(nome,recs){
   const interjDays=new Set((recs||[]).filter(r=>r.interjornada!=null&&r.interjornada<CFG.interjornadaMin).map(r=>r.data)).size;
   const interjScore=movDays?rankClamp(100*(1-interjDays/movDays)):null;
   // BONIFICAÇÃO: só penaliza hora extra ACIMA de 2h/dia (120 min). Até 2h de extra por dia não conta.
-  const hExtra2=(recs||[]).reduce((s,r)=>s+Math.max(0,(r.horaExtra||0)-120),0);
-  const extraScore=hPonto>0?rankClamp(100*(1-Math.min(1,hExtra2/hPonto))):null;
+  // IMPORTANTE: mede a MÉDIA DIÁRIA de excesso (por dia trabalhado), NÃO dividido pelo total de horas —
+  // dividir por hPonto diluía o excesso (quem trabalha muito "escondia" várias horas acima de 2h/dia).
+  const hExtra2=(recs||[]).reduce((s,r)=>s+Math.max(0,(r.horaExtra||0)-120),0);  // min de excesso acima de 2h/dia, somados
+  const EXTRA_CAP=120;  // média de 2h de EXCESSO por dia (≈4h de extra/dia) = nota 0
+  const extraMediaDia=pontoDays>0?hExtra2/pontoDays:0;  // excesso médio (min) por dia trabalhado
+  const extraScore=pontoDays>0?rankClamp(100*(1-Math.min(1,extraMediaDia/EXTRA_CAP))):null;
   const nv=(alR&&alR.niveis)||{}, alto=+nv.ALTO||0, medio=+nv.MEDIO||0, baixo=+nv.BAIXO||0, total=+(alR&&alR.total)||0, conhecido=alto+medio+baixo, desconhecido=Math.max(0,total-conhecido);
   const alertRisk=alto*4+medio*2+baixo+desconhecido*1.5, hCondH=Math.max(hCond/60,0.01), alertRate=alertRisk*10/hCondH;
   const datas=(recs||[]).map(r=>r.data).filter(Boolean).sort(), opF=$('#fOp').value; let multaRange=null;
@@ -3225,7 +3243,8 @@ function renderBonificacao(rows){
   const box=$('#bonifBox'), kb=$('#bonifKpis');
   if(!REAL||!RECORDS||!RECORDS.length){ if(kb)kb.innerHTML=''; box.innerHTML='<div class="empty">Carregue os dados na aba <b>Dados</b> para ver a bonificação.</div>'; return; }
   const agg=semanaAgg(rows); applyResumoRankScores(agg.data, rows);
-  const mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankElegivel(m)) mots.push(m); }));
+  let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankElegivel(m)) mots.push(m); }));
+  mots=resumoRankUnique(mots);   // 1 card por MOTORISTA (a nota é por pessoa; sem duplicar quem rodou em >1 operação)
   mots.sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
   const n10De=s=>Math.round((s||0)/10*10)/10;
   const catDe=n=>n>=9?'ouro':n>=7?'prata':'bronze';
@@ -3242,7 +3261,8 @@ function renderBonificacao(rows){
     const n10=n10De(m._rankScore), c=catDe(n10), ct=CAT[c], premio=Math.round(n10/10*100);
     const comps=(m._rankProfile&&m._rankProfile.components||[]).slice().sort((a,b)=>a.v-b.v);
     const bars=comps.map(cp=>`<div class="bonif-comp" title="${cp.lab}: ${Math.round(cp.v)} (peso ${cp.w})"><span>${cp.lab}</span><div class="bar"><i style="width:${Math.max(2,Math.round(cp.v))}%;background:${notaCor(cp.v)}"></i></div><b>${Math.round(cp.v)}</b></div>`).join('');
-    return `<button class="card bonif-card" data-mot="${encodeURIComponent(m.nome)}">
+    const enc=encodeURIComponent(m.nome);
+    return `<div class="card bonif-card">
       <div class="bonif-head">
         <span class="avatar" style="background:${notaCor(m._rankScore)}">${iniciais(m.nome)}</span>
         <div class="bonif-id"><b>${firstName(m.nome)}</b><small>${m.op||'—'} · ${tempoDeCasa(m.admissao)} de casa</small></div>
@@ -3250,8 +3270,11 @@ function renderBonificacao(rows){
       </div>
       <div class="bonif-score"><div class="n10">${n10.toFixed(1).replace('.',',')}<small>/10</small></div><div class="prem">${premio}%<small>do prêmio</small></div></div>
       <div class="bonif-comps">${bars}</div>
-      <span class="cap-cta">ver detalhamento →</span>
-    </button>`;
+      <div class="bonif-acts">
+        <button type="button" class="bonif-act primary" data-sc="${enc}">📊 Scorecard</button>
+        <button type="button" class="bonif-act" data-fc="${enc}">📋 Resumo semanal</button>
+      </div>
+    </div>`;
   }).join('')+'</div>';
 }
 /* ============================================================
@@ -3261,6 +3284,17 @@ function renderBonificacao(rows){
    ============================================================ */
 let SCORECARD_NOME=null;
 const SC_ICON={identMot:'📷',identCam:'🎥',jornada:'⏱️',ponto:'📋',alertas:'🚨',multas:'🚦',interj:'🛌',extra:'➕',media:'⛽'};
+const SC_EXPL={
+  identMot:'% do tempo de condução nos seus veículos em que a câmera reconheceu VOCÊ ao volante. 100 = sempre reconhecido.',
+  identCam:'% do movimento do veículo em que a câmera conseguiu identificar algum condutor (saúde do equipamento).',
+  jornada:'% da sua condução que aconteceu DENTRO do horário do ponto. 100 = tudo dentro da jornada.',
+  ponto:'% dos dias em que você moveu o veículo e tem o ponto registrado.',
+  alertas:'nota relativa à frota pela quantidade/gravidade de alertas por hora (celular, velocidade, fadiga…). 100 = entre os melhores (menos alertas).',
+  multas:'nota relativa à frota por multas de conduta por hora dirigida. 100 = sem multas / entre os melhores.',
+  interj:'% dos dias respeitando as 11h de descanso entre jornadas (interjornada CLT).',
+  extra:'penaliza a média diária de hora extra acima de 2h/dia. 100 = sem excesso; cai conforme a média passa de 2h extra por dia (≈4h extra/dia = 0).',
+  media:'sua média de consumo (km/l) comparada à meta do veículo. 100 = na meta ou acima.'
+};
 const SC_CACHE={sig:'',mensal:new Map()};
 function scEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function scN10(s){ return Math.round((s||0)/10*10)/10; }
@@ -3330,10 +3364,15 @@ function renderScorecard(nome){
   const trend=(ult&&pen)?(ult.score-pen.score):null;
   const admissao=admissaoDe(nome), op=(p.recs&&p.recs.find(r=>r.operacao&&r.operacao!=='—')||{}).operacao||'—';
   const comps=(p.components||[]).slice().sort((a,b)=>b.w-a.w);
+  const totW=comps.reduce((s,c)=>s+c.w,0)||1;
   const compHtml=comps.map(c=>{
     let d=null; if(ult&&pen&&ult.comps[c.k]!=null&&pen.comps[c.k]!=null)d=ult.comps[c.k]-pen.comps[c.k];
-    return `<div class="sc-comp"><span class="ic">${SC_ICON[c.k]||'•'}</span><div class="mid"><div class="cl"><b>${c.lab}</b><span class="w">peso ${c.w} · ${Math.round(c.v)}</span></div><div class="bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div></div>${scTrendArrow(d)}</div>`;
+    const relW=Math.round(c.w/totW*100), contrib=(c.w*c.v/100)/totW*10, maxC=c.w/totW*10;
+    return `<div class="sc-comp"><span class="ic">${SC_ICON[c.k]||'•'}</span><div class="mid"><div class="cl"><b>${c.lab}</b><span class="pts" style="color:${notaCor(c.v)}">+${scFmt(contrib)} <small>de ${scFmt(maxC)} pts</small></span></div><div class="expl">${SC_EXPL[c.k]||''}</div><div class="bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div><div class="meta"><span>seu valor <b>${Math.round(c.v)}</b>/100</span><span>peso <b>${relW}%</b> da nota</span><span>mês a mês ${scTrendArrow(d)}</span></div></div></div>`;
   }).join('');
+  const somaContrib=comps.reduce((s,c)=>s+(c.w*c.v/100)/totW*10,0);
+  const penal10=(p.idDiv>0?Math.min(12,p.idDiv*2):0)/10;
+  const totalHtml=`<div class="sc-total"><div class="row"><span>Soma das contribuições</span><b>${scFmt(somaContrib)}/10</b></div>${penal10>0?`<div class="row pen"><span>− Divergências de condutor (${p.idDiv})</span><b>−${scFmt(penal10)}</b></div>`:''}<div class="row fin"><span>Nota final</span><b style="color:${notaCor(p.score)}">${scFmt(n10)}/10</b></div></div>`;
   // tratativas (antigo -> novo) com a nota do mês e a variação de uma p/ a outra
   const trats=tratList(nome).slice().sort((a,b)=>(+a.ts||0)-(+b.ts||0)||String(a.data||'').localeCompare(String(b.data||'')));
   const scoreByMes={}; mensal.forEach(m=>{ if(m.score!=null)scoreByMes[m.key]=m.score; });
@@ -3362,9 +3401,9 @@ function renderScorecard(nome){
   </div>`;
   const body=`<div class="sc-body">${hero}
     <div class="sc-sec"><h4>📈 Evolução mensal da nota</h4><p class="sc-hint">Nota de 0 a 10 por mês. 🗣️ marca os meses com tratativa. A linha cresce conforme acumulamos meses.</p>${scLineChart(mensal,tratsPorMes)}</div>
-    <div class="sc-sec"><h4>🎯 Indicadores que compõem a nota</h4><p class="sc-hint">A nota é a média ponderada destes indicadores (peso e valor ao lado). A seta mostra a variação do último mês vs. o anterior. Ouro 9–10 · Prata 7–8 · Bronze ≤6.</p><div class="sc-comps">${compHtml}</div></div>
-    <div class="sc-sec"><h4>🗣️ Tratativas — evolução de uma para a outra</h4>${tratResumo||'<p class="sc-hint">Acompanhe se cada conversa melhorou a nota do condutor no mês seguinte.</p>'}${trats.length?`<div class="sc-trat">${tratHtml}</div>`:'<div class="sc-empty-trat">Nenhuma tratativa registrada ainda. Registre a primeira conversa para começar a acompanhar a evolução.</div>'}</div>
-    <div class="sc-actions"><button class="btn" data-sc-act="ficha" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Ver ficha completa</button><button class="btn solid" data-sc-act="trat">🗣️ Registrar tratativa</button></div>
+    <div class="sc-sec"><h4>🎯 Como chegamos na nota</h4><p class="sc-hint">A nota (0–10) é a <b>média ponderada</b> dos indicadores abaixo. Cada indicador vale um <b>peso</b>; a <b>contribuição</b> dele na nota = peso × o seu valor. Somando todas as contribuições chega-se na nota. Ouro 9–10 · Prata 7–8 · Bronze ≤6.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div>
+    <div class="sc-sec"><h4>🗣️ Tratativas — evolução de uma para a outra</h4>${tratResumo||'<p class="sc-hint">Acompanhe se cada conversa melhorou a nota do condutor no mês seguinte. As tratativas são registradas no resumo semanal (ficha do motorista).</p>'}${trats.length?`<div class="sc-trat">${tratHtml}</div>`:'<div class="sc-empty-trat">Nenhuma tratativa registrada ainda. Registre no <b>resumo semanal</b> (ficha do motorista) para começar a acompanhar a evolução.</div>'}</div>
+    <div class="sc-actions"><button class="btn solid" data-sc-act="ficha">📋 Ir para o resumo semanal</button></div>
   </div>`;
   shell.innerHTML=scTop+body;
 }
@@ -5529,7 +5568,7 @@ $('#tblBody').addEventListener('click',e=>{ const tr=e.target.closest('.tblrow')
 $('#mediaBox').addEventListener('click',e=>{ const tr=e.target.closest('.mediarow'); if(tr) openFicha(decodeURIComponent(tr.dataset.mot||'')); });
 // capinha do motorista → detalhamento (ficha)
 $('#semanaBox').addEventListener('click',e=>{ const c=e.target.closest('.capinha'); if(!c)return; openFicha(decodeURIComponent(c.dataset.mot)); });
-$('#bonifBox').addEventListener('click',e=>{ const c=e.target.closest('[data-mot]'); if(!c)return; openScorecard(decodeURIComponent(c.dataset.mot)); });
+$('#bonifBox').addEventListener('click',e=>{ const sc=e.target.closest('[data-sc]'); if(sc){ openScorecard(decodeURIComponent(sc.dataset.sc)); return; } const fc=e.target.closest('[data-fc]'); if(fc){ openFicha(decodeURIComponent(fc.dataset.fc)); return; } });
 $('#scoreModal').addEventListener('click',e=>{ if(e.target.id==='scoreModal') closeScorecard(); });
 $('#scoreShell').addEventListener('click',e=>{ const b=e.target.closest('[data-sc-act]'); if(!b)return; const act=b.dataset.scAct; if(act==='close')closeScorecard(); else if(act==='ficha'){ const nm=SCORECARD_NOME; closeScorecard(); openFicha(nm); } else if(act==='trat'){ if(SCORECARD_NOME){ fichaAtual=SCORECARD_NOME; openTratModal(); } } });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ const m=$('#scoreModal'); if(m&&m.style.display==='flex')closeScorecard(); } });
