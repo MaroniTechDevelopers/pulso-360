@@ -650,7 +650,7 @@
         <span class="lg"><span class="sw" style="background:#d4af37"></span> 🥇 Ouro (9–10) — 100% do prêmio</span>
         <span class="lg"><span class="sw" style="background:#9ca3af"></span> 🥈 Prata (7–8)</span>
         <span class="lg"><span class="sw" style="background:#b87333"></span> 🥉 Bronze (≤6)</span>
-        <span class="lg" style="margin-left:auto;color:var(--muted)">nota = identificação + jornada + ponto + alertas + multas + interjornada + hora extra (acima de 2h/dia) + média</span>
+        <span class="lg" style="margin-left:auto;color:var(--muted)">nota = jornada+ponto (20%) · alertas (15%) · hora extra (15%) · média (15%) · identificação (10%) · multas (10%) · interjornada (10%) · câmera (5%)</span>
       </div>
     </div>
     <div id="bonifBox"></div>
@@ -1881,6 +1881,12 @@ function rankProfile(nome,recs){
   const audit=auditMetrics(recs), alR=rankAlertSummary(nome,recs), movDays=audit.diasMov||0, pontoDays=audit.diasPonto||0, hCond=audit.hCond||0, hPonto=audit.hPonto||0;
   const identCam=aderRecs(recs), identMot=aderMotoristaRecs(recs), aj=aderJornada(recs);
   const pointCoverage=movDays?rankClamp(pontoDays/movDays*100):null;
+  // Unificado (08/10/2026): "Aderência de jornada e ponto" = jornada (60%) + cobertura de ponto (40%),
+  // preservando a proporção antiga 15:10. Se faltar um dos dois, usa o que existir.
+  let ajPonto=null;
+  if(aj!=null && pointCoverage!=null) ajPonto=rankClamp(aj*0.6+pointCoverage*0.4);
+  else if(aj!=null) ajPonto=aj;
+  else if(pointCoverage!=null) ajPonto=pointCoverage;
   const interjDays=new Set((recs||[]).filter(r=>r.interjornada!=null&&r.interjornada<CFG.interjornadaMin).map(r=>r.data)).size;
   const interjScore=movDays?rankClamp(100*(1-interjDays/movDays)):null;
   // BONIFICAÇÃO: só penaliza hora extra ACIMA de 2h/dia (120 min). Até 2h de extra por dia não conta.
@@ -1900,7 +1906,7 @@ function rankProfile(nome,recs){
   const rr=(recs||[]).find(r=>r.placa)||{}, meta=metaVeic(rr.placa||'',(recs&&recs[0]&&recs[0].operacao)||'');
   const mediaScore=(!MEDIA_OFF&&media!=null&&meta>0)?rankClamp(media/meta*100):null;
   const pend=(recs||[]).filter(r=>r.sev==='pendente').length, idDiv=(recs||[]).filter(r=>r.idDivergente||r.condutorDivergente).length;
-  return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
+  return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,ajPonto,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
 }
 function applyResumoRankScores(data,rows){
   const by=Object.create(null); (rows||[]).forEach(r=>{const k=norm(r.motoristaEscala||'');if(k)(by[k]=by[k]||[]).push(r);});
@@ -1909,16 +1915,16 @@ function applyResumoRankScores(data,rows){
   const hasAlerts=!!(ALERTS||BOL||AL_TL), hasMultas=!!MULTAS_N, hasMedia=!MEDIA_OFF;
   for(const p of Object.values(profiles)){
     const comps=[]; const add=(k,lab,w,val,active=true)=>{if(!active||w<=0)return;const vv=rankClamp(val==null?0:val);comps.push({k,lab,w,v:vv,pts:w*vv/100});};
-    // Identificação: motorista correto vale mais; cobertura da câmera continua influenciando como qualidade da evidência.
-    add('identMot','Identificação motorista',15,p.identMot,true);
+    // Pesos (08/10/2026, decisão do William): jornada+ponto unificados em 20%, alertas 15%, hora extra 15%,
+    // identificação do motorista 10%, média 15%. Câmera 5%, multas 10%, interjornada 10%. Soma = 100%.
+    add('identMot','Identificação motorista',10,p.identMot,true);
     add('identCam','Cobertura câmera',5,p.identCam,true);
-    add('jornada','Aderência jornada',15,p.aj,!!(BASES&&BASES.ponto));
-    add('ponto','Cobertura ponto',10,p.pointCoverage,!!(BASES&&BASES.ponto));
-    add('alertas','Alertas/severidade',20,rankLowerPercentile(alertRates,p.alertRate),hasAlerts);
+    add('jornada','Aderência de jornada e ponto',20,p.ajPonto,!!(BASES&&BASES.ponto));
+    add('alertas','Alertas/severidade',15,rankLowerPercentile(alertRates,p.alertRate),hasAlerts);
     add('multas','Multas conduta',10,rankLowerPercentile(multaRates,p.multaRate),hasMultas);
     add('interj','Interjornada',10,p.interjScore,!!(BASES&&BASES.ponto));
-    add('extra','Hora extra',5,p.extraScore,!!(BASES&&BASES.ponto));
-    add('media','Média × meta',10,p.mediaScore,hasMedia);
+    add('extra','Hora extra',15,p.extraScore,!!(BASES&&BASES.ponto));
+    add('media','Média × meta',15,p.mediaScore,hasMedia);
     const W=comps.reduce((s,c)=>s+c.w,0), P=comps.reduce((s,c)=>s+c.pts,0); let score=W?P/W*100:0;
     // Divergência explícita de condutor é uma falha independente e não pode sumir dentro de uma média.
     if(p.idDiv>0)score-=Math.min(12,p.idDiv*2);
@@ -3287,7 +3293,7 @@ const SC_ICON={identMot:'📷',identCam:'🎥',jornada:'⏱️',ponto:'📋',ale
 const SC_EXPL={
   identMot:'% do tempo de condução nos seus veículos em que a câmera reconheceu VOCÊ ao volante. 100 = sempre reconhecido.',
   identCam:'% do movimento do veículo em que a câmera conseguiu identificar algum condutor (saúde do equipamento).',
-  jornada:'% da sua condução que aconteceu DENTRO do horário do ponto. 100 = tudo dentro da jornada.',
+  jornada:'junta dois pontos: conduzir DENTRO do horário do ponto (60%) e ter o ponto registrado nos dias que moveu (40%). 100 = tudo em dia.',
   ponto:'% dos dias em que você moveu o veículo e tem o ponto registrado.',
   alertas:'nota relativa à frota pela quantidade/gravidade de alertas por hora (celular, velocidade, fadiga…). 100 = entre os melhores (menos alertas).',
   multas:'nota relativa à frota por multas de conduta por hora dirigida. 100 = sem multas / entre os melhores.',
