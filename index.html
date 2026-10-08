@@ -370,6 +370,12 @@
   .bonif-comp .bar{height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden}
   .bonif-comp .bar i{display:block;height:100%;border-radius:999px}
   .bonif-comp>b{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+  /* ===== EM FÉRIAS (resumo semanal) ===== */
+  .ferias-grid{display:flex;flex-wrap:wrap;gap:8px}
+  .ferias-chip{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:6px 11px}
+  .ferias-chip .fav{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:#fff3f6;color:#a52f5d;border:1px solid #f1c7d4;flex:none}
+  .ferias-chip b{display:block;font-size:12.5px}
+  .ferias-chip small{color:var(--muted);font-size:10.5px}
 
   /* ============ FICHA DO MOTORISTA (detalhamento) ============ */
   .ficha-back{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:7px 12px;cursor:pointer;font:inherit;font-size:13px}
@@ -1927,6 +1933,18 @@ function semanaAgg(rows){
   SEMANA_AGG_CACHE_MAP.set(cacheKey,out); while(SEMANA_AGG_CACHE_MAP.size>8)SEMANA_AGG_CACHE_MAP.delete(SEMANA_AGG_CACHE_MAP.keys().next().value);
   return out;
 }
+// motoristas de FÉRIAS no período filtrado que NÃO têm card de trabalho (senão ficam invisíveis no resumo)
+function feriasNoPeriodo(rows, shownNn){
+  if(typeof JORNADA_FERIAS==='undefined' || !JORNADA_FERIAS) return [];
+  const rng=activeRange(); let de,ate;
+  if(rng && rng.de && rng.ate){ de=rng.de; ate=rng.ate; }
+  else { const ds=(rows||[]).map(r=>r.data).filter(Boolean).sort(); if(!ds.length) return []; de=ds[0]; ate=ds[ds.length-1]; }
+  const byNn={};
+  for(const k in JORNADA_FERIAS){ const i=k.lastIndexOf('|'); if(i<0) continue; const nn=k.slice(0,i), d=k.slice(i+1);
+    if(d<de||d>ate) continue; if(shownNn.has(nn)) continue;
+    const g=(byNn[nn]=byNn[nn]||{nn,dias:0,min:d,max:d}); g.dias++; if(d<g.min)g.min=d; if(d>g.max)g.max=d; }
+  return Object.values(byNn).sort((a,b)=>a.nn.localeCompare(b.nn,'pt-BR'));
+}
 function renderSemana(rows){
   const box=$('#semanaBox');
   if(!rows.length){ box.innerHTML='<div class="empty">Nenhum registro para o filtro atual.</div>'; return; }
@@ -1970,7 +1988,14 @@ function renderSemana(rows){
       <div class="capgrid">${vis.map(m=>capinha(m,weeks)).join('')}</div>
     </div>`);
   });
-  box.innerHTML=html.join('')||'<div class="empty">Nenhum motorista encontrado neste ranking.</div>';
+  let feriasHtml='';
+  if(SEMANA_RANK_MODE==='all'){
+    const shownNn=new Set(global.map(m=>norm(m.nome))); const fer=feriasNoPeriodo(rows, shownNn);
+    if(fer.length) feriasHtml=`<div class="card op-block"><div class="op-head"><h3>🏖️ Em férias no período <span class="op-ranknote">${fer.length} motorista(s)</span></h3>
+      <div class="op-kpi">de férias no período selecionado · não entram no ranking</div></div>
+      <div class="ferias-grid">${fer.map(f=>`<div class="ferias-chip"><span class="fav">${iniciais(f.nn)}</span><div><b>${firstName(f.nn)}</b><small>${brDate(f.min)}–${brDate(f.max)} · ${f.dias}d</small></div></div>`).join('')}</div></div>`;
+  }
+  box.innerHTML=(html.join('')+feriasHtml)||'<div class="empty">Nenhum motorista encontrado neste ranking.</div>';
 }
 // "capinha" do motorista — clicável, leva ao detalhamento (ficha)
 function capinha(m,weeks){
