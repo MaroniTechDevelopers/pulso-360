@@ -1795,6 +1795,7 @@ function resumoRankMelhorElegivel(m){
 function rankLowerPercentile(values,v){
   const a=(values||[]).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length||!Number.isFinite(v))return 0;
   if(a.length===1||a[0]===a[a.length-1])return 100;
+  if(v<=a[0])return 100;   // no MELHOR valor (ex.: ZERO multa/alerta) = nota cheia, mesmo empatado com muitos
   let lo=0,eq=0; for(const x of a){if(x<v)lo++;else if(x===v)eq++;}
   const avg=lo+Math.max(0,eq-1)/2; return rankClamp(100*(1-avg/(a.length-1)));
 }
