@@ -467,6 +467,53 @@
   .modal .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media(max-width:560px){.modal .modal-grid{grid-template-columns:1fr}}
   .modal .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+  /* ===== Scorecard do condutor (gamificação) ===== */
+  #scoreModal{z-index:58}
+  #scoreModal .sc-modal{background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.4);width:100%;max-width:900px;max-height:92vh;overflow:auto}
+  .sc-top{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:14px;padding:15px 20px;background:linear-gradient(180deg,var(--navy-2),var(--navy));border-bottom:1px solid rgba(255,255,255,.08);border-radius:18px 18px 0 0}
+  .sc-top .avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#0b1220;font-size:17px;flex:0 0 auto}
+  .sc-top .sc-id{flex:1;min-width:0;color:#fff}
+  .sc-top .sc-id b{display:block;font-size:17px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sc-top .sc-id small{color:#cbd5e1;font-size:12px}
+  .sc-cat{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:13px;padding:6px 12px;border-radius:999px;white-space:nowrap}
+  .sc-close{background:rgba(255,255,255,.12);color:#fff;border:none;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;flex:0 0 auto}
+  .sc-close:hover{background:rgba(255,255,255,.22)}
+  .sc-body{padding:18px 20px 22px}
+  .sc-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .sc-hero .sc-tile{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:13px 10px;text-align:center}
+  .sc-hero .sc-big{font-size:30px;font-weight:800;line-height:1}
+  .sc-hero .sc-big small{font-size:14px;font-weight:600;color:var(--muted)}
+  .sc-hero .sc-lab{font-size:11px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.03em}
+  .sc-hero .sc-sub{font-size:12px;color:var(--ink-2);margin-top:3px;font-weight:600}
+  .sc-sec{margin-top:20px}
+  .sc-sec h4{margin:0 0 4px;font-size:14px;display:flex;align-items:center;gap:7px}
+  .sc-sec .sc-hint{font-size:12px;color:var(--muted);margin:0 0 12px}
+  .sc-chart{width:100%;height:auto;display:block;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:6px}
+  .sc-nochart{background:var(--surface-2);border:1px dashed var(--border);border-radius:14px;padding:22px;text-align:center;color:var(--muted);font-size:13px}
+  .sc-comps{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .sc-comp{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+  .sc-comp .ic{font-size:18px;flex:0 0 auto}
+  .sc-comp .mid{flex:1;min-width:0}
+  .sc-comp .mid .cl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px}
+  .sc-comp .mid .cl .w{color:var(--muted);font-size:11px;font-weight:600}
+  .sc-comp .bar{height:7px;background:color-mix(in srgb,var(--ink) 9%,transparent);border-radius:999px;overflow:hidden;margin-top:6px}
+  .sc-comp .bar i{display:block;height:100%;border-radius:999px}
+  .sc-comp .tr{flex:0 0 auto;font-size:12px;font-weight:700;width:52px;text-align:right}
+  .sc-trat{display:flex;flex-direction:column}
+  .sc-tline{display:flex;gap:12px;padding:0 0 14px;position:relative}
+  .sc-tline:before{content:'';position:absolute;left:7px;top:4px;bottom:-4px;width:2px;background:var(--border)}
+  .sc-tline:last-child:before{display:none}
+  .sc-tdot{width:16px;height:16px;border-radius:50%;flex:0 0 auto;margin-top:2px;z-index:1;border:3px solid var(--surface)}
+  .sc-tcard{flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+  .sc-tcard .th{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .sc-tcard .th .dt{font-size:12px;color:var(--muted)}
+  .sc-tcard .ob{font-size:12.5px;color:var(--ink-2);margin-top:5px;white-space:pre-wrap}
+  .sc-tcard .mt{display:flex;gap:12px;align-items:center;margin-top:7px;font-size:12px;flex-wrap:wrap}
+  .sc-delta{font-weight:700;font-size:12px}
+  .sc-tnota{font-weight:700}
+  .sc-empty-trat{background:var(--surface-2);border:1px dashed var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted);font-size:13px}
+  .sc-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+  @media(max-width:720px){ .sc-hero{grid-template-columns:1fr 1fr} .sc-comps{grid-template-columns:1fr} }
   .tratlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
   .tratlist li{border-left:3px solid var(--gold);background:var(--surface-2);border-radius:9px;padding:10px 12px}
   .tratlist .tt-h{font-size:13px}
@@ -926,6 +973,10 @@
       <button class="btn solid" id="tratSave">Salvar tratativa</button>
     </div>
   </div>
+</div>
+
+<div id="scoreModal" class="modal-bg">
+  <div class="sc-modal" id="scoreShell"></div>
 </div>
 
 <div id="toast"></div>
@@ -3203,6 +3254,120 @@ function renderBonificacao(rows){
     </button>`;
   }).join('')+'</div>';
 }
+/* ============================================================
+   SCORECARD DO CONDUTOR (gamificação estilo Gobrax)
+   Clique no card de Bonificação -> tela focada só nos indicadores
+   que compõem a NOTA + evolução mensal + comparação entre tratativas.
+   ============================================================ */
+let SCORECARD_NOME=null;
+const SC_ICON={identMot:'📷',identCam:'🎥',jornada:'⏱️',ponto:'📋',alertas:'🚨',multas:'🚦',interj:'🛌',extra:'➕',media:'⛽'};
+const SC_CACHE={sig:'',mensal:new Map()};
+function scEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function scN10(s){ return Math.round((s||0)/10*10)/10; }
+function scFmt(n){ return Number(n).toFixed(1).replace('.',','); }
+function scMesLabel(key){ const m=String(key||'').match(/(\d{4})-(\d{2})/); if(!m)return key||''; const MES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']; return MES[(+m[2]-1)]+'/'+m[1].slice(2); }
+function scTrendArrow(delta){
+  if(delta==null) return '<span class="tr" style="color:var(--muted)">—</span>';
+  if(delta>=3) return '<span class="tr" style="color:var(--good)">↑'+Math.round(delta)+'</span>';
+  if(delta<=-3) return '<span class="tr" style="color:var(--critical)">↓'+Math.round(Math.abs(delta))+'</span>';
+  return '<span class="tr" style="color:var(--muted)">→</span>';
+}
+// Evolução mensal da nota (percentil relativo à frota POR MÊS) sem corromper o estado global de cores.
+function scoreMensalMotorista(nome, rows){
+  const nn=norm(nome), byMes=Object.create(null);
+  (rows||[]).forEach(r=>{ const mk=r.mesKey; if(!mk)return; (byMes[mk]=byMes[mk]||{key:mk,label:r.mesLabel||mk,rows:[]}).rows.push(r); });
+  const meses=Object.values(byMes).sort((a,b)=>a.key<b.key?-1:1);
+  const saved=RANK_SCORES; const out=[];
+  for(const mz of meses){
+    const profiles=applyResumoRankScores([], mz.rows); const p=profiles[nn];
+    if(!p){ out.push({key:mz.key,label:mz.label,score:null,comps:{}}); continue; }
+    const cm=Object.create(null); (p.components||[]).forEach(c=>cm[c.k]=c.v);
+    const elig=(p.movDays>0&&p.hCond>0);
+    out.push({key:mz.key,label:mz.label,score:elig?p.score:null,comps:cm,movDays:p.movDays});
+  }
+  RANK_SCORES=saved;
+  return out;
+}
+function scSig(){ const r=activeRange(); return DATA_REV+'|M'+MULTAS_REV+'|'+($('#fOp').value||'')+'|'+(r?(r.de+'~'+r.ate):'*'); }
+function scMensalCached(nome, rows){ const sig=scSig(); if(SC_CACHE.sig!==sig){ SC_CACHE.sig=sig; SC_CACHE.mensal=new Map(); } const nn=norm(nome); if(SC_CACHE.mensal.has(nn))return SC_CACHE.mensal.get(nn); const v=scoreMensalMotorista(nome,rows); SC_CACHE.mensal.set(nn,v); return v; }
+function scLineChart(mensal, tratsPorMes){
+  const data=(mensal||[]).filter(m=>m.score!=null);
+  if(!data.length) return '<div class="sc-nochart">Ainda não há meses com movimentação para traçar a evolução. Conforme publicamos novos meses, a linha cresce.</div>';
+  const W=720,H=238,padL=34,padR=16,padT=18,padB=40, plotW=W-padL-padR, plotH=H-padT-padB, n=data.length;
+  const x=i=> n===1 ? padL+plotW/2 : padL+plotW*i/(n-1);
+  const y=v=> padT+plotH*(1-Math.max(0,Math.min(10,v))/10);
+  let grid=''; for(let g=0;g<=10;g+=2){ const yy=y(g); grid+=`<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-6}" y="${(yy+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">${g}</text>`; }
+  const line=data.map((m,i)=>`${x(i).toFixed(1)},${y(scN10(m.score)).toFixed(1)}`).join(' ');
+  let dots='',xl=''; data.forEach((m,i)=>{ const n10=scN10(m.score),cx=x(i),cy=y(n10),col=notaCor(m.score);
+    dots+=`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4.5" fill="${col}" stroke="var(--surface)" stroke-width="2"/><text x="${cx.toFixed(1)}" y="${(cy-10).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">${scFmt(n10)}</text>`;
+    xl+=`<text x="${cx.toFixed(1)}" y="${H-22}" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">${scMesLabel(m.key)}</text>`;
+    const nt=(tratsPorMes||{})[m.key]||0; if(nt) xl+=`<text x="${cx.toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="11">🗣️${nt>1?'×'+nt:''}</text>`;
+  });
+  const lineEl = n>1 ? `<polyline points="${line}" fill="none" stroke="var(--s2)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+  return `<svg viewBox="0 0 ${W} ${H}" class="sc-chart" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Evolução mensal da nota">${grid}${lineEl}${dots}${xl}</svg>`;
+}
+function openScorecard(nome){
+  if(!nome)return; SCORECARD_NOME=nome;
+  const modal=$('#scoreModal'), shell=$('#scoreShell');
+  modal.style.display='flex';
+  shell.innerHTML='<div class="sc-body"><div class="empty" style="padding:48px;text-align:center">Montando o scorecard do condutor…</div></div>';
+  requestAnimationFrame(()=>setTimeout(()=>{ try{ renderScorecard(nome); }catch(e){ console.error('[Pulso360] scorecard',e); shell.innerHTML='<div class="sc-body"><div class="card" style="padding:22px;border-left:4px solid var(--critical)"><b>Não foi possível montar o scorecard.</b><div style="margin-top:6px;color:var(--muted)">'+scEsc(e&&e.message||'')+'</div></div><div class="sc-actions"><button class="btn" data-sc-act="close">Fechar</button></div></div>'; } },12));
+}
+function closeScorecard(){ const m=$('#scoreModal'); if(m)m.style.display='none'; SCORECARD_NOME=null; }
+function renderScorecard(nome){
+  const shell=$('#scoreShell'), nn=norm(nome), rows=filtered();
+  const profiles=applyResumoRankScores([], rows), p=profiles[nn];
+  if(!p || !(p.movDays>0 && p.hCond>0)){
+    shell.innerHTML='<div class="sc-body"><div class="empty" style="padding:44px;text-align:center">Este condutor não tem movimentação no período/filtros atuais.</div><div class="sc-actions"><button class="btn" data-sc-act="close">Fechar</button></div></div>';
+    return;
+  }
+  const CAT={ouro:{lab:'Ouro',cor:'#d4af37',ic:'🥇',premio:'100% do prêmio'},prata:{lab:'Prata',cor:'#9ca3af',ic:'🥈',premio:'prêmio parcial'},bronze:{lab:'Bronze',cor:'#b87333',ic:'🥉',premio:'menor/sem prêmio'}};
+  const n10=scN10(p.score), premio=Math.round(n10/10*100), catK=n10>=9?'ouro':n10>=7?'prata':'bronze', cat=CAT[catK];
+  const elig=Object.keys(profiles).filter(k=>profiles[k].movDays>0&&profiles[k].hCond>0).map(k=>({k,s:profiles[k].score})).sort((a,b)=>b.s-a.s);
+  const pos=elig.findIndex(e=>e.k===nn)+1, tot=elig.length, topPct=tot?Math.max(1,Math.round(pos/tot*100)):null;
+  const mensal=scMensalCached(nome, rows), com=mensal.filter(m=>m.score!=null);
+  const ult=com[com.length-1]||null, pen=com[com.length-2]||null;
+  const trend=(ult&&pen)?(ult.score-pen.score):null;
+  const admissao=admissaoDe(nome), op=(p.recs&&p.recs.find(r=>r.operacao&&r.operacao!=='—')||{}).operacao||'—';
+  const comps=(p.components||[]).slice().sort((a,b)=>b.w-a.w);
+  const compHtml=comps.map(c=>{
+    let d=null; if(ult&&pen&&ult.comps[c.k]!=null&&pen.comps[c.k]!=null)d=ult.comps[c.k]-pen.comps[c.k];
+    return `<div class="sc-comp"><span class="ic">${SC_ICON[c.k]||'•'}</span><div class="mid"><div class="cl"><b>${c.lab}</b><span class="w">peso ${c.w} · ${Math.round(c.v)}</span></div><div class="bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div></div>${scTrendArrow(d)}</div>`;
+  }).join('');
+  // tratativas (antigo -> novo) com a nota do mês e a variação de uma p/ a outra
+  const trats=tratList(nome).slice().sort((a,b)=>(+a.ts||0)-(+b.ts||0)||String(a.data||'').localeCompare(String(b.data||'')));
+  const scoreByMes={}; mensal.forEach(m=>{ if(m.score!=null)scoreByMes[m.key]=m.score; });
+  const tratsPorMes={}; trats.forEach(t=>{ const mk=String(t.data||'').slice(0,7); if(mk)tratsPorMes[mk]=(tratsPorMes[mk]||0)+1; });
+  let tratHtml='',prevSc=null,firstSc=null,lastSc=null;
+  trats.forEach(t=>{
+    const mk=String(t.data||'').slice(0,7), sc=scoreByMes[mk];
+    let notaHtml='',deltaHtml='',dotCol='var(--muted)';
+    if(sc!=null){ dotCol=notaCor(sc); notaHtml=`<span class="sc-tnota" style="color:${notaCor(sc)}">nota ${scFmt(scN10(sc))} no mês</span>`;
+      if(prevSc!=null){ const dd=sc-prevSc, c=dd>=1?'var(--good)':dd<=-1?'var(--critical)':'var(--muted)', ar=dd>=1?'↑':dd<=-1?'↓':'→'; deltaHtml=`<span class="sc-delta" style="color:${c}">${ar} ${dd>0?'+':''}${scFmt(scN10(dd))} vs tratativa anterior</span>`; }
+      if(firstSc==null)firstSc=sc; lastSc=sc; prevSc=sc;
+    } else notaHtml='<span style="color:var(--muted)">sem dados do mês</span>';
+    const dtBR=String(t.data||'').split('-').reverse().join('/');
+    tratHtml+=`<div class="sc-tline"><span class="sc-tdot" style="background:${dotCol}"></span><div class="sc-tcard"><div class="th"><b>${scEsc(t.tipo||'Tratativa')}</b><span class="dt">${dtBR}${t.gestor?' · '+scEsc(t.gestor):''}</span></div>${t.obs?`<div class="ob">${scEsc(t.obs)}</div>`:''}<div class="mt">${notaHtml}${deltaHtml}</div></div></div>`;
+  });
+  let tratResumo='';
+  if(firstSc!=null && lastSc!=null && trats.length>1){ const dd=lastSc-firstSc, c=dd>=1?'var(--good)':dd<=-1?'var(--critical)':'var(--muted)'; tratResumo=`<p class="sc-hint">Da 1ª à última tratativa: <b style="color:${c}">${scFmt(scN10(firstSc))} → ${scFmt(scN10(lastSc))} (${dd>0?'+':''}${scFmt(scN10(dd))})</b></p>`; }
+  const trendTxt = trend==null?'—':(trend>=1?'↑ +'+scFmt(scN10(trend)):trend<=-1?'↓ '+scFmt(scN10(trend)):'→ estável');
+  const trendCol = trend==null?'var(--muted)':(trend>=1?'var(--good)':trend<=-1?'var(--critical)':'var(--muted)');
+  const scTop=`<div class="sc-top"><span class="avatar" style="background:${notaCor(p.score)}">${iniciais(nome)}</span><div class="sc-id"><b>${scEsc(nome)}</b><small>${scEsc(op)} · ${tempoDeCasa(admissao)} de casa</small></div><span class="sc-cat" style="background:color-mix(in srgb,${cat.cor} 20%,transparent);color:${cat.cor};border:1px solid color-mix(in srgb,${cat.cor} 50%,transparent)">${cat.ic} ${cat.lab}</span><button class="sc-close" data-sc-act="close" title="Fechar">✕</button></div>`;
+  const hero=`<div class="sc-hero">
+    <div class="sc-tile"><div class="sc-big" style="color:${notaCor(p.score)}">${scFmt(n10)}<small>/10</small></div><div class="sc-lab">Nota atual</div></div>
+    <div class="sc-tile"><div class="sc-big">${premio}<small>%</small></div><div class="sc-lab">do prêmio</div><div class="sc-sub">${cat.premio}</div></div>
+    <div class="sc-tile"><div class="sc-big">${pos}º<small>/${tot}</small></div><div class="sc-lab">no ranking</div><div class="sc-sub">top ${topPct}%</div></div>
+    <div class="sc-tile"><div class="sc-big" style="color:${trendCol};font-size:22px;padding-top:7px">${trendTxt}</div><div class="sc-lab">vs mês anterior</div></div>
+  </div>`;
+  const body=`<div class="sc-body">${hero}
+    <div class="sc-sec"><h4>📈 Evolução mensal da nota</h4><p class="sc-hint">Nota de 0 a 10 por mês. 🗣️ marca os meses com tratativa. A linha cresce conforme acumulamos meses.</p>${scLineChart(mensal,tratsPorMes)}</div>
+    <div class="sc-sec"><h4>🎯 Indicadores que compõem a nota</h4><p class="sc-hint">A nota é a média ponderada destes indicadores (peso e valor ao lado). A seta mostra a variação do último mês vs. o anterior. Ouro 9–10 · Prata 7–8 · Bronze ≤6.</p><div class="sc-comps">${compHtml}</div></div>
+    <div class="sc-sec"><h4>🗣️ Tratativas — evolução de uma para a outra</h4>${tratResumo||'<p class="sc-hint">Acompanhe se cada conversa melhorou a nota do condutor no mês seguinte.</p>'}${trats.length?`<div class="sc-trat">${tratHtml}</div>`:'<div class="sc-empty-trat">Nenhuma tratativa registrada ainda. Registre a primeira conversa para começar a acompanhar a evolução.</div>'}</div>
+    <div class="sc-actions"><button class="btn" data-sc-act="ficha" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Ver ficha completa</button><button class="btn solid" data-sc-act="trat">🗣️ Registrar tratativa</button></div>
+  </div>`;
+  shell.innerHTML=scTop+body;
+}
 function renderAll(){
   // Qualquer mudança nos controles pertence somente à aba/filtro corrente.
   saveTopFilterState(CURRENT_FILTER_TAB);
@@ -5201,7 +5366,7 @@ async function excluirTratativa(nome,uid){
   renderFicha();
 }
 function openTratModal(){ const nome=fichaAtual; if(!nome)return; $('#tratNome').textContent=nome; $('#tratData').value=new Date().toISOString().slice(0,10); let g=''; if(spSignedIn())g=spGestor().nome; if(!g){try{g=localStorage.getItem('integ360_gestor')||'';}catch(e){}} $('#tratGestor').value=g;$('#tratTipo').value='Conversa de orientação';$('#tratObs').value='';$('#tratModal').style.display='flex';setTimeout(()=>$('#tratObs').focus(),50); }
-async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,obs=$('#tratObs').value.trim();if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,obs,op:M.op||'',placa:M.placas||'',cpf:(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[norm(nome)])||'',sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); }
+async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,obs=$('#tratObs').value.trim();if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,obs,op:M.op||'',placa:M.placas||'',cpf:(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[norm(nome)])||'',sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); if(typeof SCORECARD_NOME!=='undefined'&&SCORECARD_NOME&&$('#scoreModal')&&$('#scoreModal').style.display==='flex'){ try{renderScorecard(SCORECARD_NOME);}catch(e){} } }
 
 /* ============================================================
    PUBLICAÇÃO DE DADOS — GitHub Pages
@@ -5364,7 +5529,10 @@ $('#tblBody').addEventListener('click',e=>{ const tr=e.target.closest('.tblrow')
 $('#mediaBox').addEventListener('click',e=>{ const tr=e.target.closest('.mediarow'); if(tr) openFicha(decodeURIComponent(tr.dataset.mot||'')); });
 // capinha do motorista → detalhamento (ficha)
 $('#semanaBox').addEventListener('click',e=>{ const c=e.target.closest('.capinha'); if(!c)return; openFicha(decodeURIComponent(c.dataset.mot)); });
-$('#bonifBox').addEventListener('click',e=>{ const c=e.target.closest('[data-mot]'); if(!c)return; openFicha(decodeURIComponent(c.dataset.mot)); });
+$('#bonifBox').addEventListener('click',e=>{ const c=e.target.closest('[data-mot]'); if(!c)return; openScorecard(decodeURIComponent(c.dataset.mot)); });
+$('#scoreModal').addEventListener('click',e=>{ if(e.target.id==='scoreModal') closeScorecard(); });
+$('#scoreShell').addEventListener('click',e=>{ const b=e.target.closest('[data-sc-act]'); if(!b)return; const act=b.dataset.scAct; if(act==='close')closeScorecard(); else if(act==='ficha'){ const nm=SCORECARD_NOME; closeScorecard(); openFicha(nm); } else if(act==='trat'){ if(SCORECARD_NOME){ fichaAtual=SCORECARD_NOME; openTratModal(); } } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ const m=$('#scoreModal'); if(m&&m.style.display==='flex')closeScorecard(); } });
 $('#fichaBack').onclick=voltarResumo;
 // tratativa (modal)
 $('#btnTratativa').onclick=openTratModal;
