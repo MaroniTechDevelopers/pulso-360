@@ -1901,8 +1901,11 @@ function rankProfile(nome,recs){
   if(aj!=null && pointCoverage!=null) ajPonto=rankClamp(aj*0.6+pointCoverage*0.4);
   else if(aj!=null) ajPonto=aj;
   else if(pointCoverage!=null) ajPonto=pointCoverage;
+  // Interjornada: o descanso só é MEDÍVEL nos dias que têm jornada anterior para comparar (r.interjornada!=null).
+  // O denominador tem que ser esses dias — NÃO os dias de movimento (bug antigo: inflava violação e zerava a nota).
+  const interjBase=new Set((recs||[]).filter(r=>r.interjornada!=null).map(r=>r.data)).size;
   const interjDays=new Set((recs||[]).filter(r=>r.interjornada!=null&&r.interjornada<CFG.interjornadaMin).map(r=>r.data)).size;
-  const interjScore=movDays?rankClamp(100*(1-interjDays/movDays)):null;
+  const interjScore=interjBase>0?rankClamp(100*(1-interjDays/interjBase)):null;
   // BONIFICAÇÃO: só penaliza hora extra ACIMA de 2h/dia (120 min). Até 2h de extra por dia não conta.
   // IMPORTANTE: mede a MÉDIA DIÁRIA de excesso (por dia trabalhado), NÃO dividido pelo total de horas —
   // dividir por hPonto diluía o excesso (quem trabalha muito "escondia" várias horas acima de 2h/dia).
@@ -1928,7 +1931,10 @@ function applyResumoRankScores(data,rows){
   const elig=Object.values(profiles).filter(p=>p.movDays>0&&p.hCond>0), alertRates=elig.map(p=>p.alertRate).filter(Number.isFinite), multaRates=elig.map(p=>p.multaRate).filter(Number.isFinite);
   const hasAlerts=!!(ALERTS||BOL||AL_TL), hasMultas=!!MULTAS_N, hasMedia=!MEDIA_OFF;
   for(const p of Object.values(profiles)){
-    const comps=[]; const add=(k,lab,w,val,active=true)=>{if(!active||w<=0)return;const vv=rankClamp(val==null?0:val);comps.push({k,lab,w,v:vv,pts:w*vv/100});};
+    // IMPORTANTE p/ acertividade: componente SEM DADO (val==null) é EXCLUÍDO da nota (não vira 0).
+    // Ex.: motorista sem litros não é penalizado na média — a nota é calculada sobre o que dá para medir.
+    // Valor medido 0 (ex.: identificação 0%) continua entrando como 0 (é um 0 real, não ausência de dado).
+    const comps=[]; const add=(k,lab,w,val,active=true)=>{if(!active||w<=0||val==null)return;const vv=rankClamp(val);if(vv==null)return;comps.push({k,lab,w,v:vv,pts:w*vv/100});};
     // Pesos (08/10/2026, decisão do William): jornada+ponto unificados em 20%, alertas 15%, hora extra 15%,
     // identificação do motorista 10%, média 15%. Câmera 5%, multas 10%, interjornada 10%. Soma = 100%.
     add('identMot','Identificação motorista',10,p.identMot,true);
