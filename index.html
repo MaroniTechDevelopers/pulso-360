@@ -3808,8 +3808,10 @@ function aderTrilhaIdent(segs){
   return temErro ? Math.min(99,Math.floor(pct)) : Math.round(pct);
 }
 // aderência DO MOTORISTA: min reconhecidos COMO ELE ÷ min de movimento do veículo nos dias dele (a da câmera conta qualquer condutor)
-function aderMotoristaRecs(recs){ let meu=0,tot=0; (recs||[]).forEach(r=>{ meu+=(r.horasMov||0); const arr=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]); arr.forEach(p=>{ const pk=placaKey(p)+'|'+r.data; if(MOV_TOT[pk]) tot+=MOV_TOT[pk]; }); });
-  if(tot>0) return Math.min(100,Math.round(meu/tot*100));
+function aderMotoristaRecs(recs){ let meu=0,unid=0; (recs||[]).forEach(r=>{ meu+=(r.horasMov||0); (r.movUnid||[]).forEach(s=>{ const a=+s.ini,b=+s.fim; if(isFinite(a)&&isFinite(b)&&b>a) unid+=(b-a); }); });
+  // Aderência DO CONDUTOR: em cima da movimentação DELE = identificado como ele ÷ (identificado + não-identificado nos dias/placas dele).
+  // NÃO divide pelo movimento dos OUTROS condutores do mesmo veículo.
+  const tot=meu+unid; if(tot>0) return Math.min(100,Math.round(meu/tot*100));
   let s=0,n=0; (recs||[]).forEach(r=>{ if(r.semelhanca!=null){ s+=r.semelhanca; n++; } }); return n?Math.round(s/n):null; }
 // ADERÊNCIA DE JORNADA (score positivo): % da condução que ocorreu DENTRO da janela do ponto (100% = jornada certinha)
 function aderJornada(recs){ let cond=0,fora=0; (recs||[]).forEach(r=>{ if(r.punches&&r.punches.length){ cond+=(r.horasMov||0); fora+=(r.ddReal||0); } }); return cond>0? Math.max(0,Math.round((cond-fora)/cond*100)) : null; }
