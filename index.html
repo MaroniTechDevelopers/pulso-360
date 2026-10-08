@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Conferência Ponto × Movimentação × Trimble — Pulso 360</title>
 <link rel="icon" id="favicon" type="image/png" href="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600;700&display=swap">
 <style>
   /* ============ TEMA (identidade Grupo Maroni — claro padrão, toggle p/ escuro) ============ */
   :root{
@@ -54,9 +57,13 @@
   }
   .head-top{display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap}
   .brand{display:flex; align-items:center; gap:13px; flex:1; min-width:260px}
-  .brand-logo{height:40px;width:auto;flex:none;display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,.35))}
-  .brand h1{font-size:18px; color:#fff}
-  .brand .sub{color:#9aa4b2; font-size:12.5px; margin-top:2px}
+  .brand-logo{height:44px;width:auto;flex:none;display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,.35))}
+  .brand h1{font-family:"Barlow Condensed","Barlow",system-ui,sans-serif;font-weight:800;font-size:27px;letter-spacing:.03em;color:#fff;line-height:1;display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+  .brand h1 .gold{color:var(--gold)}
+  .brand h1 .pulse{height:18px;width:auto;opacity:.6;flex:none}
+  .brand h1 .pulse polyline{fill:none;stroke:var(--gold);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .brand .sub{color:#9aa4b2; font-size:12px; margin-top:3px; letter-spacing:.01em}
+  .brand .sub b{color:#c9d2e0}
   .brand .sub b{color:var(--gold)}
   .head-tools{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
   .pill{
@@ -475,62 +482,106 @@
   .modal .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media(max-width:560px){.modal .modal-grid{grid-template-columns:1fr}}
   .modal .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
-  /* ===== Scorecard do condutor (gamificação) ===== */
+  /* ===== Scorecard do condutor — identidade Maroni (navy + ouro), gamificado ===== */
   #scoreModal{z-index:58}
-  #scoreModal .sc-modal{background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.4);width:100%;max-width:900px;max-height:92vh;overflow:auto}
-  .sc-top{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:14px;padding:15px 20px;background:linear-gradient(180deg,var(--navy-2),var(--navy));border-bottom:1px solid rgba(255,255,255,.08);border-radius:18px 18px 0 0}
-  .sc-top .avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#0b1220;font-size:17px;flex:0 0 auto}
-  .sc-top .sc-id{flex:1;min-width:0;color:#fff}
-  .sc-top .sc-id b{display:block;font-size:17px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .sc-top .sc-id small{color:#cbd5e1;font-size:12px}
-  .sc-cat{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:13px;padding:6px 12px;border-radius:999px;white-space:nowrap}
-  .sc-close{background:rgba(255,255,255,.12);color:#fff;border:none;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;flex:0 0 auto}
-  .sc-close:hover{background:rgba(255,255,255,.22)}
-  .sc-body{padding:18px 20px 22px}
-  .sc-hero{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-  .sc-hero .sc-tile{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:13px 10px;text-align:center}
-  .sc-hero .sc-big{font-size:30px;font-weight:800;line-height:1}
-  .sc-hero .sc-big small{font-size:14px;font-weight:600;color:var(--muted)}
-  .sc-hero .sc-lab{font-size:11px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.03em}
-  .sc-hero .sc-sub{font-size:12px;color:var(--ink-2);margin-top:3px;font-weight:600}
-  .sc-sec{margin-top:20px}
-  .sc-sec h4{margin:0 0 4px;font-size:14px;display:flex;align-items:center;gap:7px}
-  .sc-sec .sc-hint{font-size:12px;color:var(--muted);margin:0 0 12px}
-  .sc-chart{width:100%;height:auto;display:block;background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:6px}
-  .sc-nochart{background:var(--surface-2);border:1px dashed var(--border);border-radius:14px;padding:22px;text-align:center;color:var(--muted);font-size:13px}
-  .sc-comps{display:grid;grid-template-columns:1fr;gap:10px}
-  .sc-comp{display:flex;align-items:flex-start;gap:11px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:11px 13px}
-  .sc-comp .ic{font-size:18px;flex:0 0 auto;margin-top:1px}
+  #scoreModal .sc-modal{width:100%;max-width:460px;max-height:94vh;overflow:auto;border-radius:24px;color:#f3f6fc;
+    background:radial-gradient(125% 60% at 50% -8%, #1b2b4d 0%, #0e1626 58%), #0e1626;
+    box-shadow:0 26px 70px rgba(0,0,0,.55);
+    --sg-gold:#f5c800;--sg-gold2:#e68a00;--sg-goldsoft:rgba(245,200,0,.14);
+    --sg-ink:#f3f6fc;--sg-ink2:#c2cee2;--sg-mut:#8699b6;
+    --sg-card:#1a2742;--sg-card2:#223257;--sg-line:rgba(255,255,255,.09);
+    --sg-good:#4ade80;--sg-warn:#fbbf24;--sg-bad:#fb7185;
+    --sg-disp:"Barlow Condensed","Barlow",system-ui,sans-serif;
+    font-family:"Barlow",system-ui,-apple-system,sans-serif;line-height:1.45}
+  .sc-brand{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:11px;padding:13px 16px;background:linear-gradient(180deg,rgba(14,22,38,.97),rgba(14,22,38,.74));backdrop-filter:blur(6px);border-bottom:1px solid var(--sg-line);border-radius:24px 24px 0 0}
+  .sc-brand .mk{flex:none;display:flex;align-items:center;justify-content:center}
+  .sc-brand .mk img{height:40px;width:auto;display:block}
+  .sc-brand .bt b{font-family:var(--sg-disp);font-weight:700;letter-spacing:.06em;font-size:15px;display:block;line-height:1}
+  .sc-brand .bt small{color:var(--sg-mut);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase}
+  .sc-brand .sc-close{margin-left:auto;background:rgba(255,255,255,.12);color:#fff;border:none;width:32px;height:32px;border-radius:50%;font-size:15px;cursor:pointer;flex:none}
+  .sc-brand .sc-close:hover{background:rgba(255,255,255,.22)}
+  .sc-body{padding:16px 16px 24px}
+  .sg-hero{background:radial-gradient(130% 90% at 50% 0%,rgba(245,200,0,.10),transparent 60%),linear-gradient(165deg,var(--sg-card2),var(--sg-card));border:1px solid var(--sg-line);border-radius:22px;padding:22px 18px 18px;text-align:center;box-shadow:0 16px 36px rgba(0,0,0,.35)}
+  .sg-ring{position:relative;width:174px;height:174px;margin:0 auto 4px}
+  .sg-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .sg-ring .mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .sg-ring .nota{font-family:var(--sg-disp);font-weight:800;font-size:56px;line-height:.9;background:linear-gradient(160deg,#fff,var(--sg-gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sg-ring .de10{font-family:var(--sg-disp);font-weight:600;color:var(--sg-mut);font-size:14px;letter-spacing:.12em;margin-top:2px}
+  .sg-medal{display:inline-flex;align-items:center;gap:7px;margin-top:2px;padding:6px 15px;border-radius:999px;font-family:var(--sg-disp);font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;background:var(--sg-goldsoft);color:var(--sg-gold);border:1px solid color-mix(in srgb,var(--sg-gold) 38%,transparent)}
+  .sg-who{margin-top:12px}
+  .sg-who b{font-family:var(--sg-disp);font-weight:700;font-size:21px;letter-spacing:.02em;display:block}
+  .sg-who span{color:var(--sg-mut);font-size:12px}
+  .sg-level{margin-top:15px;background:rgba(0,0,0,.2);border:1px solid var(--sg-line);border-radius:13px;padding:11px 13px;text-align:left}
+  .sg-level .lr{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--sg-ink2);margin-bottom:7px}
+  .sg-level .lr b{font-family:var(--sg-disp);font-weight:700;color:var(--sg-gold)}
+  .sg-bar{height:9px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+  .sg-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--sg-gold2),var(--sg-gold));box-shadow:0 0 12px rgba(245,200,0,.5)}
+  .sg-track{display:flex;justify-content:space-between;margin-top:8px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--sg-mut);font-family:var(--sg-disp);font-weight:600}
+  .sg-track .on{color:var(--sg-ink)}
+  .sg-streak{display:flex;align-items:center;gap:10px;margin-top:13px;background:color-mix(in srgb,var(--sg-good) 12%,transparent);border:1px solid color-mix(in srgb,var(--sg-good) 30%,transparent);border-radius:12px;padding:10px 13px;font-size:12.5px;color:#d7f7e3;text-align:left}
+  .sg-streak.cool{background:color-mix(in srgb,var(--sg-gold) 11%,transparent);border-color:color-mix(in srgb,var(--sg-gold) 30%,transparent);color:#f6e6b0}
+  .sg-streak .em{font-size:18px;flex:none}
+  .sc-sec{margin-top:22px}
+  .sc-sec > h4{font-family:var(--sg-disp);font-weight:700;font-size:15px;letter-spacing:.05em;text-transform:uppercase;color:var(--sg-ink2);margin:0 2px 11px;display:flex;align-items:center;gap:8px}
+  .sc-chart{width:100%;height:auto;display:block;background:linear-gradient(165deg,var(--sg-card),#141f34);border:1px solid var(--sg-line);border-radius:16px;padding:14px 12px 8px}
+  .sc-nochart{background:var(--sg-card);border:1px dashed var(--sg-line);border-radius:14px;padding:20px;text-align:center;color:var(--sg-mut);font-size:12.5px}
+  .sg-ind{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;margin-bottom:9px;border:1px solid var(--sg-line)}
+  .sg-ind:last-child{margin-bottom:0}
+  .sg-ind.good{background:linear-gradient(120deg,color-mix(in srgb,var(--sg-good) 10%,var(--sg-card)),var(--sg-card))}
+  .sg-ind.warn{background:linear-gradient(120deg,var(--sg-goldsoft),var(--sg-card))}
+  .sg-ind .ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;font-size:20px;flex:none}
+  .sg-ind.good .ic{background:color-mix(in srgb,var(--sg-good) 18%,transparent)}
+  .sg-ind.warn .ic{background:var(--sg-goldsoft)}
+  .sg-ind .mid{flex:1;min-width:0}
+  .sg-ind .mid b{font-family:var(--sg-disp);font-weight:700;font-size:15.5px;letter-spacing:.02em;display:block}
+  .sg-ind .mid small{color:var(--sg-mut);font-size:11.5px;line-height:1.35;display:block;margin-top:1px}
+  .sg-ind .val{font-family:var(--sg-disp);font-weight:800;font-size:25px;flex:none;font-variant-numeric:tabular-nums}
+  .sg-ind.good .val{color:var(--sg-good)}
+  .sg-ind.warn .val{color:var(--sg-gold)}
+  .sc-ges{margin-top:22px;border:1px solid var(--sg-line);border-radius:14px;background:rgba(0,0,0,.14);overflow:hidden}
+  .sc-ges>summary{cursor:pointer;list-style:none;padding:13px 15px;font-family:var(--sg-disp);font-weight:700;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--sg-ink2);display:flex;align-items:center;gap:8px}
+  .sc-ges>summary::-webkit-details-marker{display:none}
+  .sc-ges>summary:after{content:'▾';margin-left:auto;color:var(--sg-mut)}
+  .sc-ges[open]>summary:after{content:'▴'}
+  .sc-ges .inner{padding:0 14px 14px}
+  .sc-comps{display:grid;grid-template-columns:1fr;gap:9px}
+  .sc-comp{display:flex;align-items:flex-start;gap:10px;background:var(--sg-card);border:1px solid var(--sg-line);border-radius:11px;padding:10px 12px}
+  .sc-comp .ic{font-size:17px;flex:0 0 auto;margin-top:1px}
   .sc-comp .mid{flex:1;min-width:0}
-  .sc-comp .mid .cl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}
-  .sc-comp .mid .cl b{font-size:13px}
+  .sc-comp .mid .cl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px}
+  .sc-comp .mid .cl b{font-size:12.5px;color:var(--sg-ink)}
   .sc-comp .mid .cl .pts{font-weight:800;white-space:nowrap}
-  .sc-comp .mid .cl .pts small{font-weight:600;color:var(--muted);font-size:10.5px}
-  .sc-comp .expl{font-size:11px;color:var(--muted);line-height:1.35;margin:3px 0 7px}
-  .sc-comp .bar{height:7px;background:color-mix(in srgb,var(--ink) 9%,transparent);border-radius:999px;overflow:hidden}
+  .sc-comp .mid .cl .pts small{font-weight:600;color:var(--sg-mut);font-size:10px}
+  .sc-comp .expl{font-size:10.5px;color:var(--sg-mut);line-height:1.35;margin:3px 0 6px}
+  .sc-comp .bar{height:6px;background:rgba(255,255,255,.1);border-radius:999px;overflow:hidden}
   .sc-comp .bar i{display:block;height:100%;border-radius:999px}
-  .sc-comp .meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--ink-2);align-items:center}
-  .sc-comp .meta b{color:var(--ink)}
-  .sc-comp .tr{font-weight:700;font-size:11px}
-  .sc-total{margin-top:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px 14px}
-  .sc-total .row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0}
-  .sc-total .row.pen{color:var(--critical)}
-  .sc-total .row.fin{border-top:1px dashed var(--border);margin-top:5px;padding-top:8px;font-size:15px;font-weight:800}
+  .sc-comp .meta{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;font-size:10.5px;color:var(--sg-ink2);align-items:center}
+  .sc-comp .meta b{color:var(--sg-ink)}
+  .sc-comp .tr{font-weight:700;font-size:10.5px}
+  .sc-total{margin-top:11px;background:var(--sg-card);border:1px solid var(--sg-line);border-radius:11px;padding:10px 13px}
+  .sc-total .row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:3px 0;color:var(--sg-ink2)}
+  .sc-total .row.pen{color:var(--sg-bad)}
+  .sc-total .row.fin{border-top:1px dashed var(--sg-line);margin-top:5px;padding-top:7px;font-size:14.5px;font-weight:800;color:var(--sg-ink)}
   .sc-trat{display:flex;flex-direction:column}
-  .sc-tline{display:flex;gap:12px;padding:0 0 14px;position:relative}
-  .sc-tline:before{content:'';position:absolute;left:7px;top:4px;bottom:-4px;width:2px;background:var(--border)}
+  .sc-tline{display:flex;gap:11px;padding:0 0 13px;position:relative}
+  .sc-tline:before{content:'';position:absolute;left:7px;top:4px;bottom:-4px;width:2px;background:var(--sg-line)}
   .sc-tline:last-child:before{display:none}
-  .sc-tdot{width:16px;height:16px;border-radius:50%;flex:0 0 auto;margin-top:2px;z-index:1;border:3px solid var(--surface)}
-  .sc-tcard{flex:1;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+  .sc-tdot{width:16px;height:16px;border-radius:50%;flex:0 0 auto;margin-top:2px;z-index:1;border:3px solid var(--sg-card)}
+  .sc-tcard{flex:1;background:var(--sg-card);border:1px solid var(--sg-line);border-radius:11px;padding:10px 12px}
   .sc-tcard .th{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
-  .sc-tcard .th .dt{font-size:12px;color:var(--muted)}
-  .sc-tcard .ob{font-size:12.5px;color:var(--ink-2);margin-top:5px;white-space:pre-wrap}
-  .sc-tcard .mt{display:flex;gap:12px;align-items:center;margin-top:7px;font-size:12px;flex-wrap:wrap}
-  .sc-delta{font-weight:700;font-size:12px}
+  .sc-tcard .th b{font-family:var(--sg-disp);color:var(--sg-ink);font-size:14px}
+  .sc-tcard .th .dt{font-size:11.5px;color:var(--sg-mut)}
+  .sc-tcard .ob{font-size:12px;color:var(--sg-ink2);margin-top:5px;white-space:pre-wrap}
+  .sc-tcard .mt{display:flex;gap:11px;align-items:center;margin-top:6px;font-size:11.5px;flex-wrap:wrap}
+  .sc-hint{font-size:12px;color:var(--sg-mut)}
+  .sc-delta{font-weight:700;font-size:11.5px}
   .sc-tnota{font-weight:700}
-  .sc-empty-trat{background:var(--surface-2);border:1px dashed var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted);font-size:13px}
-  .sc-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
-  @media(max-width:720px){ .sc-hero{grid-template-columns:1fr 1fr} .sc-comps{grid-template-columns:1fr} }
+  .sc-empty-trat{background:var(--sg-card);border:1px dashed var(--sg-line);border-radius:11px;padding:16px;text-align:center;color:var(--sg-mut);font-size:12.5px}
+  .sc-foot{margin-top:20px;text-align:center;color:var(--sg-mut);font-size:12px;line-height:1.5;padding:0 6px}
+  .sc-foot .big{display:block;color:var(--sg-ink2);font-family:var(--sg-disp);font-weight:600;font-size:14.5px;margin-bottom:4px}
+  .sc-actions{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+  .sc-actions .btn{background:var(--sg-goldsoft);color:var(--sg-gold);border:1px solid color-mix(in srgb,var(--sg-gold) 40%,transparent);border-radius:11px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer}
+  .sc-actions .btn:hover{background:color-mix(in srgb,var(--sg-gold) 22%,transparent)}
   .tratlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
   .tratlist li{border-left:3px solid var(--gold);background:var(--surface-2);border-radius:9px;padding:10px 12px}
   .tratlist .tt-h{font-size:13px}
@@ -565,8 +616,8 @@
     <div class="brand">
       <img class="brand-logo" id="brandLogo" alt="Grupo Maroni" src="">
       <div>
-        <h1>Conferência de Jornada — Ponto × Movimentação × Trimble</h1>
-        <div class="sub">Projeto <b>Pulso 360</b> · cruzamento folha de ponto × movimentação do veículo × identificação facial</div>
+        <h1>Pulso <span class="gold">360</span><svg class="pulse" viewBox="0 0 170 24" aria-hidden="true" preserveAspectRatio="xMidYMid meet"><polyline points="0,12 44,12 52,12 57,9 61,12 68,3 74,21 80,12 170,12"/></svg></h1>
+        <div class="sub">Conferência de jornada · ponto × movimentação × identificação facial · <b>Grupo Maroni</b></div>
       </div>
     </div>
     <div class="head-tools">
@@ -1007,7 +1058,7 @@
 /* ============================================================
    LOGO MARONI (rinoceronte) — embutido
    ============================================================ */
-const LOGO_MARONI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADcAAAA7CAYAAADfGRI9AAADxUlEQVR42u3abYgUdRzA8d9sd212HgV5RRrVFcZpDxpkUeBhLzToisI6RAkCPZKIK4IMi4gKzvJ60VUvghKE6AGl7IJ60dWBcVmClYJ6Hp6Ij6d4x6msck+6P78v5mD5cbe7/nfmZubYF59ll2Fm98vu/Oc/syPDZ+oFzQm3GGKNP9GEayvHJVTRcSdwZ8y95Bp3BBJzz5bjynHxU44rxwXgmuka9xR2Tbe4BeiEYnC6xM3GZmRzt5n0uCq8j4tQoyepcSmsQd8kUYo9SY1bBjUG8CTWQtGV1DgP+6G+P3EbBM9D0QlxdDOWRhLnWw1FBtUQXz0U7Y5hj+EkdkUZV4sxKFogvvlQ9OJVLEENpAivYRTqmzfVcTPwrhkhR1AHwS1QWP3Yjs/wgpnBzMQWqLFhquI8rMQxKKzfIaiAFmE3HsE8dENhHUUq7LiH8Te0gEYIBosMzGIImseisOLm4GtokY6jCgehJTiFjagL/Gdp96urtBH/OKw3hm14GhVhHOc8rMBRqKMxh2+uHzVhHsQfwl/QiCwtEHcDFuaYY5ancddEcRlkoRHqsEH2gxeI/wp3x/mK8wIIrDYsgUxiDRQ3xjnu+zz72kIIrEUYxgV4woMXk5iJrIf4bscgdJKf5aycwW/H+ICSiklIvsBKc0iZBXsB6g+o7/OkxCl2mtfXmriPzPLVSYrLNWzClkONByFR7HN70YxPoA76Ib46ZMzyEVRGFXceaQhaHNY/AkE1uqHG/3aGcmmKA9chBQ+HHNZ/Cz9AYW0ycSXN3HdAHXRjLX6CBugVG/cz1EEW92A0JoON4lEb9zbUwQAErTEJu4wqG1cPdXAQgpnogUasG2LjKnDOYWMXUQfB/RiKOO5bGzducwnHrRkQNEUc98ZkcYuhjjZBfN9EGNds43L9C3W0Mgb736f54hqgjjKYC8GteA/HoQH5D+3QPH61cVYH1NEeXGdORRrQHsAsqBVi5pJWb6G42vENOOpDC+wJ5Wy8g8OlBBa4GncJlTbOWgUtURYdaDTnXyksw48hzGxGcZOJm9CH0ICcQSvmwv739iYOhT1aWh6+gAZsO1Yhbd7rcXyHEaiDLRAbVyhwAzQEA2jDfNgLPV9Cr0IPqouNs1YgAw1JF17E9ebmnNNFTgHvgzjF+e7AL9AQncXL8CCowbaciD4cwE78hq1YDnGNs57B7pDievEcxKiAFOAcZ3l+ZGdA/yvsQxMqIUEJYiO1WIcujEGLNISteAIeBBK3uFxp3IsGNGE9WvAxPsDraMQDSId9X+YVeZsPNYw7FOMAAAAASUVORK5CYII=";
+const LOGO_MARONI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWwAAAGTCAYAAAAMWyh1AAAFlElEQVR42u3cvVHrQABG0StSKqAJ+q+DJqiAGEIyMIwl78858WNmHzI38Gq+oz/6eHv5vOXfPb++H1f+jHM5l3M99lyeyffPnOUpAKYg2ACCDYBgAwg2AIINgGADCDYAgg0AAADwOIdNBedyLufKlki2RAAQbADBBkCwARBsAMEGQLABEGwAwQYAAAAAgHYffwL4ifEnAPKWCACCDSDYAAg2AIININgACDYAgg0AAAAAQMafjD8BGYzKpSNA3hIBQLABEGwAwQZAsAEQbADBBkCwAQAAALIlYksEyJZIvsMGyKUjAIINgGADCDYAgg0g2AAINgCCDQAAAABAxp/K+BOQ8SfjTwAINoBgAyDYAAg2gGADINgACDaAYAMAAAAAQMafADL+BEDeEgFAsAEEGwDBBkCwAQQbAMEGQLABAAAAypYIjbXd4LOCLZF8hw2QS0cABBsAwQYQbAAEG0CwARBsAAQbAAAAAICMP5Xxp4zgXPIzPisYf8qlI0DeEgFAsAEQbADBBkCwAQQbAMEGQLABAAAAAMj4Uxl/arFRG+NP+Dsx/gSAYAMINgCCDYBgAwg2AIINgGADCDYAAABAtkRsibTrlsioWw+ssdmRLZF8hw2QS0cABBsAwQYQbAAEGwDBBhBsAAQbAAAAAICMP2X8KeNPS47zrPL7Gul3PMPfvPEnAPKWCACCDSDYAAg2gGADINgACDaAYAMAAAAAQMaflh9/WmnM6IrnuPvva+ZzGX8y/gSAYAMINgCCDSDYAAg2AIININgACDYAAABAtkQm2xKxQeFczmVLxJYIAIININgACDYAgg0g2AAINoBg+xUACDYAAAAAAGT8yTiPcznX7MNqGX/KpSNA3hIBQLABEGwAwQZAsAEQbADBBkCwAQAAAADI+FPGeZzLuZyLXDoCINgAgg2AYAMg2ACCDYBgAyDYAIINAAAAkC2RbD04l3NlS+QcK22i3Pp/8R02QC4dARBsAMEGQLABEGwAwQZAsAEQbAAAAAAAMv5knMe5nMu57jSydMX/vUFHqYw/AeQtEQAEGwDBBhBsAAQbAMEGEGwABBsAAAAAgIw/ZQTHuZzLuf4//jTq/z3jTwDkLREABBtAsAEQbADBBkCwARBsAMEGAAAAAICMP2Wcx7mcy/jTwONPIz0Tl44AeUsEAMEGEGwABBsAwQYQbAAEGwDBBgAAAMiWiHM51z1+ppM3KGyJ+AznO2yAXDoCINgACDaAYAMg2AAINoBgAyDYAAAAAADs4Bhx0CZDMM7lXMafNnomuXQEyFsiAAg2AIININgACDYAgg0g2AAINgAAAAAAGX/K+NNk5/Icncv4k/EnAPKWCACCDSDYAAg2AIININgACDYAgg0AAABkSyQbFNkS8RydK1sitkQAyKUjgGADINgACDaAYAMg2AAINoBgAwAAAABAI44/NejQkHGeNQajPEfjT8afcukIkLdEABBsAAQbQLABEGwAwQZAsAEQbAAAAAAAMv6U8SfnuujZe47Gn/xt5dIRIG+JACDYAAg2gGADINgAgg2AYAMg2AAAAAANvCWSDYptz+XzZUvE35YtEYBcOgIg2AAINoBgAyDYAAg2gGADINgAAAAAAJDxJwM1Rql87jP+ZPwJgLwlAiDYAAg2AIININgACDYAgg0g2AAAAAAAkPGnrhvNyUCNcw0y6LPK34rPyvnP3qUjQN4SAUCwAQQbAMEGQLABBBsAwQZAsAEAAADaY0ukQXcYbHY4144bJys9k3yHDYBgAwg2AIINgGADCDYAgg2AYAMINgAAAAAAZPyplceiMmbkXBOPE5FLRwAEG0CwARBsAMEGQLABEGwAwQZAsAEAAAAAIONPZJTqMeeCXDoCCDYAgg2AYAMINgCCDYBgAwg2AIINwO++AFpQ9TTgFrKSAAAAAElFTkSuQmCC";
 document.getElementById('favicon').href = LOGO_MARONI;
 document.getElementById('brandLogo').src = LOGO_MARONI;
 document.getElementById('footLogo').src = LOGO_MARONI;
@@ -3349,6 +3400,17 @@ const SC_EXPL={
   extra:'penaliza a média diária de hora extra acima de 2h/dia. 100 = sem excesso; cai conforme a média passa de 2h extra por dia (≈4h extra/dia = 0).',
   media:'sua média de consumo (km/l) comparada à meta do veículo. 100 = na meta ou acima.'
 };
+// Rótulos e dicas amigáveis p/ a tela do MOTORISTA (destaques / onde melhorar)
+const SC_FRIENDLY={
+  identMot:{ic:'📷',area:'Identificação',pos:'Sempre reconhecido',posd:'A câmera te identificou ao volante quase sempre.',tip:'Mantenha o rosto visível para a câmera.'},
+  identCam:{ic:'🎥',area:'Câmera do veículo',pos:'Câmera em dia',posd:'Boa cobertura de identificação no veículo.',tip:'Se a câmera falhar, avise a manutenção.'},
+  jornada:{ic:'⏱️',area:'Jornada e ponto',pos:'Jornada em dia',posd:'Conduziu dentro do horário do ponto.',tip:'Dirigir dentro do horário do ponto e bater o ponto.'},
+  alertas:{ic:'🚨',area:'Direção segura',pos:'Direção segura',posd:'Poucos alertas no período. Mandou bem!',tip:'Menos celular e velocidade = mais pontos.'},
+  multas:{ic:'🚦',area:'Multas',pos:'Sem multas',posd:'Nenhuma multa de conduta no período.',tip:'Evitar multas de conduta (celular, velocidade).'},
+  interj:{ic:'🛌',area:'Descanso (11h)',pos:'Descanso certo',posd:'Respeitou as 11h de descanso entre jornadas.',tip:'Respeitar as 11h de descanso entre jornadas.'},
+  extra:{ic:'➕',area:'Hora extra',pos:'Hora certa',posd:'Sem excesso de hora extra.',tip:'Evitar passar de 2h extras por dia.'},
+  media:{ic:'⛽',area:'Economia (média)',pos:'Economia',posd:'Consumo dentro da meta do veículo.',tip:'Dirigir econômico, dentro da meta do veículo.'}
+};
 const SC_CACHE={sig:'',mensal:new Map()};
 function scEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function scN10(s){ return Math.round((s||0)/10*10)/10; }
@@ -3380,19 +3442,21 @@ function scSig(){ const r=activeRange(); return DATA_REV+'|M'+MULTAS_REV+'|'+($(
 function scMensalCached(nome, rows){ const sig=scSig(); if(SC_CACHE.sig!==sig){ SC_CACHE.sig=sig; SC_CACHE.mensal=new Map(); } const nn=norm(nome); if(SC_CACHE.mensal.has(nn))return SC_CACHE.mensal.get(nn); const v=scoreMensalMotorista(nome,rows); SC_CACHE.mensal.set(nn,v); return v; }
 function scLineChart(mensal, tratsPorMes){
   const data=(mensal||[]).filter(m=>m.score!=null);
-  if(!data.length) return '<div class="sc-nochart">Ainda não há meses com movimentação para traçar a evolução. Conforme publicamos novos meses, a linha cresce.</div>';
-  const W=720,H=238,padL=34,padR=16,padT=18,padB=40, plotW=W-padL-padR, plotH=H-padT-padB, n=data.length;
+  if(!data.length) return '<div class="sc-nochart">Ainda não há meses com movimentação para traçar a sua evolução. Conforme acumulamos meses, a linha cresce. 🚀</div>';
+  const W=720,H=238,padL=30,padR=16,padT=20,padB=40, plotW=W-padL-padR, plotH=H-padT-padB, n=data.length;
   const x=i=> n===1 ? padL+plotW/2 : padL+plotW*i/(n-1);
   const y=v=> padT+plotH*(1-Math.max(0,Math.min(10,v))/10);
-  let grid=''; for(let g=0;g<=10;g+=2){ const yy=y(g); grid+=`<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-6}" y="${(yy+3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">${g}</text>`; }
-  const line=data.map((m,i)=>`${x(i).toFixed(1)},${y(scN10(m.score)).toFixed(1)}`).join(' ');
-  let dots='',xl=''; data.forEach((m,i)=>{ const n10=scN10(m.score),cx=x(i),cy=y(n10),col=notaCor(m.score);
-    dots+=`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="4.5" fill="${col}" stroke="var(--surface)" stroke-width="2"/><text x="${cx.toFixed(1)}" y="${(cy-10).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">${scFmt(n10)}</text>`;
-    xl+=`<text x="${cx.toFixed(1)}" y="${H-22}" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">${scMesLabel(m.key)}</text>`;
+  let grid=''; for(let g=0;g<=10;g+=5){ const yy=y(g); grid+=`<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="rgba(255,255,255,.07)" stroke-width="1"/><text x="${padL-6}" y="${(yy+3).toFixed(1)}" text-anchor="end" font-size="10" fill="#6c7f9c">${g}</text>`; }
+  const pts=data.map((m,i)=>`${x(i).toFixed(1)},${y(scN10(m.score)).toFixed(1)}`);
+  const line=pts.join(' ');
+  const area = n>1 ? `<path d="M${pts.join(' L')} L${x(n-1).toFixed(1)},${(H-padB).toFixed(1)} L${x(0).toFixed(1)},${(H-padB).toFixed(1)} Z" fill="url(#scfill)"/>` : '';
+  let dots='',xl=''; data.forEach((m,i)=>{ const n10=scN10(m.score),cx=x(i),cy=y(n10),last=i===n-1;
+    dots+=`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${last?6.5:5}" fill="${last?'#f5c800':'#0e1626'}" stroke="${last?'#0e1626':'#f5c800'}" stroke-width="3"/><text x="${cx.toFixed(1)}" y="${(cy-11).toFixed(1)}" text-anchor="middle" font-size="${last?14:12}" font-weight="700" fill="${last?'#f3f6fc':'#c2cee2'}" font-family="Barlow Condensed, sans-serif">${scFmt(n10)}</text>`;
+    xl+=`<text x="${cx.toFixed(1)}" y="${H-22}" text-anchor="middle" font-size="11" fill="${last?'#c2cee2':'#8699b6'}" font-family="Barlow Condensed, sans-serif" letter-spacing="1">${scMesLabel(m.key).toUpperCase()}</text>`;
     const nt=(tratsPorMes||{})[m.key]||0; if(nt) xl+=`<text x="${cx.toFixed(1)}" y="${H-7}" text-anchor="middle" font-size="11">🗣️${nt>1?'×'+nt:''}</text>`;
   });
-  const lineEl = n>1 ? `<polyline points="${line}" fill="none" stroke="var(--s2)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
-  return `<svg viewBox="0 0 ${W} ${H}" class="sc-chart" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Evolução mensal da nota">${grid}${lineEl}${dots}${xl}</svg>`;
+  const lineEl = n>1 ? `<polyline points="${line}" fill="none" stroke="#f5c800" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+  return `<svg viewBox="0 0 ${W} ${H}" class="sc-chart" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sua evolução mensal"><defs><linearGradient id="scfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(245,200,0,.32)"/><stop offset="1" stop-color="rgba(245,200,0,0)"/></linearGradient></defs>${grid}${area}${lineEl}${dots}${xl}</svg>`;
 }
 function openScorecard(nome){
   if(!nome)return; SCORECARD_NOME=nome;
@@ -3446,18 +3510,50 @@ function renderScorecard(nome){
   if(firstSc!=null && lastSc!=null && trats.length>1){ const dd=lastSc-firstSc, c=dd>=1?'var(--good)':dd<=-1?'var(--critical)':'var(--muted)'; tratResumo=`<p class="sc-hint">Da 1ª à última tratativa: <b style="color:${c}">${scFmt(scN10(firstSc))} → ${scFmt(scN10(lastSc))} (${dd>0?'+':''}${scFmt(scN10(dd))})</b></p>`; }
   const trendTxt = trend==null?'—':(trend>=1?'↑ +'+scFmt(scN10(trend)):trend<=-1?'↓ '+scFmt(scN10(trend)):'→ estável');
   const trendCol = trend==null?'var(--muted)':(trend>=1?'var(--good)':trend<=-1?'var(--critical)':'var(--muted)');
-  const scTop=`<div class="sc-top"><span class="avatar" style="background:${notaCor(p.score)}">${iniciais(nome)}</span><div class="sc-id"><b>${scEsc(nome)}</b><small>${scEsc(op)} · ${tempoDeCasa(admissao)} de casa</small></div><span class="sc-cat" style="background:color-mix(in srgb,${cat.cor} 20%,transparent);color:${cat.cor};border:1px solid color-mix(in srgb,${cat.cor} 50%,transparent)">${cat.ic} ${cat.lab}</span><button class="sc-close" data-sc-act="close" title="Fechar">✕</button></div>`;
-  const hero=`<div class="sc-hero">
-    <div class="sc-tile"><div class="sc-big" style="color:${notaCor(p.score)}">${scFmt(n10)}<small>/10</small></div><div class="sc-lab">Nota atual</div></div>
-    <div class="sc-tile"><div class="sc-big" style="color:${trendCol};font-size:22px;padding-top:7px">${trendTxt}</div><div class="sc-lab">vs mês anterior</div></div>
+  // ---- herói gamificado ----
+  const C=326.726, dash=(C*(1-Math.max(0,Math.min(10,n10))/10)).toFixed(1);
+  const medalIc={ouro:'🥇',prata:'🥈',bronze:'🥉'}[catK];
+  let lvlLR, lvlPct;
+  if(catK==='ouro'){ lvlLR='<span>🏆 Nível máximo — mantenha o <b>Ouro</b></span><span><b>Topo</b></span>'; lvlPct=100; }
+  else if(catK==='prata'){ lvlLR=`<span>Falta pouco para o <b>Ouro 🥇</b></span><span><b>+${scFmt(9-n10)}</b> pts</span>`; lvlPct=Math.max(5,Math.min(100,(n10-7)/2*100)); }
+  else { lvlLR=`<span>Rumo à <b>Prata 🥈</b></span><span><b>+${scFmt(7-n10)}</b> pts</span>`; lvlPct=Math.max(5,Math.min(100,n10/7*100)); }
+  const track=`<div class="sg-track"><span class="${catK==='bronze'?'on':''}">Bronze</span><span class="${catK==='prata'?'on':''}">Prata</span><span class="${catK==='ouro'?'on':''}">Ouro</span></div>`;
+  let rise=0; for(let i=com.length-1;i>0;i--){ if(com[i].score>=com[i-1].score-0.05) rise++; else break; }
+  let streak;
+  if(com.length>=2 && ult && pen && ult.score>pen.score+0.05) streak=`<div class="sg-streak"><span class="em">📈</span><div><b>${rise+1} ${rise+1>1?'meses':'mês'} em evolução</b> — continue assim que o próximo nível vem!</div></div>`;
+  else if(com.length>=2 && ult && pen && ult.score<pen.score-0.05) streak='<div class="sg-streak cool"><span class="em">💪</span><div>Mês passado caiu um pouco — <b>bora recuperar!</b> Você consegue voltar a subir.</div></div>';
+  else if(com.length>=2) streak='<div class="sg-streak"><span class="em">✅</span><div><b>Ritmo mantido</b> — segue firme!</div></div>';
+  else streak='<div class="sg-streak cool"><span class="em">🚀</span><div><b>Primeiro mês medido</b> — seu histórico começa aqui.</div></div>';
+  // destaques / onde melhorar (em linguagem de motorista)
+  const byVal=comps.slice().sort((a,b)=>b.v-a.v);
+  const fortes=(byVal.filter(c=>c.v>=75).slice(0,3).length?byVal.filter(c=>c.v>=75).slice(0,3):byVal.slice(0,3));
+  const fortesHtml=fortes.map(c=>{ const f=SC_FRIENDLY[c.k]||{ic:'•',pos:c.lab,posd:''}; return `<div class="sg-ind good"><div class="ic">${f.ic}</div><div class="mid"><b>${f.pos}</b><small>${f.posd}</small></div><div class="val">${Math.round(c.v)}</div></div>`; }).join('');
+  const fracos=byVal.slice().reverse().filter(c=>c.v<75).slice(0,3);
+  const fracosHtml=fracos.length? fracos.map(c=>{ const f=SC_FRIENDLY[c.k]||{ic:'•',area:c.lab,tip:''}; return `<div class="sg-ind warn"><div class="ic">${f.ic}</div><div class="mid"><b>${f.area||f.pos}</b><small>${f.tip}</small></div><div class="val">${Math.round(c.v)}</div></div>`; }).join('')
+    : '<div class="sg-ind good"><div class="ic">🎉</div><div class="mid"><b>Tudo em dia!</b><small>Você está forte em todos os indicadores. Continue assim!</small></div><div class="val">👏</div></div>';
+  const mesRef = ult? scMesLabel(ult.key).toUpperCase() : '';
+  const scBrand=`<div class="sc-brand"><span class="mk"><img src="${LOGO_MARONI}" alt="Pulso 360"></span><div class="bt"><b>PULSO 360</b><small>Grupo Maroni</small></div><button class="sc-close" data-sc-act="close" title="Fechar">✕</button></div>`;
+  const hero=`<section class="sg-hero">
+    <div class="sg-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="12"/><circle cx="60" cy="60" r="52" fill="none" stroke="url(#rg)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${dash}"/><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff2a8"/><stop offset=".5" stop-color="#f5c800"/><stop offset="1" stop-color="#e68a00"/></linearGradient></defs></svg><div class="mid"><span class="nota">${scFmt(n10)}</span><span class="de10">DE 10</span></div></div>
+    <div class="sg-medal">${medalIc} ${cat.lab}</div>
+    <div class="sg-who"><b>${scEsc(nome)}</b><span>${scEsc(op)} · ${tempoDeCasa(admissao)} de casa</span></div>
+    <div class="sg-level"><div class="lr">${lvlLR}</div><div class="sg-bar"><i style="width:${lvlPct}%"></i></div>${track}</div>
+    ${streak}
+  </section>`;
+  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota (0–10) é a média ponderada dos indicadores. A contribuição de cada um = peso × o valor. Ouro 9–10 · Prata 7–8 · Bronze ≤6.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
+  const tratSec=`<div class="sc-sec"><h4>🗣️ Tratativas</h4>${tratResumo||'<p class="sc-hint" style="margin:0 0 11px">Acompanhe se cada conversa melhorou a nota no mês seguinte. Registre no resumo semanal (ficha do motorista).</p>'}${trats.length?`<div class="sc-trat">${tratHtml}</div>`:'<div class="sc-empty-trat">Nenhuma tratativa registrada ainda.</div>'}</div>`;
+  const body=`<div class="sc-body">
+    <div style="font-family:var(--sg-disp);font-weight:600;font-size:18px;color:var(--sg-ink2);margin:2px 2px 13px">Olá, <b style="color:var(--sg-ink)">${scEsc(firstName(nome))}</b> 👋 ${mesRef?('seu desempenho em <b style="color:var(--sg-ink)">'+mesRef+'</b>'):'este é o seu desempenho'}</div>
+    ${hero}
+    <div class="sc-sec"><h4>📊 Sua evolução</h4>${scLineChart(mensal,tratsPorMes)}</div>
+    <div class="sc-sec"><h4>🌟 No que você é destaque</h4>${fortesHtml}</div>
+    <div class="sc-sec"><h4>🎯 Onde dá pra ganhar mais pontos</h4>${fracosHtml}</div>
+    ${gestor}
+    ${tratSec}
+    <div class="sc-foot"><span class="big">Seu gestor está acompanhando e torcendo por você 💪</span>Continue nesse ritmo que o prêmio vem.</div>
+    <div class="sc-actions"><button class="btn" data-sc-act="ficha">📋 Abrir no resumo semanal</button></div>
   </div>`;
-  const body=`<div class="sc-body">${hero}
-    <div class="sc-sec"><h4>📈 Evolução mensal da nota</h4><p class="sc-hint">Nota de 0 a 10 por mês. 🗣️ marca os meses com tratativa. A linha cresce conforme acumulamos meses.</p>${scLineChart(mensal,tratsPorMes)}</div>
-    <div class="sc-sec"><h4>🎯 Como chegamos na nota</h4><p class="sc-hint">A nota (0–10) é a <b>média ponderada</b> dos indicadores abaixo. Cada indicador vale um <b>peso</b>; a <b>contribuição</b> dele na nota = peso × o seu valor. Somando todas as contribuições chega-se na nota. Ouro 9–10 · Prata 7–8 · Bronze ≤6.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div>
-    <div class="sc-sec"><h4>🗣️ Tratativas — evolução de uma para a outra</h4>${tratResumo||'<p class="sc-hint">Acompanhe se cada conversa melhorou a nota do condutor no mês seguinte. As tratativas são registradas no resumo semanal (ficha do motorista).</p>'}${trats.length?`<div class="sc-trat">${tratHtml}</div>`:'<div class="sc-empty-trat">Nenhuma tratativa registrada ainda. Registre no <b>resumo semanal</b> (ficha do motorista) para começar a acompanhar a evolução.</div>'}</div>
-    <div class="sc-actions"><button class="btn solid" data-sc-act="ficha">📋 Ir para o resumo semanal</button></div>
-  </div>`;
-  shell.innerHTML=scTop+body;
+  shell.innerHTML=scBrand+body;
 }
 function renderAll(){
   // Qualquer mudança nos controles pertence somente à aba/filtro corrente.
