@@ -1743,6 +1743,17 @@ function filtered(){
   }
   FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=out; FILTER_CACHE_DIV_COUNT=div; return out;
 }
+// Placas presentes no recorte de filtros atuais (null = SEM filtro → mostra tudo).
+// Faz as abas de PLACA (Saúde das câmeras, Operação por placa, Placas sem ID) respeitarem os
+// filtros do topo (operação, período, motorista, busca) — antes elas ignoravam os filtros.
+function placasNoFiltro(){
+  if(!REAL) return null;
+  const fe=$('#fFecha').value, op=$('#fOp').value, dia=$('#fDia').value, de=$('#fDe').value, ate=$('#fAte').value, mot=norm($('#fMot').value), st=$('#fStatus').value, q=norm($('#fBusca').value);
+  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q) return null;   // nada filtrado → todas as placas
+  const s=new Set();
+  filtered().forEach(r=>{ const arr=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]); for(const p of arr){ const k=placaKey(p); if(k)s.add(k); } });
+  return s;
+}
 function debounce(fn,ms){ let t; return function(...a){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,a),ms); }; }
 const renderAllDebounced=debounce(()=>renderAll(),300);
 let MOT_FILTER_LIST=[];
@@ -3457,8 +3468,8 @@ function renderAll(){
   let viewKey;
   if(rowViews.has(view)) viewKey=DATA_REV+'|M'+MULTAS_REV+'|'+fkey+(view==='semana'?'|R'+SEMANA_RANK_MODE:'')+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'')+(view==='linha'?'|C'+($('#fCondTimeline')?$('#fCondTimeline').value:''):'');
   else if(view==='motoristas') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+(rng?(rng.de+'|'+rng.ate):'*');
-  else if(view==='semid') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+CFG.sem;
-  else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view;
+  else if(view==='semid') viewKey=DATA_REV+'|semid|'+fkey+'|'+CFG.sem;
+  else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view+'|'+fkey;
   else viewKey=DATA_REV+'|'+view;
   // Cache LRU do Resumo: limpar um filtro ou voltar a uma combinação já usada restaura o HTML pronto.
   if(view==='semana'&&SUMMARY_DOM_CACHE.has(viewKey)){
@@ -3498,7 +3509,8 @@ function renderSaude(){
   const idBy=PLATE_RECORD_SUMMARY||{};
   const temRecs=RECORDS.length>0;
   const rk={critico:0,atencao:1,pendente:2,conforme:3};
-  const rows=Object.keys(SAUDE).map(pk=>{ const s=SAUDE[pk]; const f=camFarol(s.func,s.status); const id=idBy[pk];
+  const pf=placasNoFiltro();   // respeita os filtros do topo (operação/período/motorista/busca)
+  const rows=Object.keys(SAUDE).filter(pk=>!pf||pf.has(pk)).map(pk=>{ const s=SAUDE[pk]; const f=camFarol(s.func,s.status); const id=idBy[pk];
     const dias=id?id.dias.size:0;
     const pm=(typeof PLACA_MOV!=='undefined'&&PLACA_MOV&&PLACA_MOV[pk]); const ader= pm&&pm.tot? Math.round(pm.idn/pm.tot*100) : (id&&id.aderN?Math.round(id.aderSum/id.aderN):null);   // ponderado (PLACA_MOV/BDV) > média
     const idStatus = !temRecs ? '— (sem movimentação carregada)' : (dias>0? ('identificando · '+dias+' dia'+(dias>1?'s':'')) : 'sem identificação no período');
@@ -3624,7 +3636,8 @@ function renderPlacasSemId(){
   if(!PLACA_MOV || !Object.keys(PLACA_MOV).length){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Carregue a <b>Movimentação</b> na aba <b>Dados</b> para listar as placas que se moveram sem identificação do condutor. (precisa que o relatório traga o movimento mesmo sem motorista)</div>'; SEMID_ROWS=[]; return; }
   const rk={critico:0,atencao:1};
   const opF=$('#fOp').value;
-  const rows=Object.keys(PLACA_MOV).filter(pk=> !opF || operacaoDaPlaca(pk)===opF).map(pk=>{ const g=PLACA_MOV[pk];
+  const pf=placasNoFiltro();   // respeita TODOS os filtros do topo (operação/período/motorista/busca)
+  const rows=Object.keys(PLACA_MOV).filter(pk=> !pf||pf.has(pk)).map(pk=>{ const g=PLACA_MOV[pk];
     const ader = g.tot>0? Math.round(g.idn/g.tot*100) : null;
     const op = operacaoDaPlaca(pk) || (PLACA_UO&&PLACA_UO[pk]&&PLACA_UO[pk].uoCurta) || '—';
     const cam = camDaPlaca(pk);
@@ -3635,7 +3648,7 @@ function renderPlacasSemId(){
     return {placa:pk, op, dias:g.dias, diasId:g.diasId, ader, cam, status, cls, plano:planoDaPlaca(cam,cls), ult:g.ult};
   }).filter(r=>r.cls!=='ok').sort((a,b)=> (rk[a.cls]-rk[b.cls]) || (a.ader||0)-(b.ader||0) || b.dias-a.dias);
   SEMID_ROWS=rows;
-  const totPlacas=Object.keys(PLACA_MOV).filter(pk=> !opF || operacaoDaPlaca(pk)===opF).length, semNenhum=rows.filter(r=>r.cls==='critico').length, baixa=rows.filter(r=>r.cls==='atencao').length;
+  const totPlacas=Object.keys(PLACA_MOV).filter(pk=> !pf||pf.has(pk)).length, semNenhum=rows.filter(r=>r.cls==='critico').length, baixa=rows.filter(r=>r.cls==='atencao').length;
   const nEquip=rows.filter(r=>r.plano.cat==='equip').length, nSist=rows.filter(r=>r.plano.cat==='sist').length, nVerif=rows.filter(r=>r.plano.cat==='verif').length;
   const K=[
     {lab:'Placas que se moveram',val:totPlacas.toLocaleString('pt-BR'),sub:(opF?opF:'no período'),ac:'var(--s2)'},
@@ -3665,9 +3678,10 @@ function renderPlacasSemId(){
 }
 function exportSemId(){ if(!SEMID_ROWS.length){toast('Nada para exportar');return;} const head=['Placa','Operacao','Dias_moveu','Dias_com_ID','Aderencia_pct','Camera_saude','Situacao','Categoria_plano','Plano_de_acao','Ultima_mov']; const lines=[head.join(';')]; SEMID_ROWS.forEach(r=>lines.push([r.placa,'"'+r.op+'"',r.dias,r.diasId,(r.ader==null?'':r.ader),'"'+(r.cam||'')+'"','"'+r.status+'"','"'+PLANO_DEF[r.plano.cat].lab+'"','"'+r.plano.txt.replace(/"/g,'""')+'"',r.ult].join(';'))); baixarCsv(lines,'plano_acao_placas.csv'); }
 function renderBatimento(){
-  const kbox=$('#opKpis'), box=$('#opBox'); const rows=batimentoRows();
+  const kbox=$('#opKpis'), box=$('#opBox'); let rows=batimentoRows();
   if(!rows){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Carregue os relatórios de <b>Alertas</b> (dá a UO da Trimble por placa) e do <b>TMS</b> (centro de resultado) na aba <b>Dados</b> para ver o batimento de operação.</div>'; return; }
-  if(!rows.length){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Nenhuma placa com UO da Trimble para comparar.</div>'; return; }
+  const pf=placasNoFiltro(); if(pf) rows=rows.filter(r=>pf.has(r.placa));   // respeita os filtros do topo
+  if(!rows.length){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Nenhuma placa no recorte dos filtros atuais.</div>'; return; }
   const total=rows.length, ok=rows.filter(r=>r.status==='ok').length, div=rows.filter(r=>r.status==='divergente').length,
         naoop=rows.filter(r=>r.status==='nao_op').length, semtms=rows.filter(r=>r.status==='sem_tms').length;
   const comp=total-semtms, pct=comp>0?Math.round(ok/comp*100):0;
