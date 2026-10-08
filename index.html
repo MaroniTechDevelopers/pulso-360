@@ -350,6 +350,26 @@
   .pb-cell.sist{background:color-mix(in srgb,var(--warning) 12%,transparent);border:1px solid color-mix(in srgb,var(--warning) 32%,transparent)}
   .pb-cell.verif{background:var(--surface-2);border:1px solid var(--border)}
   .planotag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
+  /* ===== BONIFICAÇÃO ===== */
+  .bonif-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .bonif-card{text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:10px;padding:13px 15px;transition:transform .12s,box-shadow .12s,border-color .12s}
+  .bonif-card:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--gold)}
+  .bonif-head{display:flex;align-items:center;gap:10px}
+  .bonif-id{flex:1;min-width:0}
+  .bonif-id b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bonif-id small{color:var(--muted);font-size:11px}
+  .bonif-cat{font-size:11px;font-weight:800;padding:2px 10px;border-radius:999px;white-space:nowrap}
+  .bonif-score{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .bonif-score .n10{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+  .bonif-score .n10 small{font-size:13px;color:var(--muted);font-weight:600}
+  .bonif-score .prem{text-align:right;font-size:16px;font-weight:800;color:var(--ink-2)}
+  .bonif-score .prem small{display:block;font-size:9.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+  .bonif-comps{display:flex;flex-direction:column;gap:4px}
+  .bonif-comp{display:grid;grid-template-columns:118px 1fr 24px;align-items:center;gap:7px;font-size:10.5px}
+  .bonif-comp>span{color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bonif-comp .bar{height:6px;background:var(--surface-2);border-radius:999px;overflow:hidden}
+  .bonif-comp .bar i{display:block;height:100%;border-radius:999px}
+  .bonif-comp>b{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
 
   /* ============ FICHA DO MOTORISTA (detalhamento) ============ */
   .ficha-back{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:7px 12px;cursor:pointer;font:inherit;font-size:13px}
@@ -487,6 +507,7 @@
   </div>
   <nav class="tabs" id="tabs">
     <button data-tab="semana" class="active">Resumo semanal</button>
+    <button data-tab="bonificacao">Bonificação</button>
     <button data-tab="motoristas">Motoristas</button>
     <button data-tab="aderencia">Aderência</button>
     <button data-tab="linha">Linha do tempo</button>
@@ -550,6 +571,22 @@
       </div>
     </div>
     <div id="semanaBox"></div>
+  </section>
+
+  <!-- ===== BONIFICAÇÃO ===== -->
+  <section class="view" id="view-bonificacao">
+    <div class="grid kpis" id="bonifKpis"></div>
+    <div class="sec-title"><h2>Bonificação</h2><span>nota 1–10 por motorista · categoria Ouro/Prata/Bronze · % do prêmio</span></div>
+    <div class="card" style="padding:11px 16px;margin-bottom:12px">
+      <div class="legend">
+        <span class="lg"><b>Categorias:</b></span>
+        <span class="lg"><span class="sw" style="background:#d4af37"></span> 🥇 Ouro (9–10) — 100% do prêmio</span>
+        <span class="lg"><span class="sw" style="background:#9ca3af"></span> 🥈 Prata (7–8)</span>
+        <span class="lg"><span class="sw" style="background:#b87333"></span> 🥉 Bronze (≤6)</span>
+        <span class="lg" style="margin-left:auto;color:var(--muted)">nota = identificação + jornada + ponto + alertas + multas + interjornada + hora extra + média</span>
+      </div>
+    </div>
+    <div id="bonifBox"></div>
   </section>
 
   <!-- ===== MOTORISTAS — TMS x PONTO ===== -->
@@ -930,6 +967,13 @@ function isoWeek(iso){ const m=String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/); if
 // farol de fora da jornada por horas (min): verde=sem horas · amarelo=até limite · vermelho=acima
 function farol(min){ if(min<=0) return 'verde'; if(min<=CFG.farolAmareloMax) return 'amarelo'; return 'vermelho'; }
 const FAROL_COR={verde:'var(--good)',amarelo:'var(--warning)',vermelho:'var(--critical)'};
+// Cor única do painel = NOTA de ranking (conjunto geral: identificação+jornada+ponto+alertas+multas+interjornada+hora extra+média).
+// Mesma régua da capinha: ≥80 verde · ≥60 amarelo · <60 vermelho · sem nota = cinza.
+let RANK_SCORES={};
+function notaCor(s){ return (s==null)?'#cbd5e1':(s>=80?'var(--good)':s>=60?'var(--warning)':'var(--critical)'); }
+function notaDe(nome){ const k=norm(nome||''); if(RANK_SCORES[k]!=null) return RANK_SCORES[k];
+  try{ const rows=filtered(); const d=semanaAgg(rows); applyResumoRankScores(d.data, rows); }catch(e){}
+  return RANK_SCORES[norm(nome||'')]; }
 const SEV_LABEL={conforme:'Tudo certo',atencao:'Atenção',critico:'Prioridade',pendente:'A conferir'};
 const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 // info da semana: chave ordenável (segunda), período real (segunda→domingo) e mês de referência (quinta)
@@ -1056,8 +1100,8 @@ const ALERTA_DEF=[
   {k:'velocidade',lab:'Velocidade',ic:'⏱️'}
 ];
 function drv(nome){ return DRIVERS[nome]||{admissao:'',media:null,alertas:{}}; }
-// Média temporariamente oculta até revisão da regra. A captura Trimble continua preparada em segundo plano.
-const MEDIA_OFF = true;
+// Média RELIGADA (08/10/2026): usa a média da Trimble (km ÷ litros da coluna CONSUMO da movimentação). Frota ≈ 3,65 km/l.
+const MEDIA_OFF = false;
 // Relatório de Motoristas: data de admissão por CPF / nome exato / nome canônico (real > cadastro demo)
 let ADMISSAO=null, ADMISSAO_CPF=null, ADMISSAO_N=0;
 let ADMISSAO_CANON=null, ADMISSAO_NOMECPF=null, ADMISSAO_CANONCPF=null;
@@ -1803,6 +1847,7 @@ function applyResumoRankScores(data,rows){
     p.score=rankClamp(score); p.scoreDisplay=Math.round(p.score); p.components=comps;
     p.scoreTitle=comps.map(c=>c.lab+': '+Math.round(c.v)+'%').join(' · ')+(p.idDiv?' · divergências de condutor: '+p.idDiv:'');
   }
+  RANK_SCORES={}; for(const k in profiles){ RANK_SCORES[k]=profiles[k].score; }   // mapa global p/ a ficha usar a mesma cor da nota
   (data||[]).forEach(g=>g.list.forEach(m=>{const p=profiles[norm(m.nome||'')];m._rankProfile=p||null;m._rankScore=p?p.score:null;m._rankScoreTitle=p?p.scoreTitle:'';}));
   return profiles;
 }
@@ -2594,10 +2639,11 @@ function renderFicha(){
     : ALERTA_DEF.map(a=>{ const n=(d.alertas&&d.alertas[a.k])||0; return `<div class="alert-tile ${n>=5?'hot':''}"><div class="n">${a.ic} ${n}</div><div class="l">${a.lab}</div>${_multaSub(a.lab)}</div>`; }).join('');
 
 
+  const _notaScore=notaDe(nome), _notaCor=notaCor(_notaScore);   // cor da ficha = NOTA (mesma régua da capinha)
   $('#fichaBox').innerHTML = `
     <div class="card" style="margin-bottom:14px">
       <div class="ficha-hero">
-        <span class="avatar" title="Risco: ${fichaRisco.cls}${fichaRisco.reasons.length?' — '+fichaRisco.reasons.join(' · '):' — sem sinais'}" style="background:${FAROL_COR[fichaRisco.cls]}">${iniciais(nome)}</span>
+        <span class="avatar" title="Nota ${_notaScore!=null?Math.round(_notaScore)+'/100':'—'}${fichaRisco.reasons.length?' · sinais: '+fichaRisco.reasons.join(' · '):''}" style="background:${_notaCor}">${iniciais(nome)}</span>
         <div style="flex:1;min-width:180px">
           <h2>${nome}</h2>
           <div class="sub">${op||'—'}${placas?' · '+placas:''} · <b>${tempo}</b> de casa · admissão ${adm?brDate(adm):'—'}</div>
@@ -3093,11 +3139,47 @@ function atualizaDataMode(){
     txt.textContent=t;
   }else{ pill.classList.remove('real'); txt.textContent='dados de demonstração'; }
 }
+/* ============================================================
+   RENDER — BONIFICAÇÃO (nota 1–10 + categoria + composição)
+   ============================================================ */
+function renderBonificacao(rows){
+  const box=$('#bonifBox'), kb=$('#bonifKpis');
+  if(!REAL||!RECORDS||!RECORDS.length){ if(kb)kb.innerHTML=''; box.innerHTML='<div class="empty">Carregue os dados na aba <b>Dados</b> para ver a bonificação.</div>'; return; }
+  const agg=semanaAgg(rows); applyResumoRankScores(agg.data, rows);
+  const mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankElegivel(m)) mots.push(m); }));
+  mots.sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
+  const n10De=s=>Math.round((s||0)/10*10)/10;
+  const catDe=n=>n>=9?'ouro':n>=7?'prata':'bronze';
+  const CAT={ouro:{lab:'Ouro',cor:'#d4af37',ic:'🥇'},prata:{lab:'Prata',cor:'#9ca3af',ic:'🥈'},bronze:{lab:'Bronze',cor:'#b87333',ic:'🥉'}};
+  const cnt={ouro:0,prata:0,bronze:0}; mots.forEach(m=>cnt[catDe(n10De(m._rankScore))]++);
+  if(kb) kb.innerHTML=[
+    {lab:'🥇 Ouro (9–10)',val:cnt.ouro,ac:CAT.ouro.cor,sub:'100% do prêmio'},
+    {lab:'🥈 Prata (7–8)',val:cnt.prata,ac:CAT.prata.cor,sub:'prêmio parcial'},
+    {lab:'🥉 Bronze (≤6)',val:cnt.bronze,ac:CAT.bronze.cor,sub:'menor/sem prêmio'},
+    {lab:'Motoristas elegíveis',val:mots.length,ac:'var(--s2)',sub:'com movimentação no período'}
+  ].map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+  if(!mots.length){ box.innerHTML='<div class="empty">Nenhum motorista elegível (com movimentação) no período/filtros atuais.</div>'; return; }
+  box.innerHTML='<div class="bonif-grid">'+mots.map(m=>{
+    const n10=n10De(m._rankScore), c=catDe(n10), ct=CAT[c], premio=Math.round(n10/10*100);
+    const comps=(m._rankProfile&&m._rankProfile.components||[]).slice().sort((a,b)=>a.v-b.v);
+    const bars=comps.map(cp=>`<div class="bonif-comp" title="${cp.lab}: ${Math.round(cp.v)} (peso ${cp.w})"><span>${cp.lab}</span><div class="bar"><i style="width:${Math.max(2,Math.round(cp.v))}%;background:${notaCor(cp.v)}"></i></div><b>${Math.round(cp.v)}</b></div>`).join('');
+    return `<button class="card bonif-card" data-mot="${encodeURIComponent(m.nome)}">
+      <div class="bonif-head">
+        <span class="avatar" style="background:${notaCor(m._rankScore)}">${iniciais(m.nome)}</span>
+        <div class="bonif-id"><b>${firstName(m.nome)}</b><small>${m.op||'—'} · ${tempoDeCasa(m.admissao)} de casa</small></div>
+        <span class="bonif-cat" style="background:color-mix(in srgb,${ct.cor} 18%,transparent);color:${ct.cor};border:1px solid color-mix(in srgb,${ct.cor} 45%,transparent)">${ct.ic} ${ct.lab}</span>
+      </div>
+      <div class="bonif-score"><div class="n10">${n10.toFixed(1).replace('.',',')}<small>/10</small></div><div class="prem">${premio}%<small>do prêmio</small></div></div>
+      <div class="bonif-comps">${bars}</div>
+      <span class="cap-cta">ver detalhamento →</span>
+    </button>`;
+  }).join('')+'</div>';
+}
 function renderAll(){
   // Qualquer mudança nos controles pertence somente à aba/filtro corrente.
   saveTopFilterState(CURRENT_FILTER_TAB);
   const view=activeViewName(), fkey=filterStateKey();
-  const rowViews=new Set(['semana','aderencia','linha','diverg','media','tabela']);
+  const rowViews=new Set(['semana','bonificacao','aderencia','linha','diverg','media','tabela']);
   const rng=activeRange();
   let viewKey;
   if(rowViews.has(view)) viewKey=DATA_REV+'|M'+MULTAS_REV+'|'+fkey+(view==='semana'?'|R'+SEMANA_RANK_MODE:'')+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'')+(view==='linha'?'|C'+($('#fCondTimeline')?$('#fCondTimeline').value:''):'');
@@ -3120,6 +3202,7 @@ function renderAll(){
   }
   let rows=null; if(rowViews.has(view)) rows=filtered();
   if(view==='semana'){ renderKpis(rows); renderSemana(rows); const c={kpis:$('#kpis').innerHTML,semana:$('#semanaBox').innerHTML,badge:FILTER_CACHE_DIV_COUNT}; SUMMARY_DOM_CACHE.set(viewKey,c); while(SUMMARY_DOM_CACHE.size>6)SUMMARY_DOM_CACHE.delete(SUMMARY_DOM_CACHE.keys().next().value); }
+  else if(view==='bonificacao') renderBonificacao(rows);
   else if(view==='motoristas') renderMotoristas();
   else if(view==='aderencia') renderAderencia(rows);
   else if(view==='linha') renderTimelines(rows);
@@ -5251,6 +5334,7 @@ $('#tblBody').addEventListener('click',e=>{ const tr=e.target.closest('.tblrow')
 $('#mediaBox').addEventListener('click',e=>{ const tr=e.target.closest('.mediarow'); if(tr) openFicha(decodeURIComponent(tr.dataset.mot||'')); });
 // capinha do motorista → detalhamento (ficha)
 $('#semanaBox').addEventListener('click',e=>{ const c=e.target.closest('.capinha'); if(!c)return; openFicha(decodeURIComponent(c.dataset.mot)); });
+$('#bonifBox').addEventListener('click',e=>{ const c=e.target.closest('[data-mot]'); if(!c)return; openFicha(decodeURIComponent(c.dataset.mot)); });
 $('#fichaBack').onclick=voltarResumo;
 // tratativa (modal)
 $('#btnTratativa').onclick=openTratModal;
