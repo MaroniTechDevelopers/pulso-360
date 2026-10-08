@@ -381,6 +381,9 @@
   .ferias-chip .fav{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:#fff3f6;color:#a52f5d;border:1px solid #f1c7d4;flex:none}
   .ferias-chip b{display:block;font-size:12.5px}
   .ferias-chip small{color:var(--muted);font-size:10.5px}
+  .capinha-ferias{cursor:default}
+  .capinha-ferias:hover{transform:none;box-shadow:none;border-color:var(--border)}
+  .cap-ferias-badge{margin-left:auto;font-size:10.5px;font-weight:700;color:#a52f5d;background:#fff3f6;border:1px solid #f1c7d4;border-radius:999px;padding:3px 9px;white-space:nowrap}
 
   /* ============ FICHA DO MOTORISTA (detalhamento) ============ */
   .ficha-back{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:7px 12px;cursor:pointer;font:inherit;font-size:13px}
@@ -484,7 +487,7 @@
   .sc-close{background:rgba(255,255,255,.12);color:#fff;border:none;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;flex:0 0 auto}
   .sc-close:hover{background:rgba(255,255,255,.22)}
   .sc-body{padding:18px 20px 22px}
-  .sc-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .sc-hero{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
   .sc-hero .sc-tile{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:13px 10px;text-align:center}
   .sc-hero .sc-big{font-size:30px;font-weight:800;line-height:1}
   .sc-hero .sc-big small{font-size:14px;font-weight:600;color:var(--muted)}
@@ -1391,11 +1394,22 @@ let TMS = null;             // placa → {centro, operacao} — do relatório do
 let ABAST = null;           // motorista(norm) → {km, litros, valor, media, n} — do consolidado de abastecimento (real)
 let META_FAM = null;        // família de operação → meta média (km/l) — fallback
 let META_PLACA = null;      // placa → meta (km/l) — meta oficial por veículo (Painel de médias)
+let META_CM = null;         // "centro|modelo" (norm) → meta (km/l) — meta por CENTRO DE RESULTADO + MODELO (Painel de médias)
 let SORT = { k:'_sev', dir:-1 };
 // meta de média por operação (família) — fallback quando não há meta por placa
 function metaDe(operacao){ if(META_FAM){ const f=opFamily(operacao); if(f && META_FAM[f]!=null) return META_FAM[f]; } return CFG.meta; }
-// meta oficial do veículo: por PLACA (exata) > por família de operação > meta única da config
-function metaVeic(placa, operacao){ if(META_PLACA && placa){ const m=META_PLACA[placaKey(placa)]; if(m!=null) return m; } return metaDe(operacao); }
+// chave de cruzamento centro de resultado + modelo (normalizada)
+function metaKeyCM(centro, modelo){ return norm(centro||'')+'|'+norm(modelo||''); }
+// META EXATA do veículo (sem fallback): por PLACA > por CENTRO+MODELO (via TMS). null se não houver meta oficial.
+// É a que vale para PAGAMENTO — o fallback por família/config NÃO entra aqui.
+function metaExata(placa){
+  const pk=placaKey(placa); if(!pk) return null;
+  if(META_PLACA && META_PLACA[pk]!=null) return META_PLACA[pk];
+  if(META_CM && TMS && TMS[pk] && TMS[pk].modelo){ const m=META_CM[metaKeyCM(TMS[pk].centro, TMS[pk].modelo)]; if(m!=null) return m; }
+  return null;
+}
+// meta oficial do veículo: EXATA (placa > centro+modelo) > família de operação > meta única da config
+function metaVeic(placa, operacao){ const ex=metaExata(placa); if(ex!=null) return ex; return metaDe(operacao); }
 // operação de um veículo pela placa — usada quando a jornada não traz o departamento
 function operacaoDaPlaca(placa){ if(!placa) return '';
   // prioridade: UO da Trimble (relatório de Alertas — leve) > centro de resultado do TMS (por placa)
@@ -2067,8 +2081,8 @@ function renderSemana(rows){
   if(SEMANA_RANK_MODE==='all'){
     const shownNn=new Set(global.map(m=>norm(m.nome))); const fer=feriasNoPeriodo(rows, shownNn);
     if(fer.length) feriasHtml=`<div class="card op-block"><div class="op-head"><h3>🏖️ Em férias no período <span class="op-ranknote">${fer.length} motorista(s)</span></h3>
-      <div class="op-kpi">de férias no período selecionado · não entram no ranking</div></div>
-      <div class="ferias-grid">${fer.map(f=>`<div class="ferias-chip"><span class="fav">${iniciais(f.nn)}</span><div><b>${firstName(f.nn)}</b><small>${brDate(f.min)}–${brDate(f.max)} · ${f.dias}d</small></div></div>`).join('')}</div></div>`;
+      <div class="op-kpi">de férias no período selecionado · não entram no ranking (sem nota)</div></div>
+      <div class="capgrid">${fer.map(capinhaFerias).join('')}</div></div>`;
   }
   box.innerHTML=(html.join('')+feriasHtml)||'<div class="empty">Nenhum motorista encontrado neste ranking.</div>';
 }
@@ -2104,6 +2118,23 @@ function capinha(m,weeks){
     </div>
     <span class="cap-cta">ver detalhamento →</span>
   </button>`;
+}
+// Capinha do motorista EM FÉRIAS no período — mesmo tamanho/estilo da capinha normal,
+// mas sem nota (de férias não entra no ranking). Não é clicável (sem data-mot).
+function capinhaFerias(f){
+  const nome=f.nn, per=`${f.min.slice(8,10)}/${f.min.slice(5,7)}–${f.max.slice(8,10)}/${f.max.slice(5,7)}`;
+  return `<div class="capinha capinha-ferias" title="Em férias no período — não entra no ranking">
+    <div class="cap-top">
+      <span class="avatar" style="background:#cbd5e1">${iniciais(nome)}</span>
+      <div class="cap-id"><b>${firstName(nome)}</b><small>${tempoDeCasa(admissaoDe(nome))} de casa</small></div>
+      <span class="cap-ferias-badge">🏖️ Férias</span>
+    </div>
+    <div class="cap-metrics">
+      <div class="cm"><span>Período de férias</span><b>${per}</b></div>
+      <div class="cm"><span>Dias</span><b>${f.dias}d</b></div>
+    </div>
+    <div class="cap-foot"><span class="cap-alerts"><span class="abadge pend" title="Em férias — não entra no ranking">sem nota · não entra no ranking</span></span></div>
+  </div>`;
 }
 
 /* ============================================================
@@ -3274,7 +3305,7 @@ function renderBonificacao(rows){
         <div class="bonif-id"><b>${firstName(m.nome)}</b><small>${m.op||'—'} · ${tempoDeCasa(m.admissao)} de casa</small></div>
         <span class="bonif-cat" style="background:color-mix(in srgb,${ct.cor} 18%,transparent);color:${ct.cor};border:1px solid color-mix(in srgb,${ct.cor} 45%,transparent)">${ct.ic} ${ct.lab}</span>
       </div>
-      <div class="bonif-score"><div class="n10">${n10.toFixed(1).replace('.',',')}<small>/10</small></div><div class="prem">${premio}%<small>do prêmio</small></div></div>
+      <div class="bonif-score"><div class="n10">${n10.toFixed(1).replace('.',',')}<small>/10</small></div></div>
       <div class="bonif-comps">${bars}</div>
       <div class="bonif-acts">
         <button type="button" class="bonif-act primary" data-sc="${enc}">📊 Scorecard</button>
@@ -3401,8 +3432,6 @@ function renderScorecard(nome){
   const scTop=`<div class="sc-top"><span class="avatar" style="background:${notaCor(p.score)}">${iniciais(nome)}</span><div class="sc-id"><b>${scEsc(nome)}</b><small>${scEsc(op)} · ${tempoDeCasa(admissao)} de casa</small></div><span class="sc-cat" style="background:color-mix(in srgb,${cat.cor} 20%,transparent);color:${cat.cor};border:1px solid color-mix(in srgb,${cat.cor} 50%,transparent)">${cat.ic} ${cat.lab}</span><button class="sc-close" data-sc-act="close" title="Fechar">✕</button></div>`;
   const hero=`<div class="sc-hero">
     <div class="sc-tile"><div class="sc-big" style="color:${notaCor(p.score)}">${scFmt(n10)}<small>/10</small></div><div class="sc-lab">Nota atual</div></div>
-    <div class="sc-tile"><div class="sc-big">${premio}<small>%</small></div><div class="sc-lab">do prêmio</div><div class="sc-sub">${cat.premio}</div></div>
-    <div class="sc-tile"><div class="sc-big">${pos}º<small>/${tot}</small></div><div class="sc-lab">no ranking</div><div class="sc-sub">top ${topPct}%</div></div>
     <div class="sc-tile"><div class="sc-big" style="color:${trendCol};font-size:22px;padding-top:7px">${trendTxt}</div><div class="sc-lab">vs mês anterior</div></div>
   </div>`;
   const body=`<div class="sc-body">${hero}
@@ -5573,7 +5602,7 @@ $('#tblBody').addEventListener('click',e=>{ const tr=e.target.closest('.tblrow')
 // clicar numa linha da Média → ficha do motorista
 $('#mediaBox').addEventListener('click',e=>{ const tr=e.target.closest('.mediarow'); if(tr) openFicha(decodeURIComponent(tr.dataset.mot||'')); });
 // capinha do motorista → detalhamento (ficha)
-$('#semanaBox').addEventListener('click',e=>{ const c=e.target.closest('.capinha'); if(!c)return; openFicha(decodeURIComponent(c.dataset.mot)); });
+$('#semanaBox').addEventListener('click',e=>{ const c=e.target.closest('.capinha'); if(!c||!c.dataset.mot)return; openFicha(decodeURIComponent(c.dataset.mot)); });
 $('#bonifBox').addEventListener('click',e=>{ const sc=e.target.closest('[data-sc]'); if(sc){ openScorecard(decodeURIComponent(sc.dataset.sc)); return; } const fc=e.target.closest('[data-fc]'); if(fc){ openFicha(decodeURIComponent(fc.dataset.fc)); return; } });
 $('#scoreModal').addEventListener('click',e=>{ if(e.target.id==='scoreModal') closeScorecard(); });
 $('#scoreShell').addEventListener('click',e=>{ const b=e.target.closest('[data-sc-act]'); if(!b)return; const act=b.dataset.scAct; if(act==='close')closeScorecard(); else if(act==='ficha'){ const nm=SCORECARD_NOME; closeScorecard(); openFicha(nm); } else if(act==='trat'){ if(SCORECARD_NOME){ fichaAtual=SCORECARD_NOME; openTratModal(); } } });
