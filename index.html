@@ -583,7 +583,7 @@
         <span class="lg"><span class="sw" style="background:#d4af37"></span> 🥇 Ouro (9–10) — 100% do prêmio</span>
         <span class="lg"><span class="sw" style="background:#9ca3af"></span> 🥈 Prata (7–8)</span>
         <span class="lg"><span class="sw" style="background:#b87333"></span> 🥉 Bronze (≤6)</span>
-        <span class="lg" style="margin-left:auto;color:var(--muted)">nota = identificação + jornada + ponto + alertas + multas + interjornada + hora extra + média</span>
+        <span class="lg" style="margin-left:auto;color:var(--muted)">nota = identificação + jornada + ponto + alertas + multas + interjornada + hora extra (acima de 2h/dia) + média</span>
       </div>
     </div>
     <div id="bonifBox"></div>
@@ -1812,7 +1812,9 @@ function rankProfile(nome,recs){
   const pointCoverage=movDays?rankClamp(pontoDays/movDays*100):null;
   const interjDays=new Set((recs||[]).filter(r=>r.interjornada!=null&&r.interjornada<CFG.interjornadaMin).map(r=>r.data)).size;
   const interjScore=movDays?rankClamp(100*(1-interjDays/movDays)):null;
-  const extraScore=hPonto>0?rankClamp(100*(1-Math.min(1,(audit.hExtra||0)/hPonto))):null;
+  // BONIFICAÇÃO: só penaliza hora extra ACIMA de 2h/dia (120 min). Até 2h de extra por dia não conta.
+  const hExtra2=(recs||[]).reduce((s,r)=>s+Math.max(0,(r.horaExtra||0)-120),0);
+  const extraScore=hPonto>0?rankClamp(100*(1-Math.min(1,hExtra2/hPonto))):null;
   const nv=(alR&&alR.niveis)||{}, alto=+nv.ALTO||0, medio=+nv.MEDIO||0, baixo=+nv.BAIXO||0, total=+(alR&&alR.total)||0, conhecido=alto+medio+baixo, desconhecido=Math.max(0,total-conhecido);
   const alertRisk=alto*4+medio*2+baixo+desconhecido*1.5, hCondH=Math.max(hCond/60,0.01), alertRate=alertRisk*10/hCondH;
   const datas=(recs||[]).map(r=>r.data).filter(Boolean).sort(), opF=$('#fOp').value; let multaRange=null;
