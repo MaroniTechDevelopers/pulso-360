@@ -20,9 +20,10 @@
     --navy:#111827; --navy-2:#1c2740; --gold:#f5c800; --gold-2:#e68a00;
     --track-ponto:#f5c800; --track-mov:#3b82f6; --track-id-ok:#10b981; --track-id-bad:#ef4444;
     --r-sm:10px; --r:16px; --r-lg:20px; --ring:color-mix(in srgb,var(--gold) 45%,transparent);
-    --shadow-sm:0 1px 2px rgba(15,23,42,.05);
-    --shadow:0 1px 3px rgba(15,23,42,.05),0 8px 22px rgba(15,23,42,.055);
-    --shadow-lg:0 12px 34px rgba(15,23,42,.13);
+    --disp:"Barlow Condensed","Barlow",system-ui,sans-serif; --body:"Barlow","Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
+    --shadow-sm:0 1px 2px rgba(15,23,42,.04);
+    --shadow:0 1px 2px rgba(15,23,42,.04),0 10px 30px rgba(15,23,42,.07);
+    --shadow-lg:0 18px 44px rgba(15,23,42,.14);
   }
   :root[data-theme="dark"]{
     --plane:#0b1220; --surface:#121b2c; --surface-2:#182234;
@@ -35,17 +36,17 @@
     --track-ponto:#f5c800; --track-mov:#60a5fa; --track-id-ok:#34d399; --track-id-bad:#f87171;
     --ring:color-mix(in srgb,var(--gold) 50%,transparent);
     --shadow-sm:0 1px 2px rgba(0,0,0,.4);
-    --shadow:0 1px 3px rgba(0,0,0,.45),0 10px 26px rgba(0,0,0,.4);
-    --shadow-lg:0 16px 40px rgba(0,0,0,.5);
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.44);
+    --shadow-lg:0 20px 46px rgba(0,0,0,.52);
   }
   *{box-sizing:border-box}
   html,body{margin:0}
   body{
     background:var(--plane); color:var(--ink);
-    font-family:"Segoe UI Variable Text","Segoe UI",Inter,system-ui,-apple-system,sans-serif;
+    font-family:var(--body);
     font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
   }
-  h1,h2,h3{margin:0; font-weight:680; letter-spacing:-.015em}
+  h1,h2,h3{margin:0; font-family:var(--disp); font-weight:700; letter-spacing:.01em}
   a{color:var(--s2)}
   .tnum{font-variant-numeric:tabular-nums}
 
@@ -78,7 +79,7 @@
   select,.btn,input[type=text]{
     font:inherit; font-size:12.5px; color:#f3f4f6;
     background-color:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14);
-    border-radius:10px; padding:8px 12px; cursor:pointer; transition:border-color .15s,background-color .15s,transform .1s;
+    border-radius:11px; padding:9px 14px; cursor:pointer; transition:border-color .15s,background-color .15s,box-shadow .15s,transform .1s;
   }
   .btn:active{transform:translateY(1px)}
   input[type=text]{cursor:text}
@@ -87,52 +88,56 @@
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%239aa4b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat:no-repeat; background-position:right 11px center; background-size:11px 7px;}
   .btn:hover,select:hover,input[type=text]:hover{border-color:rgba(255,255,255,.35)}
-  .btn.solid{background:var(--gold);color:#1a1a1a;border-color:transparent;font-weight:650}
-  .btn.solid:hover{background:#ffd521}
+  .btn.solid{background:linear-gradient(135deg,var(--gold),var(--gold-2));color:#1a1a1a;border-color:transparent;font-weight:700;box-shadow:0 2px 10px rgba(245,200,0,.28)}
+  .btn.solid:hover{filter:brightness(1.04);box-shadow:0 4px 16px rgba(245,200,0,.38)}
   .field{display:flex;flex-direction:column;gap:3px}
   .field label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#9aa4b2;padding-left:2px}
 
   /* ============ TABS ============ */
-  nav.tabs{display:flex; gap:2px; margin-top:15px; overflow-x:auto}
+  nav.tabs{display:flex; gap:5px; margin-top:15px; overflow-x:auto; padding-bottom:3px}
   nav.tabs button{
-    background:none;border:none;border-bottom:2.5px solid transparent;
-    color:#9aa4b2; font:inherit; font-size:13.5px; font-weight:600;
-    padding:10px 15px; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:7px;
-    border-radius:9px 9px 0 0; transition:color .15s, background-color .15s;
+    background:none;border:1px solid transparent;
+    color:#9aa4b2; font:inherit; font-size:13px; font-weight:600;
+    padding:9px 14px; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:7px;
+    border-radius:11px; transition:color .15s, background-color .15s, border-color .15s;
   }
   nav.tabs button .badge{font-size:11px;background:rgba(255,255,255,.1);color:#c7cfda;border-radius:20px;padding:1px 7px;border:1px solid rgba(255,255,255,.14)}
-  nav.tabs button:hover{color:#fff; background:rgba(255,255,255,.05)}
-  nav.tabs button.active{color:#fff; border-bottom-color:var(--gold); background:rgba(245,200,0,.08)}
-  nav.tabs button.active .badge{background:color-mix(in srgb,var(--gold) 28%,transparent);color:#fff;border-color:transparent}
+  nav.tabs button:hover{color:#fff; background:rgba(255,255,255,.06)}
+  nav.tabs button.active{color:#fff; background:color-mix(in srgb,var(--gold) 16%,transparent); border-color:color-mix(in srgb,var(--gold) 45%,transparent)}
+  nav.tabs button.active .badge{background:color-mix(in srgb,var(--gold) 30%,transparent);color:#fff;border-color:transparent}
 
   /* ============ LAYOUT ============ */
   main{padding:18px 22px 60px; max-width:1400px; margin:0 auto}
   section.view{display:none; animation:fade .25s ease}
   section.view.active{display:block}
   @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-  .grid{display:grid; gap:14px}
+  .grid{display:grid; gap:16px}
   .card{
     background:var(--surface); border:1px solid var(--border);
-    border-radius:var(--r); padding:16px; box-shadow:var(--shadow);
+    border-radius:18px; padding:16px; box-shadow:var(--shadow);
     transition:box-shadow .18s ease, transform .18s ease, border-color .18s ease;
   }
   .card h3{font-size:13.5px}
   .sec-title{display:flex;align-items:baseline;gap:10px;margin:20px 2px 10px}
-  .sec-title h2{font-size:15px}
+  .sec-title h2{font-size:16px;letter-spacing:.02em}
   .sec-title span{font-size:12px;color:var(--muted)}
+  /* detalhe "Pulso" — linha de ECG dourada sutil preenchendo o resto do título de seção */
+  .sec-title::after{content:"";flex:1 1 40px;min-width:28px;align-self:center;height:14px;opacity:.3;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='84' height='14' viewBox='0 0 84 14'%3E%3Cpath d='M0 7 H34 l3 -5 l3 10 l3 -5 H84' fill='none' stroke='%23f5c800' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") left center repeat-x}
 
   /* ============ FILTER BAR ============ */
   .filterbar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px}
   .filterbar .f{display:flex;flex-direction:column;gap:3px}
-  .filterbar .f label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding-left:2px}
+  .filterbar .f label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding-left:3px;font-weight:600}
   .filterbar select,.filterbar input[type=text],.filterbar input[type=date]{
-    color:var(--ink); background-color:var(--surface); border:1px solid var(--border);
-    box-shadow:var(--shadow-sm); border-radius:11px; padding:9px 12px; font:inherit; font-size:12.5px;
+    color:var(--ink); background-color:var(--surface-2); border:1px solid var(--border);
+    box-shadow:none; border-radius:12px; padding:10px 13px; font:inherit; font-size:12.5px;
+    transition:border-color .15s, box-shadow .15s, background-color .15s;
   }
   .filterbar input[type=date]{cursor:pointer; color-scheme:light}
   :root[data-theme="dark"] .filterbar input[type=date]{color-scheme:dark}
-  .filterbar select:hover,.filterbar input[type=text]:hover,.filterbar input[type=date]:hover{border-color:var(--gold)}
-  .filterbar select:focus,.filterbar input[type=text]:focus,.filterbar input[type=date]:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--ring)}
+  .filterbar select:hover,.filterbar input[type=text]:hover,.filterbar input[type=date]:hover{border-color:color-mix(in srgb,var(--gold) 55%,var(--border));background-color:var(--surface)}
+  .filterbar select:focus,.filterbar input[type=text]:focus,.filterbar input[type=date]:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--ring);background-color:var(--surface)}
   .combo-filter{position:relative;min-width:210px}
   .combo-filter>input{width:100%;padding-right:34px!important}
   .combo-arrow{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;background:transparent;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;border-radius:7px}
@@ -155,11 +160,12 @@
   .divcard{transition:box-shadow .15s,transform .15s,border-color .15s}
   .divcard:hover{box-shadow:var(--shadow-lg);transform:translateY(-1px);border-color:var(--gold)}
   .kpi:hover{box-shadow:var(--shadow-lg); transform:translateY(-2px)}
-  .kpi .lab{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;font-weight:600;letter-spacing:.01em}
-  .kpi .val{font-size:clamp(25px,2.2vw,33px);font-weight:760;letter-spacing:-.03em;margin:9px 0 3px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+  .kpi{padding:15px 16px 15px 18px}
+  .kpi .lab{font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:6px;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+  .kpi .val{font-family:var(--disp);font-size:clamp(28px,2.4vw,37px);font-weight:800;letter-spacing:0;margin:8px 0 3px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
   .kpi .val small{font-size:14px;font-weight:600;color:var(--muted)}
   .kpi .sub{font-size:11.5px;color:var(--muted)}
-  .kpi .accent{position:absolute;left:0;right:0;top:0;height:3px;width:auto;border-radius:0}
+  .kpi .accent{position:absolute;left:0;top:0;bottom:0;right:auto;width:4px;height:auto;border-radius:18px 0 0 18px}
 
   /* ============ TIMELINE CARDS ============ */
   .tl-card{padding:14px 16px 12px}
@@ -307,22 +313,24 @@
   .sem-rankhint{font-size:11px;color:var(--muted);margin-left:auto}
   .op-ranknote{font-size:11px;color:var(--muted);font-weight:500;margin-left:6px}
   @media(max-width:900px){.sem-rankhint{width:100%;margin-left:0}}
-  .capinha{text-align:left;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 13px;cursor:pointer;display:flex;flex-direction:column;gap:10px;transition:transform .12s,box-shadow .12s,border-color .12s}
+  .capinha{text-align:left;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:15px;padding:13px 14px;cursor:pointer;display:flex;flex-direction:column;gap:10px;transition:transform .12s,box-shadow .12s,border-color .12s}
   .capinha:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--gold)}
   .capinha:focus-visible{outline:2px solid var(--s2);outline-offset:2px}
   .cap-top{display:flex;align-items:center;gap:10px}
   .avatar{width:38px;height:38px;border-radius:10px;flex:none;display:grid;place-items:center;color:#1a1a1a;font-weight:750;font-size:13px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
   .cap-id{flex:1;min-width:0}
-  .cap-id b{font-size:13.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cap-id b{font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.01em;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cap-id small{color:var(--muted);font-size:11px}
-  .rank-score{flex:none;min-width:47px;padding:4px 6px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);text-align:center;font-variant-numeric:tabular-nums}
+  .rank-score{flex:none;min-width:50px;padding:4px 7px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);text-align:center;font-variant-numeric:tabular-nums}
   .rank-score small{display:block;font-size:8px;line-height:1;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
-  .rank-score b{display:block;margin-top:2px;font-size:13px;line-height:1;color:var(--ink)}
+  .rank-score .rs-med{display:block;font-size:15px;line-height:1;margin-bottom:1px}
+  .rank-score b{display:block;margin-top:1px;font-family:var(--disp);font-weight:800;font-size:18px;line-height:1;color:var(--ink)}
+  .rank-score b small{font-size:9px;font-weight:600;color:var(--muted)}
   .rank-score.good b{color:var(--good-ink)} .rank-score.warn b{color:var(--warning)} .rank-score.bad b{color:var(--crit-ink)}
   .cap-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
   .cap-metrics .cm{min-width:0;background:var(--surface-2);border-radius:8px;padding:7px 8px;text-align:center;overflow:hidden}
   .cap-metrics .cm span{display:block;font-size:9.5px;line-height:1.15;text-transform:uppercase;letter-spacing:.035em;color:var(--muted);white-space:normal}
-  .cap-metrics .cm b{display:block;margin-top:2px;font-size:15px;line-height:1.1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+  .cap-metrics .cm b{display:block;margin-top:2px;font-family:var(--disp);font-weight:700;font-size:18px;line-height:1.05;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
   .cap-metrics .cm b.ok{color:var(--good-ink)} .cap-metrics .cm b.bad{color:var(--crit-ink)} .cap-metrics .cm b.warn{color:var(--warning)}
   .cap-foot{display:flex;flex-direction:column;gap:8px}
   .cap-alerts{display:inline-flex;gap:4px;flex-wrap:wrap}
@@ -358,6 +366,90 @@
   .pb-cell.verif{background:var(--surface-2);border:1px solid var(--border)}
   .planotag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
   /* ===== BONIFICAÇÃO ===== */
+  .bonif-cfg{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 15px;margin-bottom:14px}
+  .bonif-cfg>b{font-family:var(--disp);font-size:15px;letter-spacing:.02em}
+  .bonif-cfg label{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);font-weight:600}
+  .bonif-cfg input{width:74px;text-align:right;color:var(--ink);background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:7px 9px;font:inherit;font-variant-numeric:tabular-nums}
+  .bonif-cfg input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--ring)}
+  .bonif-cfg .pre,.bonif-cfg .pos{color:var(--muted);font-weight:700}
+  .bonif-cfg .cfg-note{font-size:11px;color:var(--muted);margin-left:auto}
+  .bonif-podium{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;align-items:end}
+  .pod{background:linear-gradient(170deg,var(--surface),var(--surface-2));border:1px solid var(--border);border-radius:16px;padding:15px 12px;text-align:center;box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;gap:5px}
+  .pod .avatar{width:46px;height:46px;border-radius:50%;font-size:15px}
+  .pod-1{border-color:color-mix(in srgb,#d4af37 55%,var(--border));box-shadow:0 10px 26px rgba(212,175,55,.22);transform:translateY(-8px)}
+  .pod-rank{font-family:var(--disp);font-weight:800;font-size:15px;letter-spacing:.03em}
+  .pod b{font-family:var(--disp);font-weight:700;font-size:15px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pod-nota{font-family:var(--disp);font-weight:800;font-size:24px;line-height:1}
+  .pod-nota small{font-size:12px;color:var(--muted);font-weight:600}
+  .pod-val{font-size:12.5px;font-weight:700;color:var(--good-ink)}
+  @media(max-width:560px){.bonif-podium{grid-template-columns:1fr} .pod-1{transform:none}}
+  .bonif-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .bonif-seg{display:inline-flex;gap:3px;padding:3px;background:var(--surface-2);border:1px solid var(--border);border-radius:11px}
+  .bonif-seg button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:9px;cursor:pointer}
+  .bonif-seg button.active{color:var(--ink);background:var(--surface);box-shadow:var(--shadow-sm)}
+  .bonif-toolbar .btn.solid{margin-left:auto}
+  .bonif-filtros{display:inline-flex;gap:5px;flex-wrap:wrap}
+  .bonif-filtros button{border:1px solid var(--border);background:var(--surface);color:var(--ink-2);font:inherit;font-size:12px;font-weight:600;padding:6px 11px;border-radius:999px;cursor:pointer;transition:border-color .12s,background .12s,color .12s}
+  .bonif-filtros button:hover{border-color:var(--gold)}
+  .bonif-filtros button.active{background:color-mix(in srgb,var(--gold) 16%,transparent);border-color:color-mix(in srgb,var(--gold) 45%,transparent);color:var(--ink)}
+  .bonif-filtros button small{color:var(--muted);font-weight:700}
+  .bonif-filtros button.active small{color:var(--ink-2)}
+  .bonif-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;padding:10px 12px;border-bottom:1px solid var(--border)}
+  .bonif-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+  .bonif-table tbody tr:hover{background:var(--surface-2)}
+  .bonif-table tbody tr td:nth-child(2) b{font-family:var(--disp);font-weight:700;font-size:14px}
+  .bonif-table tfoot td{padding:12px;font-size:14px;border-top:2px solid var(--border);color:var(--ink)}
+  .bonif-table .tnum{font-variant-numeric:tabular-nums}
+  .medtag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
+  .medtag.med-ouro{background:color-mix(in srgb,#d4af37 16%,transparent);color:#b8860b;border:1px solid color-mix(in srgb,#d4af37 40%,transparent)}
+  .medtag.med-prata{background:color-mix(in srgb,#9ca3af 20%,transparent);color:#64748b;border:1px solid color-mix(in srgb,#9ca3af 42%,transparent)}
+  .medtag.med-bronze{background:color-mix(in srgb,#b87333 16%,transparent);color:#b87333;border:1px solid color-mix(in srgb,#b87333 40%,transparent)}
+  .pago-chip{border:1px solid var(--border);background:var(--surface-2);color:var(--muted);font:inherit;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;cursor:pointer;white-space:nowrap}
+  .pago-chip:hover{border-color:var(--good)}
+  .pago-chip.ok{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good-ink);border-color:color-mix(in srgb,var(--good) 42%,transparent)}
+  .bonif-table .lnk{border:0;background:none;color:var(--gold-2);font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .bonif-pay{text-align:right}
+  .bonif-pay b{font-family:var(--disp);font-weight:800;font-size:17px;color:var(--good-ink);display:block;line-height:1}
+  .bonif-pay small{display:block;font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-top:2px}
+  /* composição do prêmio (rateio) */
+  .comp-card{padding:14px 16px;margin-bottom:14px}
+  .comp-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:11px}
+  .comp-head>b{font-family:var(--disp);font-size:16px;letter-spacing:.02em}
+  .comp-flow{font-size:11.5px;color:var(--muted)}
+  .comp-bar{display:flex;height:16px;border-radius:999px;overflow:hidden;background:var(--surface-2);gap:2px}
+  .comp-bar span{display:block;min-width:3px}
+  .comp-legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;margin-top:12px}
+  .comp-line{display:flex;align-items:center;gap:8px;font-size:12.5px;background:var(--surface-2);border-radius:10px;padding:8px 11px}
+  .comp-line .cl-dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .comp-line b{font-family:var(--disp);font-weight:700}
+  .comp-line .cl-calc{color:var(--muted);font-size:11.5px}
+  .comp-line .cl-tot{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums}
+  .comp-line .cl-share{color:var(--muted);font-size:11px;min-width:34px;text-align:right}
+  .comp-total{margin-top:11px;text-align:right;font-size:13px;color:var(--ink-2)}
+  .comp-total b{font-family:var(--disp);font-size:19px;color:var(--good-ink);margin-left:8px}
+  .op-cost{padding:14px 16px;margin-bottom:14px}
+  .opc-list{display:flex;flex-direction:column;gap:7px;margin-top:10px;max-height:320px;overflow:auto}
+  .opc-row{display:flex;align-items:center;gap:10px;font-size:12.5px}
+  .opc-name{flex:0 0 200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+  .opc-n{flex:0 0 62px;color:var(--muted);font-size:11.5px;text-align:right}
+  .opc-bar{flex:1;height:9px;background:var(--surface-2);border-radius:999px;overflow:hidden;min-width:40px}
+  .opc-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--gold-2),var(--gold))}
+  .opc-tot{flex:0 0 110px;text-align:right;font-family:var(--disp);font-weight:800;font-variant-numeric:tabular-nums}
+  @media(max-width:560px){.opc-name{flex-basis:120px}.opc-tot{flex-basis:90px}}
+  .comp-delta{display:inline-block;margin-left:10px;font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px}
+  .comp-delta.up{color:var(--crit-ink);background:color-mix(in srgb,var(--critical) 12%,transparent)}
+  .comp-delta.down{color:var(--good-ink);background:color-mix(in srgb,var(--good) 14%,transparent)}
+  .bonif-table tr.brow{cursor:pointer}
+  .bonif-table tr.brow .exp-caret{color:var(--muted);font-size:10px;display:inline-block;transition:transform .15s}
+  .bonif-table tr.brow.open .exp-caret{transform:rotate(180deg);color:var(--gold-2)}
+  .bonif-table tr.bexp>td{background:var(--surface-2);padding:0}
+  .bexp-inner{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;padding:12px 16px}
+  .bexp-c{display:flex;align-items:center;gap:8px;font-size:11.5px}
+  .bexp-c .bexp-lab{flex:0 0 118px;color:var(--ink-2)}
+  .bexp-c .bexp-bar{flex:1;height:6px;background:color-mix(in srgb,var(--ink) 8%,transparent);border-radius:999px;overflow:hidden;min-width:30px}
+  .bexp-c .bexp-bar i{display:block;height:100%;border-radius:999px}
+  .bexp-c b{font-variant-numeric:tabular-nums;min-width:22px;text-align:right}
+  .bexp-c small{color:var(--muted);min-width:58px;text-align:right}
   .bonif-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
   .bonif-card{text-align:left;display:flex;flex-direction:column;gap:10px;padding:13px 15px;transition:box-shadow .12s,border-color .12s}
   .bonif-card:hover{box-shadow:var(--shadow);border-color:color-mix(in srgb,var(--gold) 55%,var(--border))}
@@ -701,9 +793,9 @@
     <div class="card" style="padding:11px 16px;margin-bottom:12px">
       <div class="legend">
         <span class="lg"><b>Categorias:</b></span>
-        <span class="lg"><span class="sw" style="background:#d4af37"></span> 🥇 Ouro (9–10) — 100% do prêmio</span>
-        <span class="lg"><span class="sw" style="background:#9ca3af"></span> 🥈 Prata (7–8)</span>
-        <span class="lg"><span class="sw" style="background:#b87333"></span> 🥉 Bronze (≤6)</span>
+        <span class="lg"><span class="sw" style="background:#d4af37"></span> 🥇 Ouro (9–10)</span>
+        <span class="lg"><span class="sw" style="background:#9ca3af"></span> 🥈 Prata (5–9)</span>
+        <span class="lg"><span class="sw" style="background:#b87333"></span> 🥉 Bronze (≤5)</span>
         <span class="lg" style="margin-left:auto;color:var(--muted)">nota = jornada+ponto (20%) · alertas (15%) · hora extra (15%) · média (15%) · identificação (10%) · multas (10%) · interjornada (10%) · câmera (5%)</span>
       </div>
     </div>
@@ -2170,8 +2262,7 @@ function capinha(m,weeks){
     <div class="cap-top">
       <span class="avatar" style="background:${rankColor}">${iniciais(m.nome)}</span>
       <div class="cap-id"><b>${firstName(m.nome)}</b><small>${tempoDeCasa(m.admissao)} de casa</small></div>
-      ${rankOk?`<span class="rank-score ${m._rankScore>=80?'good':m._rankScore>=60?'warn':'bad'}" title="${String(m._rankScoreTitle||'').replace(/"/g,'&quot;')}"><small>Nota</small><b>${Math.round(m._rankScore||0)}</b></span>`:''}
-      <span class="fdot" title="${rankTitle}" style="background:${rankColor}"></span>
+      ${rankOk?(()=>{const n=Math.round(m._rankScore||0)/10,nb=n.toFixed(1).replace('.',','),md=n>=9?'🥇':n>=7?'🥈':'🥉',ct=n>=9?'Ouro':n>=7?'Prata':'Bronze';return `<span class="rank-score" title="Nota ${nb}/10 · ${ct}"><span class="rs-med">${md}</span><b>${nb}<small>/10</small></b></span>`;})():`<span class="fdot" title="${rankTitle}" style="background:${rankColor}"></span>`}
     </div>
     <div class="cap-metrics">
       <div class="cm"><span>Identif.</span><b class="${m.ident==null?'':(m.ident>=CFG.sem?'ok':'bad')}">${m.ident==null?'—':m.ident+'%'}</b></div>
@@ -3344,43 +3435,102 @@ function atualizaDataMode(){
 /* ============================================================
    RENDER — BONIFICAÇÃO (nota 1–10 + categoria + composição)
    ============================================================ */
+// ===== Bonificação: faixas (bronze até 5), regras de pagamento e controle (RH) =====
+let BONIF_VIEW='tabela', BONIF_FILTER='todos', BONIF_LAST_TOTAL=null;
+function bonifCfg(){ try{ return Object.assign({base:300,ouro:100,prata:50,bronze:0}, JSON.parse(localStorage.getItem('bonif_cfg')||'{}')); }catch(e){ return {base:300,ouro:100,prata:50,bronze:0}; } }
+function bonifSaveCfg(c){ try{ localStorage.setItem('bonif_cfg',JSON.stringify(c)); }catch(e){} }
+function bonifPagoMap(){ try{ return JSON.parse(localStorage.getItem('bonif_pago')||'{}'); }catch(e){ return {}; } }
+function bonifSetPago(nn,v){ const m=bonifPagoMap(); if(v)m[nn]=1; else delete m[nn]; try{ localStorage.setItem('bonif_pago',JSON.stringify(m)); }catch(e){} }
+// FAIXAS: Bronze até 5 · Prata >5 a <9 · Ouro >=9
+function bonifTier(n10){ if(n10>=9)return{k:'ouro',lab:'Ouro',ic:'🥇',cor:'#d4af37'}; if(n10>5)return{k:'prata',lab:'Prata',ic:'🥈',cor:'#9ca3af'}; return{k:'bronze',lab:'Bronze',ic:'🥉',cor:'#b87333'}; }
+function brMoney(v){ return 'R$ '+(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function renderBonificacao(rows){
   const box=$('#bonifBox'), kb=$('#bonifKpis');
   if(!REAL||!RECORDS||!RECORDS.length){ if(kb)kb.innerHTML=''; box.innerHTML='<div class="empty">Carregue os dados na aba <b>Dados</b> para ver a bonificação.</div>'; return; }
   const agg=semanaAgg(rows); applyResumoRankScores(agg.data, rows);
   let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankElegivel(m)) mots.push(m); }));
-  mots=resumoRankUnique(mots);   // 1 card por MOTORISTA (a nota é por pessoa; sem duplicar quem rodou em >1 operação)
+  mots=resumoRankUnique(mots);   // 1 por MOTORISTA (a nota é por pessoa)
   mots.sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
-  const n10De=s=>Math.round((s||0)/10*10)/10;
-  const catDe=n=>n>=9?'ouro':n>=7?'prata':'bronze';
-  const CAT={ouro:{lab:'Ouro',cor:'#d4af37',ic:'🥇'},prata:{lab:'Prata',cor:'#9ca3af',ic:'🥈'},bronze:{lab:'Bronze',cor:'#b87333',ic:'🥉'}};
-  const cnt={ouro:0,prata:0,bronze:0}; mots.forEach(m=>cnt[catDe(n10De(m._rankScore))]++);
+  const cfg=bonifCfg(), pago=bonifPagoMap();
+  const data=mots.map(m=>{ const n10=Math.round(m._rankScore||0)/10, t=bonifTier(n10), pct=+cfg[t.k]||0, valor=(+cfg.base||0)*pct/100;
+    return {m,nome:m.nome,op:m.op||'—',n10,t,pct,valor,pagoOk:!!pago[norm(m.nome)]}; });
+  const cnt={ouro:0,prata:0,bronze:0}; data.forEach(d=>cnt[d.t.k]++);
+  const totalPagar=data.reduce((s,d)=>s+d.valor,0), totalPago=data.filter(d=>d.pagoOk).reduce((s,d)=>s+d.valor,0);
+  const deltaTotal=(BONIF_LAST_TOTAL!=null && Math.abs(BONIF_LAST_TOTAL-totalPagar)>0.005)?(totalPagar-BONIF_LAST_TOTAL):0; BONIF_LAST_TOTAL=totalPagar;
   if(kb) kb.innerHTML=[
-    {lab:'🥇 Ouro (9–10)',val:cnt.ouro,ac:CAT.ouro.cor,sub:'100% do prêmio'},
-    {lab:'🥈 Prata (7–8)',val:cnt.prata,ac:CAT.prata.cor,sub:'prêmio parcial'},
-    {lab:'🥉 Bronze (≤6)',val:cnt.bronze,ac:CAT.bronze.cor,sub:'menor/sem prêmio'},
-    {lab:'Motoristas elegíveis',val:mots.length,ac:'var(--s2)',sub:'com movimentação no período'}
+    {lab:'🥇 Ouro (9–10)',val:cnt.ouro,ac:'#d4af37',sub:cfg.ouro+'% do prêmio'},
+    {lab:'🥈 Prata (5–9)',val:cnt.prata,ac:'#9ca3af',sub:cfg.prata+'% do prêmio'},
+    {lab:'🥉 Bronze (≤5)',val:cnt.bronze,ac:'#b87333',sub:cfg.bronze+'% do prêmio'},
+    {lab:'Elegíveis',val:data.length,ac:'var(--s2)',sub:'com movimentação'},
+    {lab:'Total a pagar',val:brMoney(totalPagar),ac:'var(--good)',sub:(totalPago>0?brMoney(totalPago)+' já pago':'nenhum marcado como pago')}
   ].map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
-  if(!mots.length){ box.innerHTML='<div class="empty">Nenhum motorista elegível (com movimentação) no período/filtros atuais.</div>'; return; }
-  box.innerHTML='<div class="bonif-grid">'+mots.map(m=>{
-    const n10=n10De(m._rankScore), c=catDe(n10), ct=CAT[c], premio=Math.round(n10/10*100);
-    const comps=(m._rankProfile&&m._rankProfile.components||[]).slice().sort((a,b)=>a.v-b.v);
-    const bars=comps.map(cp=>`<div class="bonif-comp" title="${cp.lab}: ${Math.round(cp.v)} (peso ${cp.w})"><span>${cp.lab}</span><div class="bar"><i style="width:${Math.max(2,Math.round(cp.v))}%;background:${notaCor(cp.v)}"></i></div><b>${Math.round(cp.v)}</b></div>`).join('');
-    const enc=encodeURIComponent(m.nome);
-    return `<div class="card bonif-card">
-      <div class="bonif-head">
-        <span class="avatar" style="background:${notaCor(m._rankScore)}">${iniciais(m.nome)}</span>
-        <div class="bonif-id"><b>${firstName(m.nome)}</b><small>${m.op||'—'} · ${tempoDeCasa(m.admissao)} de casa</small></div>
-        <span class="bonif-cat" style="background:color-mix(in srgb,${ct.cor} 18%,transparent);color:${ct.cor};border:1px solid color-mix(in srgb,${ct.cor} 45%,transparent)">${ct.ic} ${ct.lab}</span>
-      </div>
-      <div class="bonif-score"><div class="n10">${n10.toFixed(1).replace('.',',')}<small>/10</small></div></div>
-      <div class="bonif-comps">${bars}</div>
-      <div class="bonif-acts">
-        <button type="button" class="bonif-act primary" data-sc="${enc}">📊 Scorecard</button>
-        <button type="button" class="bonif-act" data-fc="${enc}">📋 Resumo semanal</button>
-      </div>
-    </div>`;
-  }).join('')+'</div>';
+  if(!data.length){ box.innerHTML='<div class="empty">Nenhum motorista elegível no período/filtros atuais.</div>'; return; }
+  const cfgBar=`<div class="card bonif-cfg">
+    <b>💰 Regras de pagamento</b>
+    <label>Prêmio base <span class="pre">R$</span><input type="number" id="bfBase" value="${cfg.base}" min="0" step="10"></label>
+    <label>🥇 Ouro <input type="number" id="bfOuro" value="${cfg.ouro}" min="0" max="100" step="5"><span class="pos">%</span></label>
+    <label>🥈 Prata <input type="number" id="bfPrata" value="${cfg.prata}" min="0" max="100" step="5"><span class="pos">%</span></label>
+    <label>🥉 Bronze <input type="number" id="bfBronze" value="${cfg.bronze}" min="0" max="100" step="5"><span class="pos">%</span></label>
+    <span class="cfg-note">valores de exemplo — ajuste e a tabela recalcula</span>
+  </div>`;
+  // composição do prêmio: rateio do custo total por faixa + fluxo do cálculo
+  const faixas=[{k:'ouro',ic:'🥇',lab:'Ouro',cor:'#d4af37'},{k:'prata',ic:'🥈',lab:'Prata',cor:'#9ca3af'},{k:'bronze',ic:'🥉',lab:'Bronze',cor:'#b87333'}]
+    .map(t=>{ const unit=(+cfg.base||0)*(+cfg[t.k]||0)/100; return {...t,n:cnt[t.k],pct:+cfg[t.k]||0,unit,tot:cnt[t.k]*unit}; });
+  const sh=t=> totalPagar>0?(t.tot/totalPagar*100):0;
+  const compBar=`<div class="comp-bar">${faixas.map(t=>t.tot>0?`<span style="width:${sh(t).toFixed(1)}%;background:${t.cor}" title="${t.lab}: ${brMoney(t.tot)}"></span>`:'').join('')||'<span style="width:100%;background:var(--border)"></span>'}</div>`;
+  const compLeg=faixas.map(t=>`<div class="comp-line"><span class="cl-dot" style="background:${t.cor}"></span><b>${t.ic} ${t.lab}</b><span class="cl-calc">${t.n} × ${brMoney(t.unit)}</span><span class="cl-tot">${brMoney(t.tot)}</span><span class="cl-share">${Math.round(sh(t))}%</span></div>`).join('');
+  const compHtml=`<div class="card comp-card"><div class="comp-head"><b>📊 Composição do prêmio</b><span class="comp-flow">Como vira prêmio: indicadores ponderados → nota 0–10 → medalha → % → R$</span></div>${compBar}<div class="comp-legend">${compLeg}</div><div class="comp-total">Custo total do prêmio no período<b>${brMoney(totalPagar)}</b>${deltaTotal?`<span class="comp-delta ${deltaTotal>0?'up':'down'}">${deltaTotal>0?'+':'−'}${brMoney(Math.abs(deltaTotal))} vs. anterior</span>`:''}</div></div>`;
+  // custo por operação
+  const byOp={}; data.forEach(d=>{ const o=d.op||'—'; (byOp[o]=byOp[o]||{op:o,n:0,tot:0}); byOp[o].n++; byOp[o].tot+=d.valor; });
+  const opCost=Object.values(byOp).sort((a,b)=>b.tot-a.tot), opMax=opCost.reduce((m,o)=>Math.max(m,o.tot),0)||1;
+  const opCostHtml=`<div class="card op-cost"><div class="comp-head"><b>💼 Custo por operação</b><span class="comp-flow">quanto do prêmio vai para cada operação</span></div><div class="opc-list">${opCost.map(o=>`<div class="opc-row"><span class="opc-name" title="${scEsc(o.op)}">${scEsc(o.op)}</span><span class="opc-n">${o.n} mot.</span><div class="opc-bar"><i style="width:${(o.tot/opMax*100).toFixed(1)}%"></i></div><b class="opc-tot">${brMoney(o.tot)}</b></div>`).join('')}</div></div>`;
+  const top=data.slice(0,3), ordem=[1,0,2];
+  const podium=`<div class="bonif-podium">${ordem.filter(i=>top[i]).map(i=>{ const d=top[i]; return `<div class="pod pod-${i+1}"><div class="pod-rank">${d.t.ic} ${i+1}º</div><span class="avatar" style="background:${notaCor(d.m._rankScore)}">${iniciais(d.nome)}</span><b>${firstName(d.nome)}</b><div class="pod-nota">${d.n10.toFixed(1).replace('.',',')}<small>/10</small></div><div class="pod-val">${brMoney(d.valor)}</div></div>`; }).join('')}</div>`;
+  const nPend=data.filter(d=>!d.pagoOk).length;
+  let dataView=data;
+  if(BONIF_FILTER==='ouro')dataView=data.filter(d=>d.t.k==='ouro');
+  else if(BONIF_FILTER==='prata')dataView=data.filter(d=>d.t.k==='prata');
+  else if(BONIF_FILTER==='bronze')dataView=data.filter(d=>d.t.k==='bronze');
+  else if(BONIF_FILTER==='pendentes')dataView=data.filter(d=>!d.pagoOk);
+  const totalView=dataView.reduce((s,d)=>s+d.valor,0);
+  const filChips=`<div class="bonif-filtros">${[['todos','Todos',data.length],['ouro','🥇 Ouro',cnt.ouro],['prata','🥈 Prata',cnt.prata],['bronze','🥉 Bronze',cnt.bronze],['pendentes','⏳ Pendentes',nPend]].map(a=>`<button data-fil="${a[0]}" class="${BONIF_FILTER===a[0]?'active':''}">${a[1]} <small>${a[2]}</small></button>`).join('')}</div>`;
+  const toggle=`<div class="bonif-toolbar"><div class="bonif-seg"><button data-view="tabela" class="${BONIF_VIEW==='tabela'?'active':''}">📋 Tabela de pagamento</button><button data-view="cards" class="${BONIF_VIEW==='cards'?'active':''}">🪪 Cards</button></div>${filChips}<button class="btn solid" data-bonif-export>⬇ Exportar folha (CSV)</button></div>`;
+  let viewHtml;
+  if(!dataView.length){
+    viewHtml='<div class="card"><div class="empty" style="padding:30px">Nenhum motorista nesse filtro.</div></div>';
+  } else if(BONIF_VIEW==='tabela'){
+    viewHtml=`<div class="card op-block"><div class="tblwrap"><table class="bonif-table" style="min-width:740px"><thead><tr><th>#</th><th>Motorista</th><th>Operação</th><th>Nota</th><th>Medalha</th><th>% prêmio</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody>${
+      dataView.map((d,i)=>{ const enc=encodeURIComponent(d.nome);
+        const totWd=(d.m._rankProfile&&d.m._rankProfile.components||[]).reduce((s,c)=>s+c.w,0)||1;
+        const cbars=(d.m._rankProfile&&d.m._rankProfile.components||[]).slice().sort((a,b)=>b.w-a.w).map(c=>`<div class="bexp-c"><span class="bexp-lab">${c.lab}</span><div class="bexp-bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div><b>${Math.round(c.v)}</b><small>peso ${Math.round(c.w/totWd*100)}%</small></div>`).join('');
+        return `<tr class="brow"><td class="tnum">${i+1} <span class="exp-caret">▾</span></td><td><b>${d.nome}</b></td><td>${d.op}</td><td class="tnum"><b style="color:${notaCor(d.m._rankScore)}">${d.n10.toFixed(1).replace('.',',')}</b></td><td><span class="medtag med-${d.t.k}">${d.t.ic} ${d.t.lab}</span></td><td class="tnum">${d.pct}%</td><td class="tnum"><b>${brMoney(d.valor)}</b></td><td><button class="pago-chip ${d.pagoOk?'ok':''}" data-pago="${enc}">${d.pagoOk?'✓ Pago':'Pendente'}</button></td><td><button class="lnk" data-sc="${enc}">scorecard ↗</button></td></tr><tr class="bexp" hidden><td colspan="9"><div class="bexp-inner">${cbars}</div></td></tr>`; }).join('')
+    }</tbody><tfoot><tr><td colspan="6" style="text-align:right">Total ${BONIF_FILTER==='todos'?'a pagar':'('+BONIF_FILTER+')'} · ${dataView.length} motorista(s)</td><td class="tnum"><b>${brMoney(totalView)}</b></td><td colspan="2"></td></tr></tfoot></table></div></div>`;
+  } else {
+    viewHtml='<div class="bonif-grid">'+dataView.map(d=>{ const m=d.m, enc=encodeURIComponent(d.nome);
+      const comps=(m._rankProfile&&m._rankProfile.components||[]).slice().sort((a,b)=>a.v-b.v);
+      const bars=comps.map(cp=>`<div class="bonif-comp" title="${cp.lab}: ${Math.round(cp.v)} (peso ${cp.w})"><span>${cp.lab}</span><div class="bar"><i style="width:${Math.max(2,Math.round(cp.v))}%;background:${notaCor(cp.v)}"></i></div><b>${Math.round(cp.v)}</b></div>`).join('');
+      return `<div class="card bonif-card">
+        <div class="bonif-head"><span class="avatar" style="background:${notaCor(m._rankScore)}">${iniciais(d.nome)}</span><div class="bonif-id"><b>${firstName(d.nome)}</b><small>${d.op} · ${tempoDeCasa(m.admissao)} de casa</small></div><span class="bonif-cat" style="background:color-mix(in srgb,${d.t.cor} 18%,transparent);color:${d.t.cor};border:1px solid color-mix(in srgb,${d.t.cor} 45%,transparent)">${d.t.ic} ${d.t.lab}</span></div>
+        <div class="bonif-score"><div class="n10">${d.n10.toFixed(1).replace('.',',')}<small>/10</small></div><div class="bonif-pay"><b>${brMoney(d.valor)}</b><small>${d.pct}% do prêmio</small></div></div>
+        <div class="bonif-comps">${bars}</div>
+        <div class="bonif-acts"><button type="button" class="bonif-act primary" data-sc="${enc}">📊 Scorecard</button><button type="button" class="bonif-act" data-fc="${enc}">📋 Resumo semanal</button></div>
+      </div>`;
+    }).join('')+'</div>';
+  }
+  box.innerHTML=cfgBar+compHtml+opCostHtml+podium+toggle+viewHtml;
+}
+function exportBonifFolha(){
+  try{
+    const rows=filtered(); const agg=semanaAgg(rows); applyResumoRankScores(agg.data, rows);
+    let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankElegivel(m)) mots.push(m); })); mots=resumoRankUnique(mots).sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
+    const cfg=bonifCfg(), pago=bonifPagoMap();
+    const head=['Motorista','CPF','Operacao','Nota_10','Medalha','Pct_premio','Valor_RS','Status'];
+    const lines=[head.join(';')];
+    mots.forEach(m=>{ const n10=Math.round(m._rankScore||0)/10,t=bonifTier(n10),pct=+cfg[t.k]||0,valor=(+cfg.base||0)*pct/100;
+      const cpf=(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[norm(m.nome)])||'';
+      lines.push(['"'+m.nome+'"','"'+cpf+'"','"'+(m.op||'')+'"',n10.toFixed(1).replace('.',','),t.lab,pct,valor.toFixed(2).replace('.',','),(pago[norm(m.nome)]?'Pago':'Pendente')].join(';')); });
+    baixarCsv(lines,'folha_bonificacao.csv');
+  }catch(e){ toast('Falha ao exportar: '+(e.message||e)); }
 }
 /* ============================================================
    SCORECARD DO CONDUTOR (gamificação estilo Gobrax)
@@ -5719,7 +5869,22 @@ $('#tblBody').addEventListener('click',e=>{ const tr=e.target.closest('.tblrow')
 $('#mediaBox').addEventListener('click',e=>{ const tr=e.target.closest('.mediarow'); if(tr) openFicha(decodeURIComponent(tr.dataset.mot||'')); });
 // capinha do motorista → detalhamento (ficha)
 $('#semanaBox').addEventListener('click',e=>{ const c=e.target.closest('.capinha'); if(!c||!c.dataset.mot)return; openFicha(decodeURIComponent(c.dataset.mot)); });
-$('#bonifBox').addEventListener('click',e=>{ const sc=e.target.closest('[data-sc]'); if(sc){ openScorecard(decodeURIComponent(sc.dataset.sc)); return; } const fc=e.target.closest('[data-fc]'); if(fc){ openFicha(decodeURIComponent(fc.dataset.fc)); return; } });
+$('#bonifBox').addEventListener('click',e=>{
+  const sc=e.target.closest('[data-sc]'); if(sc){ openScorecard(decodeURIComponent(sc.dataset.sc)); return; }
+  const fc=e.target.closest('[data-fc]'); if(fc){ openFicha(decodeURIComponent(fc.dataset.fc)); return; }
+  const vw=e.target.closest('[data-view]'); if(vw){ BONIF_VIEW=vw.dataset.view; renderBonificacao(filtered()); return; }
+  const fil=e.target.closest('[data-fil]'); if(fil){ BONIF_FILTER=fil.dataset.fil; renderBonificacao(filtered()); return; }
+  const pg=e.target.closest('[data-pago]'); if(pg){ const nn=norm(decodeURIComponent(pg.dataset.pago)); bonifSetPago(nn, !(bonifPagoMap()[nn])); renderBonificacao(filtered()); return; }
+  if(e.target.closest('[data-bonif-export]')){ exportBonifFolha(); return; }
+  const row=e.target.closest('tr.brow'); if(row && !e.target.closest('button') && !e.target.closest('a')){ const nx=row.nextElementSibling; if(nx&&nx.classList.contains('bexp')){ nx.hidden=!nx.hidden; row.classList.toggle('open', !nx.hidden); } return; }
+});
+$('#bonifBox').addEventListener('change',e=>{
+  if(!e.target.closest('.bonif-cfg')) return;
+  const cfg=bonifCfg();
+  const g=(id,k)=>{ const el=document.getElementById(id); if(el){ const v=parseFloat(el.value); if(Number.isFinite(v)) cfg[k]=v; } };
+  g('bfBase','base'); g('bfOuro','ouro'); g('bfPrata','prata'); g('bfBronze','bronze');
+  bonifSaveCfg(cfg); renderBonificacao(filtered());
+});
 $('#scoreModal').addEventListener('click',e=>{ if(e.target.id==='scoreModal') closeScorecard(); });
 $('#scoreShell').addEventListener('click',e=>{ const b=e.target.closest('[data-sc-act]'); if(!b)return; const act=b.dataset.scAct; if(act==='close')closeScorecard(); else if(act==='ficha'){ const nm=SCORECARD_NOME; closeScorecard(); openFicha(nm); } else if(act==='trat'){ if(SCORECARD_NOME){ fichaAtual=SCORECARD_NOME; openTratModal(); } } });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ const m=$('#scoreModal'); if(m&&m.style.display==='flex')closeScorecard(); } });
