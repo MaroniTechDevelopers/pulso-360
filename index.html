@@ -1587,12 +1587,25 @@ let SORT = { k:'_sev', dir:-1 };
 function metaDe(operacao){ if(META_FAM){ const f=opFamily(operacao); if(f && META_FAM[f]!=null) return META_FAM[f]; } return CFG.meta; }
 // chave de cruzamento centro de resultado + modelo (normalizada)
 function metaKeyCM(centro, modelo){ return norm(centro||'')+'|'+norm(modelo||''); }
-// META EXATA do veículo (sem fallback): por PLACA > por CENTRO+MODELO (via TMS). null se não houver meta oficial.
+// Normalização de MODELO p/ cruzar TMS × planilha de metas (nomes diferentes entre sistemas):
+// casa por MARCA + NÚMERO do modelo + EIXO (ignora RH/R, "- E6", CTC/CLC, etc.). Ex.: "G 370 A4X2" e "GH 370 A"+"4X2" → "SCANIA|370"/"4X2".
+function metaEixo(s){ const m=norm(s).match(/\d\s*X\s*\d[A-Z]?/); return m?m[0].replace(/\s/g,'').replace(/T$/,''):''; }
+function metaBrand(marca, modelo){ const m=norm((marca||'')+' '+(modelo||'')); if(/MERCEDES|MBENZ|(^| )MB( |$)/.test(m))return'MB'; if(/VOLKS|(^| )VW( |$)/.test(m))return'VW'; for(const b of['VOLVO','SCANIA','IVECO','FIAT','RENAULT','RANDON','DAF','FORD','AGRALE'])if(m.indexOf(b)>=0)return b; return (norm(marca).split(' ')[0]||''); }
+function metaModelKey(marca, modelo){ const b=metaBrand(marca,modelo); const s=norm(modelo).replace(/\d\s*X\s*\d[A-Z]?/g,' ').replace(/\bE6\b|EURO ?6/g,' '); const nums=(s.match(/\d+/g)||[]).join('').slice(0,6); return (b&&nums)?(b+'|'+nums):''; }
+// META EXATA do veículo (sem fallback): por PLACA > por OPERAÇÃO(centro)+MODELO+EIXO (via TMS). null se não houver meta oficial.
 // É a que vale para PAGAMENTO — o fallback por família/config NÃO entra aqui.
 function metaExata(placa){
   const pk=placaKey(placa); if(!pk) return null;
   if(META_PLACA && META_PLACA[pk]!=null) return META_PLACA[pk];
-  if(META_CM && TMS && TMS[pk] && TMS[pk].modelo){ const m=META_CM[metaKeyCM(TMS[pk].centro, TMS[pk].modelo)]; if(m!=null) return m; }
+  if(META_CM && TMS && TMS[pk] && TMS[pk].modelo){ const t=TMS[pk], fam=opFamily(t.centro), mk=metaModelKey(t.marca,t.modelo), ex=metaEixo(t.modelo);
+    if(mk){ let m=null;
+      if(fam&&ex) m=META_CM['FME|'+fam+'|'+mk+'|'+ex];          // operação + modelo + eixo (mais específico)
+      if(m==null&&fam) m=META_CM['FM|'+fam+'|'+mk];              // operação + modelo
+      if(m==null&&ex) m=META_CM['ME|'+mk+'|'+ex];               // modelo + eixo (média entre operações)
+      if(m==null) m=META_CM['M|'+mk];                            // só modelo (último recurso)
+      if(m!=null) return m;
+    }
+  }
   return null;
 }
 // meta oficial do veículo: EXATA (placa > centro+modelo) > família de operação > meta única da config
@@ -2125,7 +2138,9 @@ function rankProfile(nome,recs){
   const multaTot=MULTAS_N?multasCondutaMotoristaCount(nome,multaRange):0, multaRate=multaTot*100/hCondH;
   const d=drv(nome), litros=(recs||[]).reduce((s,r)=>s+(+r.litros||0),0), ab=ABAST&&ABAST[norm(nome)];
   const media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(litros>0?audit.km/litros:d.media));
-  const rr=(recs||[]).find(r=>r.placa)||{}, meta=metaVeic(rr.placa||'',(recs&&recs[0]&&recs[0].operacao)||'');
+  // meta = da placa que o motorista MAIS rodou no período (≈ placa atual dele), não a primeira
+  const _plC={}; (recs||[]).forEach(r=>{ if(r.placa)_plC[r.placa]=(_plC[r.placa]||0)+(r.horasMov||1); }); let _plMain='',_plBest=-1; for(const p in _plC){ if(_plC[p]>_plBest){_plBest=_plC[p];_plMain=p;} }
+  const rr={placa:_plMain||((recs||[]).find(r=>r.placa)||{}).placa||''}, meta=metaVeic(rr.placa||'',(recs&&recs[0]&&recs[0].operacao)||'');
   const mediaScore=(!MEDIA_OFF&&media!=null&&meta>0)?rankClamp(media/meta*100):null;
   const pend=(recs||[]).filter(r=>r.sev==='pendente').length, idDiv=(recs||[]).filter(r=>r.idDivergente||r.condutorDivergente).length;
   return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,ajPonto,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
@@ -5317,12 +5332,13 @@ function ingestTMS(rows){
   if(!rows||!rows.length){ toast('TMS vazio'); return; }
   const r0=rows[0];
   const cP=col(r0,['placa']), cC=col(r0,['centro resultado','centro de resultado','centro']),
-        cT=col(r0,['tipo de rodado','rodado']), cPr=col(r0,['propriedade']), cUF=col(r0,['uf','estado']), cCar=col(r0,['carroceria']);
+        cT=col(r0,['tipo de rodado','rodado']), cPr=col(r0,['propriedade']), cUF=col(r0,['uf','estado']), cCar=col(r0,['carroceria']),
+        cMod=col(r0,['modelo']), cMar=col(r0,['marca']);
   if(!cP || !cC){ toast('TMS: não achei Placa e/ou Centro de Resultado'); return; }
   const map={};
   rows.forEach(row=>{ const pl=placaKey(row[cP]); if(!pl) return;
     const centro=cC?String(row[cC]).trim():'';
-    map[pl]={ centro, fam:opFamily(centro),
+    map[pl]={ centro, fam:opFamily(centro), modelo:cMod?String(row[cMod]).trim():'', marca:cMar?String(row[cMar]).trim():'',
       rodado:cT?String(row[cT]).trim():'', prop:cPr?String(row[cPr]).trim():'', uf:cUF?String(row[cUF]).trim():'', carroceria:cCar?String(row[cCar]).trim():'' };
   });
   TMS=map; TMS_N=Object.keys(map).length;
@@ -5365,12 +5381,15 @@ async function loadAbastecimentoFiles(files){
 }
 async function loadMetasFiles(files){
   if(typeof XLSX==='undefined' && [...files].some(f=>/\.xlsx?$/i.test(f.name))){toast('Sem internet p/ ler Excel');return;}
-  const placa={},byf={}; let ok=0;
+  const placa={},byf={},cm={}; const cmAdd=(k,v)=>{const o=cm[k]||(cm[k]={s:0,n:0});o.s+=v;o.n++;}; let ok=0;
   for(const f of [...files].sort((a,b)=>String(a.name).localeCompare(String(b.name)))){ try{ const ext=(f.name.split('.').pop()||'').toLowerCase();
-    if(ext==='xlsx'||ext==='xls'){ const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}); wb.SheetNames.forEach(sn=>{ const M=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:'',header:1}),nsn=norm(sn); M.forEach(r=>{for(let c=0;c<r.length-1;c++){const v=norm(r[c]).replace(/[\s-]/g,'');if(PLACA_PAT.test(v)){const mt=numBR(r[c+1]);if(mt>0.5&&mt<12)placa[v]=mt;}}}); if(nsn.indexOf('META GLOBAL')>=0||nsn.indexOf('PAINEL')>=0){const hdr=(M[0]||[]).map(norm),iOp=hdr.findIndex(h=>h.indexOf('OPERACAO')>=0);let iMeta=hdr.findIndex(h=>h==='META ATUALIZADA');if(iMeta<0)iMeta=hdr.findIndex(h=>h==='META');if(iOp>=0&&iMeta>=0)M.slice(1).forEach(r=>{const op=r[iOp],mt=numBR(r[iMeta]);if(op&&mt>0&&mt<12){const fam=opFamily(op);if(fam)(byf[fam]=byf[fam]||[]).push(mt);}});}}); }
+    if(ext==='xlsx'||ext==='xls'){ const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}); wb.SheetNames.forEach(sn=>{ const M=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:'',header:1}),nsn=norm(sn); M.forEach(r=>{for(let c=0;c<r.length-1;c++){const v=norm(r[c]).replace(/[\s-]/g,'');if(PLACA_PAT.test(v)){const mt=numBR(r[c+1]);if(mt>0.5&&mt<12)placa[v]=mt;}}}); if(nsn.indexOf('META GLOBAL')>=0||nsn.indexOf('PAINEL')>=0){const hdr=(M[0]||[]).map(norm),iOp=hdr.findIndex(h=>h.indexOf('OPERACAO')>=0);let iMeta=hdr.findIndex(h=>h==='META ATUALIZADA');if(iMeta<0)iMeta=hdr.findIndex(h=>h==='META');const iMM=hdr.findIndex(h=>h.indexOf('MARCA')>=0||h.indexOf('MODELO')>=0),iTp=hdr.findIndex(h=>h==='TIPO');if(iOp>=0&&iMeta>=0)M.slice(1).forEach(r=>{const op=r[iOp],mt=numBR(r[iMeta]);if(op&&mt>0&&mt<12){const fam=opFamily(op);if(fam)(byf[fam]=byf[fam]||[]).push(mt);const mk=iMM>=0?metaModelKey('',r[iMM]):'';if(mk){const ex=(iTp>=0?metaEixo(r[iTp]):'')||(iMM>=0?metaEixo(r[iMM]):'');if(fam&&ex)cmAdd('FME|'+fam+'|'+mk+'|'+ex,mt);if(fam)cmAdd('FM|'+fam+'|'+mk,mt);if(ex)cmAdd('ME|'+mk+'|'+ex,mt);cmAdd('M|'+mk,mt);}}});}}); }
     else { const rows=await readFileRowsP(f); if(rows.length){const r0=rows[0],cP=col(r0,['placa']),cO=col(r0,['operacao']),cM=col(r0,['meta']);rows.forEach(r=>{const mt=cM?numBR(r[cM]):0;if(cP){const pk=placaKey(r[cP]);if(pk&&mt>0.5&&mt<12)placa[pk]=mt;}if(cO&&mt>0&&mt<12){const fam=opFamily(r[cO]);if(fam)(byf[fam]=byf[fam]||[]).push(mt);}});} } ok++;
   }catch(e){} }
-  META_PLACA=Object.keys(placa).length?placa:null; META_FAM={}; for(const fam in byf)META_FAM[fam]=byf[fam].reduce((a,b)=>a+b,0)/byf[fam].length; if(!Object.keys(META_FAM).length)META_FAM=null; META_N=META_PLACA?Object.keys(META_PLACA).length:0;afterImportChange({reanalyze:false,filters:false,persist:true});toast('Metas ✓ '+(META_PLACA?Object.keys(META_PLACA).length+' placas':'')+(META_FAM?' · '+Object.keys(META_FAM).length+' operações':'')+' · '+ok+' arquivo(s)');
+  META_PLACA=Object.keys(placa).length?placa:null; META_FAM={}; for(const fam in byf)META_FAM[fam]=byf[fam].reduce((a,b)=>a+b,0)/byf[fam].length; if(!Object.keys(META_FAM).length)META_FAM=null;
+  META_CM=(()=>{const o={};for(const k in cm)o[k]=Math.round(cm[k].s/cm[k].n*100)/100;return Object.keys(o).length?o:null;})();
+  const nMod=META_CM?Object.keys(META_CM).filter(k=>k.indexOf('M|')===0).length:0;
+  META_N=META_PLACA?Object.keys(META_PLACA).length:0;afterImportChange({reanalyze:false,filters:false,persist:true});toast('Metas ✓ '+(META_PLACA?Object.keys(META_PLACA).length+' placas':'')+(META_FAM?' · '+Object.keys(META_FAM).length+' operações':'')+(nMod?' · '+nMod+' modelos':'')+' · '+ok+' arquivo(s)');
 }
 
 
@@ -5842,9 +5861,9 @@ async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const da
    ============================================================ */
 async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz:false,b:bytes}; const cs=new CompressionStream('gzip'); const w=cs.writable.getWriter(); w.write(bytes); w.close(); return {gz:true,b:new Uint8Array(await new Response(cs.readable).arrayBuffer())}; }
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
-function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0,_dedupeDone:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
+function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0,_dedupeDone:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_CM,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
-async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs(); await _finalizeBootUI(); return true; }
+async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_CM=S.META_CM||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs(); await _finalizeBootUI(); return true; }
 // Finalização do boot NÃO-BLOQUEANTE: cede à UI (uiYield) entre as fases pesadas e PRÉ-AQUECE o
 // ranking em lotes (await uiYield a cada N motoristas) para o navegador pintar o overlay/animar o
 // spinner e nunca travar vários segundos. Números/dados/visual idênticos ao antigo
