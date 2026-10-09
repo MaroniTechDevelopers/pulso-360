@@ -638,6 +638,12 @@
   .sg-ring .nota{font-family:var(--sg-disp);font-weight:800;font-size:56px;line-height:.9;background:linear-gradient(160deg,#fff,var(--sg-gold));-webkit-background-clip:text;background-clip:text;color:transparent}
   .sg-ring .de10{font-family:var(--sg-disp);font-weight:600;color:var(--sg-mut);font-size:14px;letter-spacing:.12em;margin-top:2px}
   .sg-medal{display:inline-flex;align-items:center;gap:7px;margin-top:2px;padding:6px 15px;border-radius:999px;font-family:var(--sg-disp);font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;background:var(--sg-goldsoft);color:var(--sg-gold);border:1px solid color-mix(in srgb,var(--sg-gold) 38%,transparent)}
+  .sg-badges{display:flex;align-items:center;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:2px}
+  .sg-badges .sg-medal{margin-top:0}
+  .sg-media{display:inline-flex;align-items:baseline;gap:6px;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--sg-line);font-family:var(--sg-disp)}
+  .sg-media .em{font-size:13px;align-self:center}
+  .sg-media b{font-size:16px;font-weight:800;color:var(--sg-ink)}
+  .sg-media small{font-weight:600;font-size:10px;color:var(--sg-mut);letter-spacing:.03em;text-transform:uppercase}
   .sg-who{margin-top:12px}
   .sg-who b{font-family:var(--sg-disp);font-weight:700;font-size:21px;letter-spacing:.02em;display:block}
   .sg-who span{color:var(--sg-mut);font-size:12px}
@@ -1936,6 +1942,10 @@ function placasNoFiltro(){
   if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q) return null;   // nada filtrado → todas as placas
   const s=new Set();
   filtered().forEach(r=>{ const arr=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]); for(const p of arr){ const k=placaKey(p); if(k)s.add(k); } });
+  // Nas abas de PLACA a "Operação" exibida é a do VEÍCULO (UO Trimble/centro TMS). Ao filtrar por
+  // operação, mantém só as placas cuja própria operação é a filtrada — assim a coluna sempre bate com o
+  // filtro (um caminhão que roda em outra operação não vaza por ter dividido um dia com a placa filtrada).
+  if(op){ for(const k of [...s]){ if(operacaoDaPlaca(k)!==op) s.delete(k); } }
   return s;
 }
 function debounce(fn,ms){ let t; return function(...a){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,a),ms); }; }
@@ -3738,7 +3748,7 @@ function renderScorecard(nome){
     return;
   }
   const CAT={ouro:{lab:'Ouro',cor:'#d4af37',ic:'🥇',premio:'100% do prêmio'},prata:{lab:'Prata',cor:'#9ca3af',ic:'🥈',premio:'prêmio parcial'},bronze:{lab:'Bronze',cor:'#b87333',ic:'🥉',premio:'menor/sem prêmio'}};
-  const n10=scN10(p.score), premio=Math.round(n10/10*100), catK=n10>=9?'ouro':n10>=7?'prata':'bronze', cat=CAT[catK];
+  const n10=scN10(p.score), premio=Math.round(n10/10*100), catK=bonifTier(n10).k, cat=CAT[catK];  // MESMA régua da Bonificação (Ouro≥9 · Prata >5 · Bronze ≤5)
   const elig=Object.keys(profiles).filter(k=>profiles[k].movDays>0&&profiles[k].hCond>0).map(k=>({k,s:profiles[k].score})).sort((a,b)=>b.s-a.s);
   const pos=elig.findIndex(e=>e.k===nn)+1, tot=elig.length, topPct=tot?Math.max(1,Math.round(pos/tot*100)):null;
   const mensal=scMensalCached(nome, rows), com=mensal.filter(m=>m.score!=null);
@@ -3777,10 +3787,13 @@ function renderScorecard(nome){
   // ---- herói gamificado ----
   const C=326.726, dash=(C*(1-Math.max(0,Math.min(10,n10))/10)).toFixed(1);
   const medalIc={ouro:'🥇',prata:'🥈',bronze:'🥉'}[catK];
+  // Média × meta do condutor ao lado da medalha (verde ≥ meta, vermelho < meta)
+  const _scMed=(p.media!=null&&isFinite(p.media))?p.media:null, _scMeta=(p.meta!=null&&isFinite(p.meta)&&p.meta>0)?p.meta:null, _scMF=v=>(Math.round(v*100)/100).toFixed(2).replace('.',',');
+  const mediaChip=_scMed!=null?`<span class="sg-media"><span class="em">⛽</span><b style="color:${_scMeta!=null?(_scMed>=_scMeta?'#34d399':'#f87171'):'var(--sg-ink)'}">${_scMF(_scMed)}</b><small>km/l${_scMeta!=null?' · meta '+_scMF(_scMeta):''}</small></span>`:'';
   let lvlLR, lvlPct;
   if(catK==='ouro'){ lvlLR='<span>🏆 Nível máximo — mantenha o <b>Ouro</b></span><span><b>Topo</b></span>'; lvlPct=100; }
-  else if(catK==='prata'){ lvlLR=`<span>Falta pouco para o <b>Ouro 🥇</b></span><span><b>+${scFmt(9-n10)}</b> pts</span>`; lvlPct=Math.max(5,Math.min(100,(n10-7)/2*100)); }
-  else { lvlLR=`<span>Rumo à <b>Prata 🥈</b></span><span><b>+${scFmt(7-n10)}</b> pts</span>`; lvlPct=Math.max(5,Math.min(100,n10/7*100)); }
+  else if(catK==='prata'){ lvlLR=`<span>Rumo ao <b>Ouro 🥇</b></span><span><b>+${scFmt(9-n10)}</b> pts</span>`; lvlPct=Math.max(5,Math.min(100,(n10-5)/4*100)); }
+  else { lvlLR=`<span>Rumo à <b>Prata 🥈</b></span><span><b>+${scFmt(Math.max(0,5-n10))}</b> pts</span>`; lvlPct=Math.max(5,Math.min(100,n10/5*100)); }
   const track=`<div class="sg-track"><span class="${catK==='bronze'?'on':''}">Bronze</span><span class="${catK==='prata'?'on':''}">Prata</span><span class="${catK==='ouro'?'on':''}">Ouro</span></div>`;
   let rise=0; for(let i=com.length-1;i>0;i--){ if(com[i].score>=com[i-1].score-0.05) rise++; else break; }
   let streak;
@@ -3799,12 +3812,12 @@ function renderScorecard(nome){
   const scBrand=`<div class="sc-brand"><span class="mk"><img src="${LOGO_MARONI}" alt="Pulso 360"></span><div class="bt"><b>PULSO 360</b><small>Grupo Maroni</small></div><span class="sc-pulse" aria-hidden="true"></span><button class="sc-close" data-sc-act="close" title="Fechar">✕</button></div>`;
   const hero=`<section class="sg-hero">
     <div class="sg-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="12"/><circle cx="60" cy="60" r="52" fill="none" stroke="url(#rg)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${dash}"/><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff2a8"/><stop offset=".5" stop-color="#f5c800"/><stop offset="1" stop-color="#e68a00"/></linearGradient></defs></svg><div class="mid"><span class="nota">${scFmt(n10)}</span><span class="de10">DE 10</span></div></div>
-    <div class="sg-medal">${medalIc} ${cat.lab}</div>
+    <div class="sg-badges"><div class="sg-medal">${medalIc} ${cat.lab}</div>${mediaChip}</div>
     <div class="sg-who"><b>${scEsc(nome)}</b><span>${scEsc(op)} · ${tempoDeCasa(admissao)} de casa</span></div>
     <div class="sg-level"><div class="lr">${lvlLR}</div><div class="sg-bar"><i style="width:${lvlPct}%"></i></div>${track}</div>
     ${streak}
   </section>`;
-  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota (0–10) é a média ponderada dos indicadores. A contribuição de cada um = peso × o valor. Ouro 9–10 · Prata 7–8 · Bronze ≤6.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
+  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota (0–10) é a média ponderada dos indicadores. A contribuição de cada um = peso × o valor. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
   const tratSec=`<div class="sc-sec"><h4>🗣️ Tratativas</h4>${tratResumo||'<p class="sc-hint" style="margin:0 0 11px">Acompanhe se cada conversa melhorou a nota no mês seguinte. Registre no resumo semanal (ficha do motorista).</p>'}${trats.length?`<div class="sc-trat">${tratHtml}</div>`:'<div class="sc-empty-trat">Nenhuma tratativa registrada ainda.</div>'}</div>`;
   const body=`<div class="sc-body">
     <div style="font-family:var(--sg-disp);font-weight:600;font-size:18px;color:var(--sg-ink2);margin:2px 2px 13px">Olá, <b style="color:var(--sg-ink)">${scEsc(firstName(nome))}</b> 👋 ${mesRef?('seu desempenho em <b style="color:var(--sg-ink)">'+mesRef+'</b>'):'este é o seu desempenho'}</div>
