@@ -2149,8 +2149,11 @@ let RANKPROFILE_CACHE={key:'',rows:null,profiles:null};
 function _rankSig(){ return (typeof DATA_REV!=='undefined'?DATA_REV:0)+'|M'+(typeof MULTAS_REV!=='undefined'?MULTAS_REV:0)+'|'+(MEDIA_OFF?1:0)+'|'+(($('#fOp')&&$('#fOp').value)||''); }
 // Pontua os perfis (percentis + pesos). Lógica VERBATIM do cálculo original — só foi fatorada p/ ser
 // reutilizada pelo caminho síncrono e pelo pré-aquecimento fatiado do boot (números idênticos).
+// Escala ABSOLUTA de alertas/multas (SEM percentil): a nota reflete o desempenho do PRÓPRIO motorista
+// (taxa 0 = nota 100; taxa >= teto = nota 0) e NÃO muda com filtro nem com quem mais está na lista.
+// Tetos calibrados na frota (alertRate p90≈123/p95≈166; multas: 91% zero). Ajustáveis aqui.
+const ALERT_CAP=150, MULTA_CAP=2;
 function _rankScoreProfiles(profiles){
-  const elig=Object.values(profiles).filter(p=>p.movDays>0&&p.hCond>0), alertRates=elig.map(p=>p.alertRate).filter(Number.isFinite), multaRates=elig.map(p=>p.multaRate).filter(Number.isFinite);
   const hasAlerts=!!(ALERTS||BOL||AL_TL), hasMultas=!!MULTAS_N, hasMedia=!MEDIA_OFF;
   for(const p of Object.values(profiles)){
     // IMPORTANTE p/ acertividade: componente SEM DADO (val==null) é EXCLUÍDO da nota (não vira 0).
@@ -2162,8 +2165,8 @@ function _rankScoreProfiles(profiles){
     add('identMot','Identificação motorista',10,p.identMot,true);
     add('identCam','Cobertura câmera',5,p.identCam,true);
     add('jornada','Aderência de jornada e ponto',20,p.ajPonto,!!(BASES&&BASES.ponto));
-    add('alertas','Alertas/severidade',15,rankLowerPercentile(alertRates,p.alertRate),hasAlerts);
-    add('multas','Multas conduta',10,rankLowerPercentile(multaRates,p.multaRate),hasMultas);
+    add('alertas','Alertas/severidade',15,rankClamp(100*(1-Math.min(1,(p.alertRate||0)/ALERT_CAP))),hasAlerts);
+    add('multas','Multas conduta',10,rankClamp(100*(1-Math.min(1,(p.multaRate||0)/MULTA_CAP))),hasMultas);
     add('interj','Interjornada',10,p.interjScore,!!(BASES&&BASES.ponto));
     add('extra','Hora extra',15,p.extraScore,!!(BASES&&BASES.ponto));
     add('media','Média × meta',15,p.mediaScore,hasMedia);
