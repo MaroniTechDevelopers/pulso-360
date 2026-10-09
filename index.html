@@ -202,6 +202,12 @@
   .wtl .vac-ribbon span{position:static;display:block;width:auto;padding:0;background:none;box-shadow:none;font-size:10px;font-weight:850;letter-spacing:.12em;color:#fff;writing-mode:vertical-rl;transform:rotate(180deg);text-align:center}
   .lane .seg{z-index:2}
   .seg{position:absolute;top:2px;bottom:2px;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;font-size:10px;font-weight:600;color:#fff;padding:0 5px;min-width:2px}
+  /* Marcador de TROCA DE PLACA (linha Direção) — mini placa Mercosul no início do novo trecho */
+  .lane .plate-mark{position:absolute;top:50%;transform:translate(-50%,-50%);z-index:6;display:inline-flex;align-items:center;gap:3px;line-height:1;white-space:nowrap;cursor:help}
+  .lane .plate-mark .pm-swap{color:#0d2a66;font-size:11px;font-weight:700}
+  .lane .plate-mark .pm-plate{display:inline-flex;align-items:stretch;border:1px solid #0d1f47;border-radius:3px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .lane .plate-mark .pm-br{background:#123a8e;color:#fff;font-size:8px;font-weight:800;letter-spacing:.04em;display:flex;align-items:center;padding:0 3px}
+  .lane .plate-mark .pm-no{color:#0b0b0b;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:.05em;padding:1px 4px;display:flex;align-items:center}
   .seg.ponto{background:color-mix(in srgb,var(--track-ponto) 82%,#000 4%);color:#3a2e00}
   .seg.mov{background:var(--track-mov)}
   .seg.mov.unid{background:repeating-linear-gradient(45deg,var(--track-id-bad),var(--track-id-bad) 5px,color-mix(in srgb,var(--track-id-bad) 55%,#000) 5px,color-mix(in srgb,var(--track-id-bad) 55%,#000) 10px);color:#fff}
@@ -2687,7 +2693,16 @@ function renderZoom(id){
   const laneM=el.querySelector('.lane[data-k="mov"]');
   // Limpeza visual: conduções de até 1 minuto continuam nos dados/cálculos,
   // mas não são desenhadas na timeline para evitar microblocos sem valor analítico.
-  if(laneM) laneM.innerHTML=vacationBg+gl+(st.mov||[]).filter(s=>(s.b-s.a)>1).map(s=>{ const hr=hm(s.a%1440)+'–'+hm(s.b%1440); const lab=s.lab||((s.placa?s.placa+' · ':'')+hr); const ttl=lab+' · '+hm(s.b-s.a)+(s.unid?' · SEM identificação':' de condução')+(s.km?' · '+Math.round(s.km)+'km':''); const cls=s.color?'mov driver-mov':'mov'; const sty=s.color?'--drv-color:'+s.color+';':''; return seg(cls,s.a,s.b,lab,s.unid?'unid':(s.fora?'fora':''),ttl,sty); }).join('');
+  if(laneM){
+    const movSegs=(st.mov||[]).filter(s=>(s.b-s.a)>1);
+    const segsHtml=movSegs.map(s=>{ const hr=hm(s.a%1440)+'–'+hm(s.b%1440); const lab=s.lab||((s.placa?s.placa+' · ':'')+hr); const ttl=lab+' · '+hm(s.b-s.a)+(s.unid?' · SEM identificação':' de condução')+(s.km?' · '+Math.round(s.km)+'km':''); const cls=s.color?'mov driver-mov':'mov'; const sty=s.color?'--drv-color:'+s.color+';':''; return seg(cls,s.a,s.b,lab,s.unid?'unid':(s.fora?'fora':''),ttl,sty); }).join('');
+    // Marcador de TROCA DE PLACA: entre trechos de condução consecutivos (em ordem de tempo) com placa
+    // diferente, um selo (mini placa Mercosul) no início do novo trecho.
+    const withPlaca=movSegs.filter(s=>s.placa).slice().sort((x,y)=>x.a-y.a);
+    let prevPl='', marks='';
+    withPlaca.forEach(s=>{ const pl=String(s.placa); if(prevPl && norm(prevPl)!==norm(pl)){ const p=pos(s.a); if(p>=-1&&p<=101){ const ttl='Trocou de placa às '+hm(s.a%1440)+' · de '+prevPl+' → para '+pl; marks+=`<span class="plate-mark" style="left:${p}%" title="${ttl}"><span class="pm-swap">⇄</span><span class="pm-plate"><span class="pm-br">BR</span><span class="pm-no">${pl}</span></span></span>`; } } prevPl=pl; });
+    laneM.innerHTML=vacationBg+gl+segsHtml+marks;
+  }
   const laneAl=el.querySelector('.lane[data-k="alertas"]');
   if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const cls=al.niv==='A'?'alto':al.niv==='M'?'medio':'baixo'; return `<span class="amark ${cls}" style="left:${p}%" title="${hm(al.t%1440)} · ${tipoLabel(al.tipo)} · ${nivName(al.niv)}"><i>${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
   const laneMulta=el.querySelector('.lane[data-k="multas"]');
