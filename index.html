@@ -2141,7 +2141,9 @@ function rankProfile(nome,recs){
   // meta = da placa que o motorista MAIS rodou no período (≈ placa atual dele), não a primeira
   const _plC={}; (recs||[]).forEach(r=>{ if(r.placa)_plC[r.placa]=(_plC[r.placa]||0)+(r.horasMov||1); }); let _plMain='',_plBest=-1; for(const p in _plC){ if(_plC[p]>_plBest){_plBest=_plC[p];_plMain=p;} }
   const rr={placa:_plMain||((recs||[]).find(r=>r.placa)||{}).placa||''}, meta=metaVeic(rr.placa||'',(recs&&recs[0]&&recs[0].operacao)||'');
-  const mediaScore=(!MEDIA_OFF&&media!=null&&meta>0)?rankClamp(media/meta*100):null;
+  // Média via Trimble: km < 0,5 km/l é impossível p/ caminhão = DISTÂNCIA furada no Trimble → NÃO entra no quesito
+  // (vira "sem dado", não penaliza com 0). Veículos com sensor ok seguem normais.
+  const mediaScore=(!MEDIA_OFF&&media!=null&&media>=0.5&&meta>0)?rankClamp(media/meta*100):null;
   const pend=(recs||[]).filter(r=>r.sev==='pendente').length, idDiv=(recs||[]).filter(r=>r.idDivergente||r.condutorDivergente).length;
   return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,ajPonto,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
 }
@@ -2153,6 +2155,9 @@ function _rankSig(){ return (typeof DATA_REV!=='undefined'?DATA_REV:0)+'|M'+(typ
 // (taxa 0 = nota 100; taxa >= teto = nota 0) e NÃO muda com filtro nem com quem mais está na lista.
 // Tetos calibrados na frota (alertRate p90≈123/p95≈166; multas: 91% zero). Ajustáveis aqui.
 const ALERT_CAP=150, MULTA_CAP=2;
+// TETO DE SEGURANÇA: alerta em EXCESSO limita a nota máxima, independente dos outros quesitos
+// (alerta = risco; quem dirige com muito alerta não chega a Ouro). Ajustável.
+const ALERT_TETO_TAXA=100, ALERT_TETO_NOTA=60;   // taxa de alerta > 100 → nota no máximo 6,0
 function _rankScoreProfiles(profiles){
   const hasAlerts=!!(ALERTS||BOL||AL_TL), hasMultas=!!MULTAS_N, hasMedia=!MEDIA_OFF;
   for(const p of Object.values(profiles)){
@@ -2173,6 +2178,8 @@ function _rankScoreProfiles(profiles){
     const W=comps.reduce((s,c)=>s+c.w,0), P=comps.reduce((s,c)=>s+c.pts,0); let score=W?P/W*100:0;
     // Divergência explícita de condutor é uma falha independente e não pode sumir dentro de uma média.
     if(p.idDiv>0)score-=Math.min(12,p.idDiv*2);
+    // Teto de segurança: alerta em excesso trava a nota máxima (prioriza segurança sobre os demais quesitos).
+    if(hasAlerts && (p.alertRate||0) > ALERT_TETO_TAXA && score > ALERT_TETO_NOTA){ score=ALERT_TETO_NOTA; p.alertTeto=true; }
     p.score=rankClamp(score); p.scoreDisplay=Math.round(p.score); p.components=comps;
     p.scoreTitle=comps.map(c=>c.lab+': '+Math.round(c.v)+'%').join(' · ')+(p.idDiv?' · divergências de condutor: '+p.idDiv:'');
   }
