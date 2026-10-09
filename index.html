@@ -2079,7 +2079,18 @@ function rankProfile(nome,recs){
   const pend=(recs||[]).filter(r=>r.sev==='pendente').length, idDiv=(recs||[]).filter(r=>r.idDivergente||r.condutorDivergente).length;
   return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,ajPonto,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
 }
+let RANKPROFILE_CACHE={key:'',rows:null,profiles:null};
 function applyResumoRankScores(data,rows){
+  // CACHE: montar os perfis de ranking é caro (~2,8s na frota toda). Como o mesmo `rows`
+  // (filtered()) é passado várias vezes por render (semanaAgg + bonificação + scorecard),
+  // reaproveitamos os perfis quando rows/estado não mudaram — as chamadas repetidas viram instantâneas.
+  const sig=(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|M'+(typeof MULTAS_REV!=='undefined'?MULTAS_REV:0)+'|'+(MEDIA_OFF?1:0)+'|'+(($('#fOp')&&$('#fOp').value)||'');
+  if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles){
+    const profiles=RANKPROFILE_CACHE.profiles;
+    RANK_SCORES={}; for(const k in profiles){ RANK_SCORES[k]=profiles[k].score; }
+    (data||[]).forEach(g=>g.list.forEach(m=>{const p=profiles[norm(m.nome||'')];m._rankProfile=p||null;m._rankScore=p?p.score:null;m._rankScoreTitle=p?p.scoreTitle:'';}));
+    return profiles;
+  }
   const by=Object.create(null); (rows||[]).forEach(r=>{const k=norm(r.motoristaEscala||'');if(k)(by[k]=by[k]||[]).push(r);});
   const profiles=Object.create(null); for(const k in by){const nm=(by[k][0]&&by[k][0].motoristaEscala)||k;profiles[k]=rankProfile(nm,by[k]);}
   const elig=Object.values(profiles).filter(p=>p.movDays>0&&p.hCond>0), alertRates=elig.map(p=>p.alertRate).filter(Number.isFinite), multaRates=elig.map(p=>p.multaRate).filter(Number.isFinite);
@@ -2105,6 +2116,7 @@ function applyResumoRankScores(data,rows){
     p.score=rankClamp(score); p.scoreDisplay=Math.round(p.score); p.components=comps;
     p.scoreTitle=comps.map(c=>c.lab+': '+Math.round(c.v)+'%').join(' · ')+(p.idDiv?' · divergências de condutor: '+p.idDiv:'');
   }
+  RANKPROFILE_CACHE={key:sig,rows:rows,profiles:profiles};   // guarda p/ as próximas chamadas com o mesmo recorte
   RANK_SCORES={}; for(const k in profiles){ RANK_SCORES[k]=profiles[k].score; }   // mapa global p/ a ficha usar a mesma cor da nota
   (data||[]).forEach(g=>g.list.forEach(m=>{const p=profiles[norm(m.nome||'')];m._rankProfile=p||null;m._rankScore=p?p.score:null;m._rankScoreTitle=p?p.scoreTitle:'';}));
   return profiles;
@@ -3501,9 +3513,7 @@ function renderBonificacao(rows){
   } else if(BONIF_VIEW==='tabela'){
     viewHtml=`<div class="card op-block"><div class="tblwrap"><table class="bonif-table" style="min-width:740px"><thead><tr><th>#</th><th>Motorista</th><th>Operação</th><th>Nota</th><th>Medalha</th><th>% prêmio</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody>${
       dataView.map((d,i)=>{ const enc=encodeURIComponent(d.nome);
-        const totWd=(d.m._rankProfile&&d.m._rankProfile.components||[]).reduce((s,c)=>s+c.w,0)||1;
-        const cbars=(d.m._rankProfile&&d.m._rankProfile.components||[]).slice().sort((a,b)=>b.w-a.w).map(c=>`<div class="bexp-c"><span class="bexp-lab">${c.lab}</span><div class="bexp-bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div><b>${Math.round(c.v)}</b><small>peso ${Math.round(c.w/totWd*100)}%</small></div>`).join('');
-        return `<tr class="brow"><td class="tnum">${i+1} <span class="exp-caret">▾</span></td><td><b>${d.nome}</b></td><td>${d.op}</td><td class="tnum"><b style="color:${notaCor(d.m._rankScore)}">${d.n10.toFixed(1).replace('.',',')}</b></td><td><span class="medtag med-${d.t.k}">${d.t.ic} ${d.t.lab}</span></td><td class="tnum">${d.pct}%</td><td class="tnum"><b>${brMoney(d.valor)}</b></td><td><button class="pago-chip ${d.pagoOk?'ok':''}" data-pago="${enc}">${d.pagoOk?'✓ Pago':'Pendente'}</button></td><td><button class="lnk" data-sc="${enc}">scorecard ↗</button></td></tr><tr class="bexp" hidden><td colspan="9"><div class="bexp-inner">${cbars}</div></td></tr>`; }).join('')
+        return `<tr class="brow" data-mot="${enc}"><td class="tnum">${i+1} <span class="exp-caret">▾</span></td><td><b>${d.nome}</b></td><td>${d.op}</td><td class="tnum"><b style="color:${notaCor(d.m._rankScore)}">${d.n10.toFixed(1).replace('.',',')}</b></td><td><span class="medtag med-${d.t.k}">${d.t.ic} ${d.t.lab}</span></td><td class="tnum">${d.pct}%</td><td class="tnum"><b>${brMoney(d.valor)}</b></td><td><button class="pago-chip ${d.pagoOk?'ok':''}" data-pago="${enc}">${d.pagoOk?'✓ Pago':'Pendente'}</button></td><td><button class="lnk" data-sc="${enc}">scorecard ↗</button></td></tr>`; }).join('')
     }</tbody><tfoot><tr><td colspan="6" style="text-align:right">Total ${BONIF_FILTER==='todos'?'a pagar':'('+BONIF_FILTER+')'} · ${dataView.length} motorista(s)</td><td class="tnum"><b>${brMoney(totalView)}</b></td><td colspan="2"></td></tr></tfoot></table></div></div>`;
   } else {
     viewHtml='<div class="bonif-grid">'+dataView.map(d=>{ const m=d.m, enc=encodeURIComponent(d.nome);
@@ -5876,7 +5886,15 @@ $('#bonifBox').addEventListener('click',e=>{
   const fil=e.target.closest('[data-fil]'); if(fil){ BONIF_FILTER=fil.dataset.fil; renderBonificacao(filtered()); return; }
   const pg=e.target.closest('[data-pago]'); if(pg){ const nn=norm(decodeURIComponent(pg.dataset.pago)); bonifSetPago(nn, !(bonifPagoMap()[nn])); renderBonificacao(filtered()); return; }
   if(e.target.closest('[data-bonif-export]')){ exportBonifFolha(); return; }
-  const row=e.target.closest('tr.brow'); if(row && !e.target.closest('button') && !e.target.closest('a')){ const nx=row.nextElementSibling; if(nx&&nx.classList.contains('bexp')){ nx.hidden=!nx.hidden; row.classList.toggle('open', !nx.hidden); } return; }
+  const row=e.target.closest('tr.brow'); if(row && !e.target.closest('button') && !e.target.closest('a')){
+    const nx=row.nextElementSibling;
+    if(nx && nx.classList.contains('bexp')){ nx.remove(); row.classList.remove('open'); return; }   // fecha
+    const p=(applyResumoRankScores([], filtered())||{})[norm(decodeURIComponent(row.dataset.mot||''))];
+    if(p && p.components){ const totWd=p.components.reduce((s,c)=>s+c.w,0)||1;
+      const cbars=p.components.slice().sort((a,b)=>b.w-a.w).map(c=>`<div class="bexp-c"><span class="bexp-lab">${c.lab}</span><div class="bexp-bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div><b>${Math.round(c.v)}</b><small>peso ${Math.round(c.w/totWd*100)}%</small></div>`).join('');
+      const tr=document.createElement('tr'); tr.className='bexp'; tr.innerHTML=`<td colspan="9"><div class="bexp-inner">${cbars}</div></td>`; row.after(tr); row.classList.add('open'); }
+    return;
+  }
 });
 $('#bonifBox').addEventListener('change',e=>{
   if(!e.target.closest('.bonif-cfg')) return;
