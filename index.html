@@ -1739,7 +1739,10 @@ function build(forceAnalyze=false){
   // pula a etapa mais cara (analyze + interjornada) e apenas reconstrói os índices leves.
   const ready = !!(REAL && RAW && RAW._readyRecords===1 && !forceAnalyze && Array.isArray(base) && (!base.length || base[0]._key));
   if(ready){
-    RECORDS = dedupeCalcRecords(base);
+    // Snapshot/cache/publicação já trazem RECORDS deduplicado; pular o dedupe (calcRecordSignature ×66k)
+    // economiza ~0,3–0,9s na reabertura. Só vale quando _dedupeDone veio do snapshot (dados já processados).
+    RECORDS = (RAW&&RAW._dedupeDone)? base.slice() : dedupeCalcRecords(base);
+    if(RAW&&RAW._dedupeDone)CALC_DUPLICATES=0;
   }else{
     RECORDS = dedupeCalcRecords(base.map(analyze));
     // operação = do VEÍCULO (UO/placa). Só dias SEM veículo (só ponto) herdam a operação predominante
@@ -2080,19 +2083,10 @@ function rankProfile(nome,recs){
   return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,ajPonto,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
 }
 let RANKPROFILE_CACHE={key:'',rows:null,profiles:null};
-function applyResumoRankScores(data,rows){
-  // CACHE: montar os perfis de ranking é caro (~2,8s na frota toda). Como o mesmo `rows`
-  // (filtered()) é passado várias vezes por render (semanaAgg + bonificação + scorecard),
-  // reaproveitamos os perfis quando rows/estado não mudaram — as chamadas repetidas viram instantâneas.
-  const sig=(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|M'+(typeof MULTAS_REV!=='undefined'?MULTAS_REV:0)+'|'+(MEDIA_OFF?1:0)+'|'+(($('#fOp')&&$('#fOp').value)||'');
-  if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles){
-    const profiles=RANKPROFILE_CACHE.profiles;
-    RANK_SCORES={}; for(const k in profiles){ RANK_SCORES[k]=profiles[k].score; }
-    (data||[]).forEach(g=>g.list.forEach(m=>{const p=profiles[norm(m.nome||'')];m._rankProfile=p||null;m._rankScore=p?p.score:null;m._rankScoreTitle=p?p.scoreTitle:'';}));
-    return profiles;
-  }
-  const by=Object.create(null); (rows||[]).forEach(r=>{const k=norm(r.motoristaEscala||'');if(k)(by[k]=by[k]||[]).push(r);});
-  const profiles=Object.create(null); for(const k in by){const nm=(by[k][0]&&by[k][0].motoristaEscala)||k;profiles[k]=rankProfile(nm,by[k]);}
+function _rankSig(){ return (typeof DATA_REV!=='undefined'?DATA_REV:0)+'|M'+(typeof MULTAS_REV!=='undefined'?MULTAS_REV:0)+'|'+(MEDIA_OFF?1:0)+'|'+(($('#fOp')&&$('#fOp').value)||''); }
+// Pontua os perfis (percentis + pesos). Lógica VERBATIM do cálculo original — só foi fatorada p/ ser
+// reutilizada pelo caminho síncrono e pelo pré-aquecimento fatiado do boot (números idênticos).
+function _rankScoreProfiles(profiles){
   const elig=Object.values(profiles).filter(p=>p.movDays>0&&p.hCond>0), alertRates=elig.map(p=>p.alertRate).filter(Number.isFinite), multaRates=elig.map(p=>p.multaRate).filter(Number.isFinite);
   const hasAlerts=!!(ALERTS||BOL||AL_TL), hasMultas=!!MULTAS_N, hasMedia=!MEDIA_OFF;
   for(const p of Object.values(profiles)){
@@ -2116,10 +2110,38 @@ function applyResumoRankScores(data,rows){
     p.score=rankClamp(score); p.scoreDisplay=Math.round(p.score); p.components=comps;
     p.scoreTitle=comps.map(c=>c.lab+': '+Math.round(c.v)+'%').join(' · ')+(p.idDiv?' · divergências de condutor: '+p.idDiv:'');
   }
-  RANKPROFILE_CACHE={key:sig,rows:rows,profiles:profiles};   // guarda p/ as próximas chamadas com o mesmo recorte
-  RANK_SCORES={}; for(const k in profiles){ RANK_SCORES[k]=profiles[k].score; }   // mapa global p/ a ficha usar a mesma cor da nota
-  (data||[]).forEach(g=>g.list.forEach(m=>{const p=profiles[norm(m.nome||'')];m._rankProfile=p||null;m._rankScore=p?p.score:null;m._rankScoreTitle=p?p.scoreTitle:'';}));
+}
+function _rankCacheSet(sig,rows,profiles){ RANKPROFILE_CACHE={key:sig,rows:rows,profiles:profiles}; RANK_SCORES={}; for(const k in profiles){ RANK_SCORES[k]=profiles[k].score; } }
+function _rankAnnotate(data,profiles){ (data||[]).forEach(g=>g.list.forEach(m=>{const p=profiles[norm(m.nome||'')];m._rankProfile=p||null;m._rankScore=p?p.score:null;m._rankScoreTitle=p?p.scoreTitle:'';})); }
+function applyResumoRankScores(data,rows){
+  // CACHE: montar os perfis de ranking é caro (~2,8s na frota toda). Como o mesmo `rows`
+  // (filtered()) é passado várias vezes por render (semanaAgg + bonificação + scorecard),
+  // reaproveitamos os perfis quando rows/estado não mudaram — as chamadas repetidas viram instantâneas.
+  const sig=_rankSig();
+  if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles){
+    const profiles=RANKPROFILE_CACHE.profiles;
+    RANK_SCORES={}; for(const k in profiles){ RANK_SCORES[k]=profiles[k].score; }
+    _rankAnnotate(data,profiles);
+    return profiles;
+  }
+  const by=Object.create(null); (rows||[]).forEach(r=>{const k=norm(r.motoristaEscala||'');if(k)(by[k]=by[k]||[]).push(r);});
+  const profiles=Object.create(null); for(const k in by){const nm=(by[k][0]&&by[k][0].motoristaEscala)||k;profiles[k]=rankProfile(nm,by[k]);}
+  _rankScoreProfiles(profiles);
+  _rankCacheSet(sig,rows,profiles);   // guarda p/ as próximas chamadas com o mesmo recorte + mapa RANK_SCORES p/ a ficha
+  _rankAnnotate(data,profiles);
   return profiles;
+}
+// BOOT: pré-aquece o cache de ranking em lotes, cedendo à UI a cada N motoristas, para o maior bloco
+// (recálculo de ~2663 perfis) não travar a tela. Mesmo cálculo de applyResumoRankScores (rankProfile +
+// _rankScoreProfiles), só fatiado — resultado idêntico. renderAll depois só reaproveita o cache.
+async function _prewarmRankAsync(rows){
+  const sig=_rankSig();
+  if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles) return;   // já pronto
+  const by=Object.create(null); (rows||[]).forEach(r=>{const k=norm(r.motoristaEscala||'');if(k)(by[k]=by[k]||[]).push(r);});
+  const profiles=Object.create(null), keys=Object.keys(by);
+  for(let i=0;i<keys.length;i++){ const k=keys[i], nm=(by[k][0]&&by[k][0].motoristaEscala)||k; profiles[k]=rankProfile(nm,by[k]); if((i&63)===63) await uiYield(); }
+  _rankScoreProfiles(profiles);
+  _rankCacheSet(sig,rows,profiles);
 }
 function resumoRankCmp(a,b){
   const ea=resumoRankElegivel(a), eb=resumoRankElegivel(b); if(ea!==eb)return ea?-1:1;
@@ -5725,9 +5747,23 @@ async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const da
    ============================================================ */
 async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz:false,b:bytes}; const cs=new CompressionStream('gzip'); const w=cs.writable.getWriter(); w.write(bytes); w.close(); return {gz:true,b:new Uint8Array(await new Response(cs.readable).arrayBuffer())}; }
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
-function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
+function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0,_dedupeDone:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
-function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs();build();fillFilters();renderAll();updateDropStatus(); return true; }
+async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs(); await _finalizeBootUI(); return true; }
+// Finalização do boot NÃO-BLOQUEANTE: cede à UI (uiYield) entre as fases pesadas e PRÉ-AQUECE o
+// ranking em lotes (await uiYield a cada N motoristas) para o navegador pintar o overlay/animar o
+// spinner e nunca travar vários segundos. Números/dados/visual idênticos ao antigo
+// build();fillFilters();renderAll();updateDropStatus() — só time-slicing (mesmo cálculo, fatiado).
+async function _finalizeBootUI(){
+  const bt=$('#bootLoadTxt');
+  if(bt)bt.textContent='Preparando base…';         await uiYield(); build();
+                                                   await uiYield(); fillFilters();
+  // O recálculo do ranking (o maior bloco: ~2663 perfis) é fatiado ANTES do render → renderAll
+  // apenas reaproveita o cache (sem bloquear). filtered() sem filtro retorna RECORDS.
+  if(bt)bt.textContent='Calculando indicadores…';  await _prewarmRankAsync(filtered());
+  if(bt)bt.textContent='Montando painel…';         await uiYield(); renderAll();
+  updateDropStatus();
+}
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
 async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();return true;}catch(e){return false;}}
 async function idbGet(k){try{const db=await idbOpen();const v=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly'),rq=tx.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});db.close();return v;}catch(e){return null;}}
@@ -5747,10 +5783,10 @@ async function cacheSalvar(){
 async function cacheRestaurar(){
   try{
     const f=await idbGet('estadoFast');
-    if(f&&f.v===1&&f.s&&restoreState(f.s))return f.ts||1;
+    if(f&&(f.v===1||f.v===2)&&f.s&&await restoreState(f.s))return f.ts||1;   // lê o snapshot (compatível com caches v:1 e v:2)
   }catch(e){}
   try{
-    const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);const S=JSON.parse(new TextDecoder().decode(bytes));if(!restoreState(S))return 0;return c.ts||1;
+    const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);const S=JSON.parse(new TextDecoder().decode(bytes));if(!(await restoreState(S)))return 0;return c.ts||1;
   }catch(e){return 0;}
 }
 function _baixarBlob(blob,nome){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
@@ -5818,7 +5854,7 @@ async function carregarDadosPublicados(){
     if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3)return false;
     const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);
     if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}
-    restoreState(S);DATA_UPDATED_AT=pub||DATA_UPDATED_AT;atualizaDataMode();
+    await restoreState(S);DATA_UPDATED_AT=pub||DATA_UPDATED_AT;atualizaDataMode();
     // Guarda a fotografia publicada no IndexedDB em segundo plano para a próxima abertura.
     if(typeof agendarCache==='function')agendarCache();
     return true;
@@ -6050,7 +6086,7 @@ async function bootPulso360(){
     // Sem publicação/cache: só então cai para uma base local antiga ou demonstração.
     if(!pub&&!temCache){
       if(RAW&&RAW.records&&RAW.schema===3){ REAL=true; } else { RAW=null; REAL=false; }
-      build(); fillFilters(); renderAll(); updateDropStatus();
+      await _finalizeBootUI();
     }else if(!pub&&temCache){
       if(!DATA_UPDATED_AT)DATA_UPDATED_AT=+(RAW&&RAW._savedAt||temCache||0); atualizaDataMode(); updateDropStatus();
     }
