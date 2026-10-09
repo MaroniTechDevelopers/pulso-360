@@ -827,7 +827,7 @@
   <!-- ===== BONIFICAÇÃO ===== -->
   <section class="view" id="view-bonificacao">
     <div class="grid kpis" id="bonifKpis"></div>
-    <div class="sec-title"><h2>Bonificação</h2><span>nota 1–10 por motorista · categoria Ouro/Prata/Bronze · % do prêmio</span></div>
+    <div class="sec-title"><h2>Bonificação</h2><span>nota 1–10 por motorista · categoria Ouro/Prata/Bronze · prêmio proporcional à nota</span></div>
     <div class="card" style="padding:11px 16px;margin-bottom:12px">
       <div class="legend">
         <span class="lg"><b>Categorias:</b></span>
@@ -1600,7 +1600,7 @@ function operacaoDaPlaca(placa){ if(!placa) return '';
 // operação da VIAGEM (Pedidos), pela placa + dia — mais precisa que a do veículo (a placa muda de operação por viagem)
 function opDaViagem(placas, data){ if(typeof PED_OP==='undefined'||!PED_OP) return ''; for(const p of (placas||[])){ if(!p) continue; const c=PED_OP[placaKey(p)+'|'+data]; if(c){ const f=opFamily(c); if(f && f!=='(não-operacional)') return f; } } return ''; }
 
-function loadCfg(){ const d={tol:20,sem:80,fora:15,movMin:5,farolAmareloMax:60,meta:2.40,precoLitro:6.00,jornadaMin:440,interjornadaMin:660}; try{ return Object.assign(d, JSON.parse(localStorage.getItem(LS.cfg)||'{}')); }catch(e){ return d; } }
+function loadCfg(){ const d={tol:20,sem:80,fora:15,movMin:5,farolAmareloMax:60,meta:2.40,precoLitro:6.00,jornadaMin:440,interjornadaMin:660,bonifBase:300}; try{ return Object.assign(d, JSON.parse(localStorage.getItem(LS.cfg)||'{}')); }catch(e){ return d; } }
 function saveCfg(){ try{ localStorage.setItem(LS.cfg, JSON.stringify(CFG)); }catch(e){} }
 function loadData(){ try{ const d=JSON.parse(localStorage.getItem(LS.data)||'null'); return (d&&d.records&&d.schema===3)?d:null; }catch(e){ return null; } }
 function saveData(){ try{ if(RAW){ RAW._savedAt=Date.now(); DATA_UPDATED_AT=RAW._savedAt; } /* bases grandes ficam no IndexedDB; evita JSON.stringify síncrono no localStorage */ if(REAL)localStorage.removeItem(LS.data); else localStorage.setItem(LS.data, JSON.stringify(RAW)); }catch(e){} if(typeof agendarCache==='function') agendarCache(); }
@@ -3554,8 +3554,10 @@ function atualizaDataMode(){
    ============================================================ */
 // ===== Bonificação: faixas (bronze até 5), regras de pagamento e controle (RH) =====
 let BONIF_VIEW='tabela', BONIF_FILTER='todos', BONIF_LAST_TOTAL=null;
-function bonifCfg(){ try{ return Object.assign({base:300,ouro:100,prata:50,bronze:0}, JSON.parse(localStorage.getItem('bonif_cfg')||'{}')); }catch(e){ return {base:300,ouro:100,prata:50,bronze:0}; } }
-function bonifSaveCfg(c){ try{ localStorage.setItem('bonif_cfg',JSON.stringify(c)); }catch(e){} }
+// Valor base do prêmio = compartilhado por TODOS via CFG (vai no snapshot publicado/cacheado).
+// Prêmio de cada motorista = base × nota/10 (ex.: nota 9,8 → 98% do valor base).
+function bonifCfg(){ let b=null; if(typeof CFG!=='undefined'&&CFG&&CFG.bonifBase!=null)b=+CFG.bonifBase; if(b==null||!isFinite(b)){ try{ const o=JSON.parse(localStorage.getItem('bonif_cfg')||'{}'); if(o&&o.base!=null)b=+o.base; }catch(e){} } return {base:(b!=null&&isFinite(b))?b:300}; }
+function bonifSaveCfg(base){ const b=+base; if(!isFinite(b)||b<0)return; if(typeof CFG!=='undefined'&&CFG)CFG.bonifBase=b; try{ localStorage.setItem('bonif_cfg',JSON.stringify({base:b})); }catch(e){} if(typeof agendarCache==='function')agendarCache(); }
 function bonifPagoMap(){ try{ return JSON.parse(localStorage.getItem('bonif_pago')||'{}'); }catch(e){ return {}; } }
 function bonifSetPago(nn,v){ const m=bonifPagoMap(); if(v)m[nn]=1; else delete m[nn]; try{ localStorage.setItem('bonif_pago',JSON.stringify(m)); }catch(e){} }
 // FAIXAS: Bronze até 5 · Prata >5 a <9 · Ouro >=9
@@ -3569,34 +3571,31 @@ function renderBonificacao(rows){
   mots=resumoRankUnique(mots);   // 1 por MOTORISTA (a nota é por pessoa)
   mots.sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
   const cfg=bonifCfg(), pago=bonifPagoMap();
-  const data=mots.map(m=>{ const n10=Math.round(m._rankScore||0)/10, t=bonifTier(n10), pct=+cfg[t.k]||0, valor=(+cfg.base||0)*pct/100;
-    return {m,nome:m.nome,op:m.op||'—',n10,t,pct,valor,pagoOk:!!pago[norm(m.nome)]}; });
+  const data=mots.map(m=>{ const n10=Math.round(m._rankScore||0)/10, t=bonifTier(n10), valor=(+cfg.base||0)*n10/10;
+    return {m,nome:m.nome,op:m.op||'—',n10,t,valor,pagoOk:!!pago[norm(m.nome)]}; });
   const cnt={ouro:0,prata:0,bronze:0}; data.forEach(d=>cnt[d.t.k]++);
   const totalPagar=data.reduce((s,d)=>s+d.valor,0), totalPago=data.filter(d=>d.pagoOk).reduce((s,d)=>s+d.valor,0);
   const deltaTotal=(BONIF_LAST_TOTAL!=null && Math.abs(BONIF_LAST_TOTAL-totalPagar)>0.005)?(totalPagar-BONIF_LAST_TOTAL):0; BONIF_LAST_TOTAL=totalPagar;
   if(kb) kb.innerHTML=[
-    {lab:'🥇 Ouro (9–10)',val:cnt.ouro,ac:'#d4af37',sub:cfg.ouro+'% do prêmio'},
-    {lab:'🥈 Prata (5–9)',val:cnt.prata,ac:'#9ca3af',sub:cfg.prata+'% do prêmio'},
-    {lab:'🥉 Bronze (≤5)',val:cnt.bronze,ac:'#b87333',sub:cfg.bronze+'% do prêmio'},
+    {lab:'🥇 Ouro (9–10)',val:cnt.ouro,ac:'#d4af37',sub:'nota 9 a 10'},
+    {lab:'🥈 Prata (5–9)',val:cnt.prata,ac:'#9ca3af',sub:'nota 5 a 9'},
+    {lab:'🥉 Bronze (≤5)',val:cnt.bronze,ac:'#b87333',sub:'nota até 5'},
     {lab:'Elegíveis',val:data.length,ac:'var(--s2)',sub:'com movimentação'},
     {lab:'Total a pagar',val:brMoney(totalPagar),ac:'var(--good)',sub:(totalPago>0?brMoney(totalPago)+' já pago':'nenhum marcado como pago')}
   ].map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
   if(!data.length){ box.innerHTML='<div class="empty">Nenhum motorista elegível no período/filtros atuais.</div>'; return; }
   const cfgBar=`<div class="card bonif-cfg">
-    <b>💰 Regras de pagamento</b>
-    <label>Prêmio base <span class="pre">R$</span><input type="number" id="bfBase" value="${cfg.base}" min="0" step="10"></label>
-    <label>🥇 Ouro <input type="number" id="bfOuro" value="${cfg.ouro}" min="0" max="100" step="5"><span class="pos">%</span></label>
-    <label>🥈 Prata <input type="number" id="bfPrata" value="${cfg.prata}" min="0" max="100" step="5"><span class="pos">%</span></label>
-    <label>🥉 Bronze <input type="number" id="bfBronze" value="${cfg.bronze}" min="0" max="100" step="5"><span class="pos">%</span></label>
-    <span class="cfg-note">valores de exemplo — ajuste e a tabela recalcula</span>
+    <b>💰 Valor do prêmio</b>
+    <label>Prêmio integral (nota 10) <span class="pre">R$</span><input type="number" id="bfBase" value="${cfg.base}" min="0" step="10"></label>
+    <span class="cfg-note">o prêmio de cada motorista = valor × nota ÷ 10 (nota 10 recebe o valor integral) · <b>publique os dados</b> para salvar para todos</span>
   </div>`;
   // composição do prêmio: rateio do custo total por faixa + fluxo do cálculo
   const faixas=[{k:'ouro',ic:'🥇',lab:'Ouro',cor:'#d4af37'},{k:'prata',ic:'🥈',lab:'Prata',cor:'#9ca3af'},{k:'bronze',ic:'🥉',lab:'Bronze',cor:'#b87333'}]
-    .map(t=>{ const unit=(+cfg.base||0)*(+cfg[t.k]||0)/100; return {...t,n:cnt[t.k],pct:+cfg[t.k]||0,unit,tot:cnt[t.k]*unit}; });
+    .map(t=>{ const tot=data.filter(d=>d.t.k===t.k).reduce((s,d)=>s+d.valor,0); return {...t,n:cnt[t.k],tot}; });
   const sh=t=> totalPagar>0?(t.tot/totalPagar*100):0;
   const compBar=`<div class="comp-bar">${faixas.map(t=>t.tot>0?`<span style="width:${sh(t).toFixed(1)}%;background:${t.cor}" title="${t.lab}: ${brMoney(t.tot)}"></span>`:'').join('')||'<span style="width:100%;background:var(--border)"></span>'}</div>`;
-  const compLeg=faixas.map(t=>`<div class="comp-line"><span class="cl-dot" style="background:${t.cor}"></span><b>${t.ic} ${t.lab}</b><span class="cl-calc">${t.n} × ${brMoney(t.unit)}</span><span class="cl-tot">${brMoney(t.tot)}</span><span class="cl-share">${Math.round(sh(t))}%</span></div>`).join('');
-  const compHtml=`<div class="card comp-card"><div class="comp-head"><b>📊 Composição do prêmio</b><span class="comp-flow">Como vira prêmio: indicadores ponderados → nota 0–10 → medalha → % → R$</span></div>${compBar}<div class="comp-legend">${compLeg}</div><div class="comp-total">Custo total do prêmio no período<b>${brMoney(totalPagar)}</b>${deltaTotal?`<span class="comp-delta ${deltaTotal>0?'up':'down'}">${deltaTotal>0?'+':'−'}${brMoney(Math.abs(deltaTotal))} vs. anterior</span>`:''}</div></div>`;
+  const compLeg=faixas.map(t=>`<div class="comp-line"><span class="cl-dot" style="background:${t.cor}"></span><b>${t.ic} ${t.lab}</b><span class="cl-calc">${t.n} motorista(s)</span><span class="cl-tot">${brMoney(t.tot)}</span></div>`).join('');
+  const compHtml=`<div class="card comp-card"><div class="comp-head"><b>📊 Composição do prêmio</b><span class="comp-flow">Como vira prêmio: indicadores → nota 0–10 → prêmio = valor base × nota ÷ 10</span></div>${compBar}<div class="comp-legend">${compLeg}</div><div class="comp-total">Custo total do prêmio no período<b>${brMoney(totalPagar)}</b>${deltaTotal?`<span class="comp-delta ${deltaTotal>0?'up':'down'}">${deltaTotal>0?'+':'−'}${brMoney(Math.abs(deltaTotal))} vs. anterior</span>`:''}</div></div>`;
   // custo por operação
   const byOp={}; data.forEach(d=>{ const o=d.op||'—'; (byOp[o]=byOp[o]||{op:o,n:0,tot:0}); byOp[o].n++; byOp[o].tot+=d.valor; });
   const opCost=Object.values(byOp).sort((a,b)=>b.tot-a.tot), opMax=opCost.reduce((m,o)=>Math.max(m,o.tot),0)||1;
@@ -3616,17 +3615,17 @@ function renderBonificacao(rows){
   if(!dataView.length){
     viewHtml='<div class="card"><div class="empty" style="padding:30px">Nenhum motorista nesse filtro.</div></div>';
   } else if(BONIF_VIEW==='tabela'){
-    viewHtml=`<div class="card op-block"><div class="tblwrap"><table class="bonif-table" style="min-width:740px"><thead><tr><th>#</th><th>Motorista</th><th>Operação</th><th>Nota</th><th>Medalha</th><th>% prêmio</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody>${
+    viewHtml=`<div class="card op-block"><div class="tblwrap"><table class="bonif-table" style="min-width:740px"><thead><tr><th>#</th><th>Motorista</th><th>Operação</th><th>Nota</th><th>Medalha</th><th>Valor</th><th>Status</th><th></th></tr></thead><tbody>${
       dataView.map((d,i)=>{ const enc=encodeURIComponent(d.nome);
-        return `<tr class="brow" data-mot="${enc}"><td class="tnum">${i+1} <span class="exp-caret">▾</span></td><td><b>${d.nome}</b></td><td>${d.op}</td><td class="tnum"><b style="color:${notaCor(d.m._rankScore)}">${d.n10.toFixed(1).replace('.',',')}</b></td><td><span class="medtag med-${d.t.k}">${d.t.ic} ${d.t.lab}</span></td><td class="tnum">${d.pct}%</td><td class="tnum"><b>${brMoney(d.valor)}</b></td><td><button class="pago-chip ${d.pagoOk?'ok':''}" data-pago="${enc}">${d.pagoOk?'✓ Pago':'Pendente'}</button></td><td><button class="lnk" data-sc="${enc}">scorecard ↗</button></td></tr>`; }).join('')
-    }</tbody><tfoot><tr><td colspan="6" style="text-align:right">Total ${BONIF_FILTER==='todos'?'a pagar':'('+BONIF_FILTER+')'} · ${dataView.length} motorista(s)</td><td class="tnum"><b>${brMoney(totalView)}</b></td><td colspan="2"></td></tr></tfoot></table></div></div>`;
+        return `<tr class="brow" data-mot="${enc}"><td class="tnum">${i+1} <span class="exp-caret">▾</span></td><td><b>${d.nome}</b></td><td>${d.op}</td><td class="tnum"><b style="color:${notaCor(d.m._rankScore)}">${d.n10.toFixed(1).replace('.',',')}</b></td><td><span class="medtag med-${d.t.k}">${d.t.ic} ${d.t.lab}</span></td><td class="tnum"><b>${brMoney(d.valor)}</b></td><td><button class="pago-chip ${d.pagoOk?'ok':''}" data-pago="${enc}">${d.pagoOk?'✓ Pago':'Pendente'}</button></td><td><button class="lnk" data-sc="${enc}">scorecard ↗</button></td></tr>`; }).join('')
+    }</tbody><tfoot><tr><td colspan="5" style="text-align:right">Total ${BONIF_FILTER==='todos'?'a pagar':'('+BONIF_FILTER+')'} · ${dataView.length} motorista(s)</td><td class="tnum"><b>${brMoney(totalView)}</b></td><td colspan="2"></td></tr></tfoot></table></div></div>`;
   } else {
     viewHtml='<div class="bonif-grid">'+dataView.map(d=>{ const m=d.m, enc=encodeURIComponent(d.nome);
       const comps=(m._rankProfile&&m._rankProfile.components||[]).slice().sort((a,b)=>a.v-b.v);
       const bars=comps.map(cp=>`<div class="bonif-comp" title="${cp.lab}: ${Math.round(cp.v)} (peso ${cp.w})"><span>${cp.lab}</span><div class="bar"><i style="width:${Math.max(2,Math.round(cp.v))}%;background:${notaCor(cp.v)}"></i></div><b>${Math.round(cp.v)}</b></div>`).join('');
       return `<div class="card bonif-card">
         <div class="bonif-head"><span class="avatar" style="background:${notaCor(m._rankScore)}">${iniciais(d.nome)}</span><div class="bonif-id"><b>${firstName(d.nome)}</b><small>${d.op} · ${tempoDeCasa(m.admissao)} de casa</small></div><span class="bonif-cat" style="background:color-mix(in srgb,${d.t.cor} 18%,transparent);color:${d.t.cor};border:1px solid color-mix(in srgb,${d.t.cor} 45%,transparent)">${d.t.ic} ${d.t.lab}</span></div>
-        <div class="bonif-score"><div class="n10">${d.n10.toFixed(1).replace('.',',')}<small>/10</small></div><div class="bonif-pay"><b>${brMoney(d.valor)}</b><small>${d.pct}% do prêmio</small></div></div>
+        <div class="bonif-score"><div class="n10">${d.n10.toFixed(1).replace('.',',')}<small>/10</small></div><div class="bonif-pay"><b>${brMoney(d.valor)}</b><small>prêmio</small></div></div>
         <div class="bonif-comps">${bars}</div>
         <div class="bonif-acts"><button type="button" class="bonif-act primary" data-sc="${enc}">📊 Scorecard</button><button type="button" class="bonif-act" data-fc="${enc}">📋 Resumo semanal</button></div>
       </div>`;
@@ -3639,11 +3638,11 @@ function exportBonifFolha(){
     const rows=filtered(); const agg=semanaAgg(rows); applyResumoRankScores(agg.data, rows);
     let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankElegivel(m)) mots.push(m); })); mots=resumoRankUnique(mots).sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
     const cfg=bonifCfg(), pago=bonifPagoMap();
-    const head=['Motorista','CPF','Operacao','Nota_10','Medalha','Pct_premio','Valor_RS','Status'];
+    const head=['Motorista','CPF','Operacao','Nota_10','Medalha','Valor_RS','Status'];
     const lines=[head.join(';')];
-    mots.forEach(m=>{ const n10=Math.round(m._rankScore||0)/10,t=bonifTier(n10),pct=+cfg[t.k]||0,valor=(+cfg.base||0)*pct/100;
+    mots.forEach(m=>{ const n10=Math.round(m._rankScore||0)/10,t=bonifTier(n10),valor=(+cfg.base||0)*n10/10;
       const cpf=(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[norm(m.nome)])||'';
-      lines.push(['"'+m.nome+'"','"'+cpf+'"','"'+(m.op||'')+'"',n10.toFixed(1).replace('.',','),t.lab,pct,valor.toFixed(2).replace('.',','),(pago[norm(m.nome)]?'Pago':'Pendente')].join(';')); });
+      lines.push(['"'+m.nome+'"','"'+cpf+'"','"'+(m.op||'')+'"',n10.toFixed(1).replace('.',','),t.lab,valor.toFixed(2).replace('.',','),(pago[norm(m.nome)]?'Pago':'Pendente')].join(';')); });
     baixarCsv(lines,'folha_bonificacao.csv');
   }catch(e){ toast('Falha ao exportar: '+(e.message||e)); }
 }
@@ -6011,16 +6010,15 @@ $('#bonifBox').addEventListener('click',e=>{
     const p=(applyResumoRankScores([], filtered())||{})[norm(decodeURIComponent(row.dataset.mot||''))];
     if(p && p.components){ const totWd=p.components.reduce((s,c)=>s+c.w,0)||1;
       const cbars=p.components.slice().sort((a,b)=>b.w-a.w).map(c=>`<div class="bexp-c"><span class="bexp-lab">${c.lab}</span><div class="bexp-bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div><b>${Math.round(c.v)}</b><small>peso ${Math.round(c.w/totWd*100)}%</small></div>`).join('');
-      const tr=document.createElement('tr'); tr.className='bexp'; tr.innerHTML=`<td colspan="9"><div class="bexp-inner">${cbars}</div></td>`; row.after(tr); row.classList.add('open'); }
+      const tr=document.createElement('tr'); tr.className='bexp'; tr.innerHTML=`<td colspan="8"><div class="bexp-inner">${cbars}</div></td>`; row.after(tr); row.classList.add('open'); }
     return;
   }
 });
 $('#bonifBox').addEventListener('change',e=>{
   if(!e.target.closest('.bonif-cfg')) return;
-  const cfg=bonifCfg();
-  const g=(id,k)=>{ const el=document.getElementById(id); if(el){ const v=parseFloat(el.value); if(Number.isFinite(v)) cfg[k]=v; } };
-  g('bfBase','base'); g('bfOuro','ouro'); g('bfPrata','prata'); g('bfBronze','bronze');
-  bonifSaveCfg(cfg); renderBonificacao(filtered());
+  const el=document.getElementById('bfBase'); if(!el) return;
+  const v=parseFloat(el.value); if(!Number.isFinite(v)) return;
+  bonifSaveCfg(v); renderBonificacao(filtered());
 });
 $('#scoreModal').addEventListener('click',e=>{ if(e.target.id==='scoreModal') closeScorecard(); });
 $('#scoreShell').addEventListener('click',e=>{ const b=e.target.closest('[data-sc-act]'); if(!b)return; const act=b.dataset.scAct; if(act==='close')closeScorecard(); else if(act==='ficha'){ const nm=SCORECARD_NOME; closeScorecard(); openFicha(nm); } else if(act==='trat'){ if(SCORECARD_NOME){ fichaAtual=SCORECARD_NOME; openTratModal(); } } });
