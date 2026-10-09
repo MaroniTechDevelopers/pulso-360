@@ -769,7 +769,7 @@
     <button data-tab="aderencia">Aderência</button>
     <button data-tab="linha">Linha do tempo</button>
     <button data-tab="diverg">Pontos de atenção <span class="badge" id="badgeDiv">0</span></button>
-    <button data-tab="media" style="display:none">Média</button>
+    <button data-tab="media">Média</button>
     <button data-tab="tabela">Consolidado</button>
     <button data-tab="operacao">Operação por placa</button>
     <button data-tab="saude">Saúde das câmeras</button>
@@ -4144,12 +4144,13 @@ function renderMedia(rows){
   if(!list.length){ box.innerHTML='<div class="empty">Sem média no filtro. A média sai de <b>km ÷ litros</b> — carregue a <b>movimentação</b> (estimativa Trimble) e o <b>abastecimento</b> (real das bombas).</div>'; return; }
   const nf=v=>v==null?'—':v.toFixed(2).replace('.',',');
   box.innerHTML=`<div class="tblwrap"><table style="min-width:820px"><thead><tr>
-      <th>Motorista</th><th>Operação</th><th>Meta</th><th>Trimble (est.)</th><th>Abastec. (real)</th><th>Δ bomba×telem.</th><th>Custo R$</th><th>Farol</th></tr></thead><tbody>${
+      <th>Motorista</th><th>Operação</th><th>Meta</th><th>Trimble (est.)</th><th>Abastec. (real)</th><th>Aproveit.</th><th>Δ bomba×telem.</th><th>Custo R$</th><th>Farol</th></tr></thead><tbody>${
       list.map(m=>{ const of=m.oficial; const cor=of>=m.meta?'var(--good-ink)':'var(--crit-ink)';
         return `<tr class="mediarow" data-mot="${encodeURIComponent(m.nome)}" title="ver ficha do motorista" style="cursor:pointer"><td>${m.nome}</td><td>${m.op||'—'}</td>
           <td class="tnum" title="meta por operação">${nf(m.meta)}</td>
           <td class="tnum" style="color:var(--muted)">${nf(m.mediaT)}</td>
           <td class="tnum" style="font-weight:650;color:${m.mediaA!=null?cor:'var(--muted)'}">${m.mediaA!=null?nf(m.mediaA):'—'}</td>
+          <td class="tnum" style="font-weight:700;color:${(of!=null&&m.meta>0)?(of>=m.meta?'var(--good-ink)':'var(--crit-ink)'):'var(--muted)'}" title="realizada ÷ meta">${(of!=null&&m.meta>0)?Math.round(of/m.meta*100)+'%':'—'}</td>
           <td class="tnum" style="color:${m.diff==null?'var(--muted)':(Math.abs(m.diff)>0.3?'var(--serious)':'var(--muted)')}">${m.diff==null?'—':(m.diff>=0?'+':'')+nf(m.diff)}</td>
           <td class="tnum">${m.ab?('R$ '+Math.round(m.ab.valor).toLocaleString('pt-BR')):'—'}</td>
           <td><span class="fdot" style="background:${FAROL_COR[farolMediaVs(of,m.meta)]}" title="oficial ${nf(of)} vs meta ${nf(m.meta)}"></span></td></tr>`;
