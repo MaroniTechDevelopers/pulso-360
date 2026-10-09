@@ -485,12 +485,14 @@
   .cap-ferias-badge{margin-left:auto;font-size:10.5px;font-weight:700;color:#a52f5d;background:#fff3f6;border:1px solid #f1c7d4;border-radius:999px;padding:3px 9px;white-space:nowrap}
 
   /* ============ FICHA DO MOTORISTA (detalhamento) ============ */
-  .ficha-back{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:7px 12px;cursor:pointer;font:inherit;font-size:13px}
-  .ficha-back:hover{border-color:var(--gold)}
+  .ficha-back{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:9px 14px;cursor:pointer;font:inherit;font-size:13px;transition:border-color .15s,box-shadow .15s,transform .1s}
+  .ficha-back:hover{border-color:var(--gold);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+  .ficha-back:active{transform:translateY(1px)}
   .ficha-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
   .ficha-actions .ficha-back{margin-bottom:0}
-  .btn-pdf{display:inline-flex;align-items:center;gap:6px;color:var(--navy);background:var(--gold);border:1px solid var(--gold-2);border-radius:9px;padding:7px 13px;cursor:pointer;font:inherit;font-size:13px;font-weight:700}
-  .btn-pdf:hover{filter:brightness(1.05)}
+  .btn-pdf{display:inline-flex;align-items:center;gap:6px;color:#1a1a1a;background:linear-gradient(135deg,var(--gold),var(--gold-2));border:1px solid transparent;border-radius:11px;padding:9px 14px;cursor:pointer;font:inherit;font-size:13px;font-weight:700;box-shadow:0 2px 10px rgba(245,200,0,.28);transition:filter .15s,box-shadow .15s,transform .1s}
+  .btn-pdf:hover{filter:brightness(1.04);box-shadow:0 4px 16px rgba(245,200,0,.38)}
+  .btn-pdf:active{transform:translateY(1px)}
   .pontos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}
   @media(max-width:720px){.pontos{grid-template-columns:1fr}}
   .pontos-col{padding:14px 16px}
