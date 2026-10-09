@@ -499,6 +499,33 @@
   .btn-pdf{display:inline-flex;align-items:center;gap:6px;color:#1a1a1a;background:linear-gradient(135deg,var(--gold),var(--gold-2));border:1px solid transparent;border-radius:11px;padding:9px 14px;cursor:pointer;font:inherit;font-size:13px;font-weight:700;box-shadow:0 2px 10px rgba(245,200,0,.28);transition:filter .15s,box-shadow .15s,transform .1s}
   .btn-pdf:hover{filter:brightness(1.04);box-shadow:0 4px 16px rgba(245,200,0,.38)}
   .btn-pdf:active{transform:translateY(1px)}
+  /* Evolução por tratativa (agente) na ficha */
+  .evt-strip{display:flex;flex-wrap:wrap;align-items:center;gap:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+  .evt-strip .evt-k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .evt-big{font-size:21px;font-weight:800;font-family:"Barlow Condensed","Barlow",system-ui,sans-serif;color:var(--ink);font-variant-numeric:tabular-nums}
+  .evt-ar{color:var(--muted);font-weight:400}
+  .evt-up{color:var(--good)} .evt-dn{color:var(--critical)} .evt-fl{color:var(--muted)}
+  .evt-tend{margin-left:auto;font-size:12.5px;color:var(--muted);max-width:360px}
+  .evt-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:10px}
+  .evt-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:9px}
+  .evt-date{font-size:13.5px;font-weight:700;color:var(--ink)}
+  .evt-tag{font-size:11.5px;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--gold) 20%,transparent);color:var(--gold-2);font-weight:600}
+  .evt-g{font-size:11.5px;color:var(--muted)}
+  .evt-verd{margin-left:auto;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .evt-verd.evt-up{background:color-mix(in srgb,var(--good) 15%,transparent)}
+  .evt-verd.evt-dn{background:color-mix(in srgb,var(--warning) 20%,transparent);color:var(--warning)}
+  .evt-verd.evt-fl{background:color-mix(in srgb,var(--muted) 15%,transparent)}
+  .evt-verd.evt-wait{background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted)}
+  .evt-note{font-size:12.5px;color:var(--muted);border-left:2px solid var(--border);padding-left:10px;margin-bottom:10px;font-style:italic}
+  .evt-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
+  .evt-mt{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:7px 10px}
+  .evt-mt-nota{background:color-mix(in srgb,var(--gold) 10%,var(--surface-2))}
+  .evt-ml{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+  .evt-mv{font-size:13px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+  .evt-mv small{font-weight:600;color:var(--muted);font-size:10px}
+  .evt-ai{display:flex;gap:9px;background:color-mix(in srgb,var(--gold) 9%,var(--surface-2));border:1px solid var(--border);border-radius:10px;padding:9px 11px}
+  .evt-ic{flex:none;width:24px;height:24px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:14px}
+  .evt-tx{font-size:12.5px;line-height:1.5;color:var(--ink)}
   .pontos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:6px}
   @media(max-width:720px){.pontos{grid-template-columns:1fr}}
   .pontos-col{padding:14px 16px}
@@ -2942,6 +2969,40 @@ function planoDeAcao(M){
   if(!acoes.length) acoes.push({ic:'✅',t:'Manter monitoramento',d:'Sem ação corretiva necessária no período — seguir acompanhando os indicadores.'});
   return acoes;
 }
+// AGENTE DE EVOLUÇÃO POR TRATATIVA: para cada conversa registrada pelo gestor, compara a nota e os
+// indicadores do mês da tratativa (antes) com o 1º mês seguinte com dados (depois) e redige a análise.
+// 100% calculado dos dados reais (scMensalCached = nota + componentes por mês); só a redação é por regra.
+function fichaEvolTratativas(nome){
+  const trats=tratList(nome); if(!trats.length) return '';
+  const head=`<div class="sec-title"><h2>📈 Evolução por tratativa</h2><span>análise do agente · antes × depois de cada conversa registrada pelo gestor</span></div>`;
+  const mensal=(scMensalCached(nome, filtered())||[]).filter(m=>m.score!=null);
+  if(mensal.length<1) return head+`<div class="card"><div class="empty" style="padding:18px">Assim que houver meses com movimentação no período, o agente mostra aqui a evolução a cada tratativa.</div></div>`;
+  const n10=s=>scN10(s), f1=v=>(Math.round(v*10)/10).toFixed(1).replace('.',','), sgn=v=>(v>0?'+':'')+f1(v), keyOf=iso=>String(iso||'').slice(0,7);
+  const notaAt=mk=>{ let r=null; for(const m of mensal){ if(m.key<=mk) r=m; else break; } return r; };
+  const notaAfter=mk=>{ for(const m of mensal){ if(m.key>mk) return m; } return null; };
+  const COMPS=[['jornada','Aderência de jornada'],['alertas','Alertas/segurança'],['media','Média × meta'],['extra','Hora extra']];
+  const sorted=trats.slice().sort((a,b)=>String(a.data||'').localeCompare(String(b.data||'')));
+  const baseM=notaAt(keyOf(sorted[0].data))||mensal[0], lastM=mensal[mensal.length-1];
+  const d0=n10(baseM.score), d1=n10(lastM.score), dT=d1-d0;
+  const trendTxt=dT>=0.3?'tendência de melhora':dT<=-0.3?'tendência de queda — vale intensificar o acompanhamento':'nota estável no período';
+  const strip=`<div class="evt-strip"><div><div class="evt-k">Da 1ª tratativa até o último mês</div><div class="evt-big">${f1(d0)} <span class="evt-ar">→</span> ${f1(d1)} <span class="${dT>=0?'evt-up':'evt-dn'}">(${sgn(dT)})</span></div></div><div class="evt-tend">💡 ${trats.length} tratativa(s) · ${trendTxt}</div></div>`;
+  const cards=sorted.slice().reverse().map(t=>{
+    const mk=keyOf(t.data), a=notaAt(mk), b=notaAfter(mk);
+    const h=`<div class="evt-h"><span class="evt-date">${brDate(t.data)}</span><span class="evt-tag">${pdfEsc(t.tipo||'—')}</span>${t.gestor?`<span class="evt-g">👤 ${pdfEsc(t.gestor)}</span>`:''}`;
+    const nota=t.obs?`<div class="evt-note">"${pdfEsc(t.obs)}"</div>`:'';
+    if(!a||!b){ const msg=!b?'Ainda não há um mês seguinte com movimentação para medir o efeito desta conversa. Assim que o próximo fechamento entrar, a evolução aparece aqui.':'Não há um mês anterior com dados para comparar — esta é uma das primeiras conversas do histórico.'; return `<div class="evt-card">${h}<span class="evt-verd evt-wait">⏳ aguardando dados</span></div>${nota}<div class="evt-ai"><span class="evt-ic">🤖</span><span class="evt-tx"><b>Análise:</b> ${msg}</span></div></div>`; }
+    const dn=n10(b.score)-n10(a.score), verd=dn>=0.3?['evt-up','📈 Evoluiu']:dn<=-0.3?['evt-dn','📉 Atenção']:['evt-fl','➖ Estável'];
+    let best=null,worst=null,mets='';
+    COMPS.forEach(([k,lab])=>{ const va=a.comps[k],vb=b.comps[k]; if(va==null||vb==null)return; const d=vb-va; if(best==null||d>best.d)best={lab,d}; if(worst==null||d<worst.d)worst={lab,d}; const cls=d>=3?'evt-up':d<=-3?'evt-dn':'evt-fl'; mets+=`<div class="evt-mt"><div class="evt-ml">${lab}</div><div class="evt-mv">${Math.round(va)} <span class="evt-ar">→</span> ${Math.round(vb)}<small>/100</small> <span class="${cls}">${d>0?'+':''}${Math.round(d)}</span></div></div>`; });
+    const notaTile=`<div class="evt-mt evt-mt-nota"><div class="evt-ml">Nota</div><div class="evt-mv">${f1(n10(a.score))} <span class="evt-ar">→</span> ${f1(n10(b.score))}<small>/10</small> <span class="${dn>=0.3?'evt-up':dn<=-0.3?'evt-dn':'evt-fl'}">${sgn(dn)}</span></div></div>`;
+    let ai='A nota '+(Math.abs(dn)<0.1?'manteve-se em '+f1(n10(b.score)):'foi de '+f1(n10(a.score))+' para '+f1(n10(b.score))+' ('+sgn(dn)+')')+' do mês da conversa para o seguinte.';
+    if(best&&best.d>=3) ai+=' Destaque de melhora: '+best.lab.toLowerCase()+' (+'+Math.round(best.d)+').';
+    if(worst&&worst.d<=-3) ai+=' Piorou: '+worst.lab.toLowerCase()+' ('+Math.round(worst.d)+').';
+    ai+= dn<=-0.3?(' Vale uma nova conversa'+(worst&&worst.d<=-3?' focada em '+worst.lab.toLowerCase():'')+'.'):dn>=0.3?' Bom resultado — manter o acompanhamento.':' Sem mudança relevante — seguir acompanhando.';
+    return `<div class="evt-card">${h}<span class="evt-verd ${verd[0]}">${verd[1]}</span></div>${nota}<div class="evt-metrics">${notaTile}${mets}</div><div class="evt-ai"><span class="evt-ic">🤖</span><span class="evt-tx"><b>Análise:</b> ${ai}</span></div></div>`;
+  }).join('');
+  return head+strip+cards;
+}
 function renderFicha(){
   const nome=fichaAtual; if(!nome){ $('#fichaBox').innerHTML=''; return; }
   const M=fichaMetrics(nome);
@@ -3004,6 +3065,8 @@ function renderFicha(){
     <div class="card">${ trats.length
       ? '<ul class="tratlist">'+trats.map(t=>`<li data-trat-uid="${encodeURIComponent(tratUid(t))}"><div class="tt-h"><span class="tt-tipo">${pdfEsc(t.tipo||'—')}</span><b>${brDate(t.data)}</b>${t.gestor?' · <span class="tt-g">'+pdfEsc(t.gestor)+'</span>':''}${isAdmin()?`<button class="trat-del" type="button" data-uid="${encodeURIComponent(tratUid(t))}" title="Excluir esta tratativa do histórico compartilhado">🗑️ Excluir</button>`:''}</div>${t.obs?'<div class="tt-o">'+pdfEsc(t.obs)+'</div>':''}${t.sinais?'<div class="tt-s">sinais na época: '+pdfEsc(t.sinais)+'</div>':''}</li>`).join('')+'</ul>'
       : '<div class="empty" style="padding:22px">Nenhuma tratativa registrada ainda. Use o botão <b>🗣️ Registrar tratativa</b> (acima) para iniciar o acompanhamento com o motorista.</div>' }</div>
+
+    ${fichaEvolTratativas(nome)}
 
     <div class="sec-title"><h2>Pontos de atenção × pontos fortes</h2><span>${periodoLabel()} · resumo executivo (o mesmo do PDF)</span></div>
     <div class="pontos">
