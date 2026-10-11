@@ -797,6 +797,38 @@
     #scoreModal .sc-modal{max-height:96vh;border-radius:18px}
     .sc-body{padding:14px 12px 20px}
   }
+  /* ===== MODO CELULAR LEVE (Fase 1) ===== */
+  body.mobile-light #filterbar,
+  body.mobile-light #view-semana > .card,
+  body.mobile-light #view-bonificacao > .card,
+  body.mobile-light .sec-title > span,
+  body.mobile-light .sec-title button{display:none}
+  body.mobile-light .sec-title{margin-bottom:10px}
+  body.mobile-light main{padding-top:14px}
+  .ml-searchwrap{padding:10px 12px;margin-bottom:12px}
+  .ml-search{width:100%;border:1px solid var(--border);border-radius:11px;padding:11px 13px;font:inherit;background:var(--surface);color:var(--ink);box-sizing:border-box}
+  .ml-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:13px;padding:10px 12px;margin-bottom:8px;cursor:pointer;font:inherit;color:var(--ink)}
+  .ml-row:active{transform:scale(.995)}
+  .ml-row .ml-pos{font-weight:700;color:var(--muted);min-width:20px;text-align:center;font-size:13px;flex:none}
+  .ml-row .avatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;flex:none;font-size:13px}
+  .ml-row .ml-id{flex:1;min-width:0}
+  .ml-row .ml-id b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ml-row .ml-id small{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .ml-row .ml-medal{font-size:18px;flex:none}
+  .ml-row .ml-nota{font-weight:800;font-size:18px;flex:none;font-variant-numeric:tabular-nums}
+  .ml-row .ml-nota small{font-size:10px;color:var(--muted);font-weight:600}
+  .ml-row .ml-val{font-weight:700;font-size:13px;flex:none;min-width:82px;text-align:right}
+  .ml-mlist .ml-mrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:13px;padding:11px 13px;margin-bottom:8px;cursor:pointer;font:inherit;color:var(--ink)}
+  .ml-mrow .ml-id{flex:1;min-width:0}
+  .ml-mrow .ml-id b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ml-mrow .ml-id small{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .ml-mrow .ml-mv{text-align:right;flex:none;min-width:52px}
+  .ml-mrow .ml-mv small{display:block;color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.03em}
+  .ml-mrow .ml-mv b{font-size:14px;font-variant-numeric:tabular-nums}
+  body.mobile-light .capinha .ml-op{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%}
+  .ml-unpub{max-width:440px;margin:44px auto;text-align:center;padding:30px 22px}
+  .ml-unpub h2{font-size:19px;margin:10px 0 6px}
+  .ml-unpub p{color:var(--muted);font-size:13.5px;line-height:1.5}
 </style>
 </head>
 <body class="booting">
@@ -1055,6 +1087,7 @@
     <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:12px 16px">
       <b>Publicação e tratativas</b>
       <button class="btn solid" id="btnSnapshot" title="Baixar os dados atuais para publicar junto do GitHub Pages">📦 Gerar dados para publicação</button>
+      <button class="btn solid" id="btnSnapshotMobile" title="Baixar um arquivo LEVE por motorista (dados-mobile.json) para o celular abrir rápido — publique ao lado do index.html">📱 Gerar dados do celular</button>
       <button class="btn" id="btnTratSync" title="Sincronizar o histórico compartilhado de tratativas no SharePoint" style="color:var(--ink);background:var(--surface);border-color:var(--border)">☁️ Sincronizar tratativas</button>
       <span style="font-size:12px;color:var(--muted)">Relatórios: importação manual · SharePoint: somente tratativas</span>
       <span id="dadosWho" style="font-size:12px;color:var(--muted)"></span>
@@ -1581,6 +1614,12 @@ function feriasPeriodo(nome,start,totalMin){
   return out;
 }
 let REAL = !!RAW;
+// ===== MODO CELULAR LEVE (Fase 1) =====
+// Celular não aguenta a base cheia (446 MB / ~121 mil registros → iOS mata a aba por memória).
+// Em telas pequenas de toque, o painel baixa um arquivo LEVE por motorista (dados-mobile.json)
+// e renderiza um modo reduzido (Bonificação/Resumo/Média/Scorecard) SEM os registros crus.
+let MOBILE_LIGHT=false, MOBILE_DATA=null, MOBILE_Q='';
+const _isMobile = matchMedia('(max-width:820px)').matches && (navigator.maxTouchPoints>0 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent));
 let RECORDS = [];           // registros motorista-dia já com análise
 let BASES = {ponto:true, mov:true, trim:true};   // quais das 3 fontes estão carregadas
 let ALERTS = null;          // agregado de alertas por motorista (norm) — do relatório de alertas
@@ -3870,6 +3909,7 @@ function openScorecard(nome){
 }
 function closeScorecard(){ const m=$('#scoreModal'); if(m)m.style.display='none'; SCORECARD_NOME=null; }
 function renderScorecard(nome){
+  if(MOBILE_LIGHT) return renderScorecardLight(nome);
   const shell=$('#scoreShell'), nn=norm(nome), rows=filtered();
   const profiles=applyResumoRankScores([], rows), p=profiles[nn];
   if(!p || !(p.movDays>0 && p.hCond>0)){
@@ -3961,7 +4001,187 @@ function renderScorecard(nome){
   </div>`;
   shell.innerHTML=scBrand+body;
 }
+/* ============================================================
+   MODO CELULAR LEVE — TELAS (ETAPA C)
+   Renderiza Bonificação / Resumo / Média / Scorecard a partir de MOBILE_DATA.drivers
+   (SEM RECORDS / filtered()). As abas de detalhe cru ficam escondidas do nav.
+   ============================================================ */
+function _initMobileLight(){
+  document.body.classList.add('mobile-light');
+  const keep=new Set(['semana','bonificacao','media']);   // só o que o leve consegue montar
+  $$('#tabs button').forEach(b=>{ if(!keep.has(b.dataset.tab)) b.style.display='none'; });
+  const pill=$('#dataModePill'), txt=$('#dataModeTxt');
+  if(pill)pill.classList.add('real');
+  if(txt){ const d=MOBILE_DATA, dh=d&&d.dataMax?(' · dados até '+brDate(d.dataMax)):''; txt.textContent='versão do celular · '+((d&&d.drivers||[]).length).toLocaleString('pt-BR')+' motoristas'+dh; }
+  // tap em qualquer card leve → scorecard do condutor
+  const main=document.querySelector('main');
+  if(main && !main._mlWired){ main._mlWired=true; main.addEventListener('click',e=>{ const t=e.target.closest('[data-mlsc]'); if(t){ e.preventDefault(); openScorecard(decodeURIComponent(t.dataset.mlsc)); } }); }
+  // busca da Bonificação (delegada, não perde foco no re-render da lista)
+  const bb=$('#bonifBox'); if(bb && !bb._mlInput){ bb._mlInput=true; bb.addEventListener('input',e=>{ if(e.target&&e.target.id==='mlBonifQ'){ MOBILE_Q=e.target.value; _mlRenderBonifList(); } }); }
+  goTab('bonificacao');   // landing = tela de pagamento (Bonificação)
+}
+function _mobileNotPublished(){
+  document.body.classList.add('mobile-light');
+  const fb=$('#filterbar'); if(fb)fb.style.display='none';
+  $$('#tabs button').forEach(b=>b.style.display='none');
+  $$('.view').forEach(v=>v.classList.remove('active'));
+  const main=document.querySelector('main');
+  if(main){ const msg=document.createElement('div'); msg.className='card ml-unpub';
+    msg.innerHTML='<div style="font-size:42px">📱</div><h2>Versão do celular ainda não publicada</h2><p>Os dados do celular ainda não foram gerados. Abra o painel no <b>computador</b> para ver todas as informações.</p>';
+    main.prepend(msg); }
+  const txt=$('#dataModeTxt'); if(txt)txt.textContent='versão do celular indisponível';
+}
+function renderMobileLight(){
+  const view=activeViewName();
+  if(view==='bonificacao') renderBonifLight();
+  else if(view==='media') renderMediaLight();
+  else renderSemanaLight();
+}
+let _MLB=null;
+function renderBonifLight(){
+  const box=$('#bonifBox'), kb=$('#bonifKpis'); if(!box)return;
+  const ds=((MOBILE_DATA&&MOBILE_DATA.drivers)||[]).slice().sort((a,b)=>(b.score||0)-(a.score||0)); _MLB=ds;
+  const cnt={ouro:0,prata:0,bronze:0}; let total=0; ds.forEach(d=>{cnt[d.tier.k]=(cnt[d.tier.k]||0)+1; total+=d.valor||0;});
+  if(kb) kb.innerHTML=[
+    {lab:'🥇 Ouro (9–10)',val:cnt.ouro,ac:'#d4af37',sub:'nota 9 a 10'},
+    {lab:'🥈 Prata (5–9)',val:cnt.prata,ac:'#9ca3af',sub:'nota 5 a 9'},
+    {lab:'🥉 Bronze (≤5)',val:cnt.bronze,ac:'#b87333',sub:'nota até 5'},
+    {lab:'Elegíveis',val:ds.length,ac:'var(--s2)',sub:'com movimentação'},
+    {lab:'Total a pagar',val:brMoney(total),ac:'var(--good)',sub:'prêmio proporcional à nota'}
+  ].map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+  box.innerHTML=`<div class="card ml-searchwrap"><input type="search" id="mlBonifQ" class="ml-search" placeholder="🔎 Buscar motorista…" value="${String(MOBILE_Q||'').replace(/"/g,'&quot;')}"></div><div id="mlBonifList"></div>`;
+  _mlRenderBonifList();
+}
+function _mlRenderBonifList(){
+  const wrap=document.getElementById('mlBonifList'); if(!wrap)return;
+  const q=norm(MOBILE_Q||''), ds=_MLB||[];
+  const list=q? ds.filter(d=>norm(d.nome).includes(q)) : ds;
+  if(!list.length){ wrap.innerHTML='<div class="empty">Nenhum motorista encontrado.</div>'; return; }
+  wrap.innerHTML=list.map((d,i)=>{ const col=notaCor(d.score), nb=(+d.n10).toFixed(1).replace('.',',');
+    return `<button type="button" class="ml-row" data-mlsc="${encodeURIComponent(d.nome)}">
+      <span class="ml-pos">${i+1}</span>
+      <span class="avatar" style="background:${col}">${iniciais(d.nome)}</span>
+      <span class="ml-id"><b>${firstName(d.nome)}</b><small>${scEsc(d.op)}</small></span>
+      <span class="ml-medal">${d.tier.ic}</span>
+      <span class="ml-nota" style="color:${col}">${nb}<small>/10</small></span>
+      <span class="ml-val">${brMoney(d.valor)}</span>
+    </button>`; }).join('');
+}
+function _mlCapinha(d){
+  const col=notaCor(d.score), nb=(+d.n10).toFixed(1).replace('.',','), md=d.tier.ic;
+  const cv={}; (d.components||[]).forEach(c=>cv[c.k]=c.v);
+  const ident=cv.identMot!=null?cv.identMot:(cv.identCam!=null?cv.identCam:null);
+  const cm=(lab,v,suf)=>`<div class="cm"><span>${lab}</span><b>${v==null?'—':v+(suf||'')}</b></div>`;
+  return `<button type="button" class="capinha" data-mlsc="${encodeURIComponent(d.nome)}">
+    <div class="cap-top">
+      <span class="avatar" style="background:${col}">${iniciais(d.nome)}</span>
+      <div class="cap-id"><b>${firstName(d.nome)}</b><small>${d.tempo||'—'} de casa</small></div>
+      <span class="rank-score" title="Nota ${nb}/10 · ${d.tier.lab}"><span class="rs-med">${md}</span><b>${nb}<small>/10</small></b></span>
+    </div>
+    <div class="cap-metrics">
+      ${cm('Jornada',cv.jornada,'')}
+      ${d.media!=null?`<div class="cm"><span>Média</span><b class="${(d.meta!=null&&d.media>=d.meta)?'ok':'bad'}">${(+d.media).toFixed(2).replace('.',',')}</b></div>`:''}
+      ${cm('Identif.',ident,'')}
+      ${d.aproveit!=null?cm('Aproveit.',d.aproveit,'%'):''}
+    </div>
+    <div class="cap-foot"><span class="ml-op">${scEsc(d.op)}</span></div>
+    <span class="cap-cta">ver scorecard →</span>
+  </button>`;
+}
+function renderSemanaLight(){
+  const box=$('#semanaBox'), kb=$('#kpis'); if(!box)return;
+  const ds=((MOBILE_DATA&&MOBILE_DATA.drivers)||[]).slice().sort((a,b)=>(b.score||0)-(a.score||0));
+  if(kb){ const n=ds.length, ouro=ds.filter(d=>d.tier.k==='ouro').length, mediaScore=n?Math.round(ds.reduce((s,d)=>s+(d.score||0),0)/n):0;
+    kb.innerHTML=[
+      {lab:'Motoristas',val:n,ac:'var(--s2)',sub:'no período'},
+      {lab:'Nota média',val:(mediaScore/10).toFixed(1).replace('.',','),ac:notaCor(mediaScore),sub:'de 0 a 10'},
+      {lab:'🥇 Ouro',val:ouro,ac:'#d4af37',sub:'nota 9+'}
+    ].map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+  }
+  box.innerHTML=ds.length?('<div class="capgrid">'+ds.map(_mlCapinha).join('')+'</div>'):'<div class="empty">Sem motoristas na versão do celular.</div>';
+}
+function renderMediaLight(){
+  const kb=$('#mediaKpis'), box=$('#mediaBox'); if(!box)return;
+  const ds=((MOBILE_DATA&&MOBILE_DATA.drivers)||[]).filter(d=>d.media!=null||d.mediaTrimble!=null||d.mediaAbast!=null);
+  ds.sort((a,b)=>((a.aproveit==null?1e9:a.aproveit))-((b.aproveit==null?1e9:b.aproveit)));   // pior aproveitamento primeiro
+  const abaixo=ds.filter(d=>d.aproveit!=null&&d.aproveit<100).length;
+  if(kb){ const comMedia=ds.filter(d=>d.media!=null); const medFrota=comMedia.length?(comMedia.reduce((s,d)=>s+d.media,0)/comMedia.length):null;
+    kb.innerHTML=[
+      {lab:'Motoristas c/ média',val:ds.length,ac:'var(--s2)',sub:'no período'},
+      {lab:'Abaixo da meta',val:abaixo,ac:'var(--warning)',sub:'de '+ds.length},
+      {lab:'Média (aprox.)',val:medFrota==null?'—':medFrota.toFixed(2).replace('.',','),ac:'var(--s3)',sub:'km/l médio'}
+    ].map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+  }
+  if(!ds.length){ box.innerHTML='<div class="empty">Sem média disponível na versão do celular.</div>'; return; }
+  const nf=v=>v==null?'—':(+v).toFixed(2).replace('.',',');
+  box.innerHTML='<div class="ml-mlist">'+ds.map(d=>{ const apr=d.aproveit, col=apr==null?'var(--muted)':(apr>=100?'var(--good-ink)':'var(--crit-ink)');
+    const med=d.media!=null?d.media:(d.mediaAbast!=null?d.mediaAbast:d.mediaTrimble);
+    return `<button type="button" class="ml-mrow" data-mlsc="${encodeURIComponent(d.nome)}">
+      <span class="ml-id"><b>${firstName(d.nome)}</b><small>${scEsc(d.op)}</small></span>
+      <span class="ml-mv"><small>média</small><b>${nf(med)}</b></span>
+      <span class="ml-mv"><small>meta</small><b>${nf(d.meta)}</b></span>
+      <span class="ml-mv"><small>aproveit.</small><b style="color:${col}">${apr==null?'—':apr+'%'}</b></span>
+    </button>`; }).join('')+'</div>';
+}
+function renderScorecardLight(nome){
+  const shell=$('#scoreShell'), nn=norm(nome);
+  const d=((MOBILE_DATA&&MOBILE_DATA.drivers)||[]).find(x=>x.nn===nn||norm(x.nome)===nn);
+  if(!d){ shell.innerHTML='<div class="sc-body"><div class="empty" style="padding:44px;text-align:center">Motorista não encontrado na versão do celular.</div><div class="sc-actions"><button class="btn" data-sc-act="close">Fechar</button></div></div>'; return; }
+  const n10=scN10(d.score), catK=d.tier.k;
+  const mensal=(d.mensal||[]), com=mensal.filter(m=>m.score!=null);
+  const ult=com[com.length-1]||null, pen=com[com.length-2]||null, trend=(ult&&pen)?(ult.score-pen.score):null;
+  const comps=(d.components||[]).slice().sort((a,b)=>b.w-a.w), totW=comps.reduce((s,c)=>s+c.w,0)||1;
+  const compHtml=comps.map(c=>{ let dd=null; const uc=ult&&ult.comps?ult.comps[c.k]:null, pc=pen&&pen.comps?pen.comps[c.k]:null; if(uc!=null&&pc!=null)dd=uc-pc;
+    const relW=Math.round(c.w/totW*100), contrib=(c.w*c.v/100)/totW*10, maxC=c.w/totW*10;
+    return `<div class="sc-comp"><span class="ic">${SC_ICON[c.k]||'•'}</span><div class="mid"><div class="cl"><b>${c.lab}</b><span class="pts" style="color:${notaCor(c.v)}">+${scFmt(contrib)} <small>de ${scFmt(maxC)} pts</small></span></div><div class="expl">${SC_EXPL[c.k]||''}</div><div class="bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div><div class="meta"><span>seu valor <b>${Math.round(c.v)}</b>/100</span><span>peso <b>${relW}%</b> da nota</span><span>mês a mês ${scTrendArrow(dd)}</span></div></div></div>`;
+  }).join('');
+  const somaContrib=comps.reduce((s,c)=>s+(c.w*c.v/100)/totW*10,0);
+  const penal10=((d.idDiv||0)>0?Math.min(12,(d.idDiv||0)*2):0)/10;
+  const totalHtml=`<div class="sc-total"><div class="row"><span>Soma das contribuições</span><b>${scFmt(somaContrib)}/10</b></div>${penal10>0?`<div class="row pen"><span>− Divergências de condutor (${d.idDiv})</span><b>−${scFmt(penal10)}</b></div>`:''}<div class="row fin"><span>Nota final</span><b style="color:${notaCor(d.score)}">${scFmt(n10)}/10</b></div></div>`;
+  const C=326.726, dash=(C*(1-Math.max(0,Math.min(10,n10))/10)).toFixed(1), medalIc=d.tier.ic, _mf=v=>(Math.round(v*100)/100).toFixed(2).replace('.',',');
+  const mediaChip=(d.media!=null)?`<span class="sg-media"><span class="em">⛽</span><b style="color:${d.meta!=null?(d.media>=d.meta?'#34d399':'#f87171'):'var(--sg-ink)'}">${_mf(d.media)}</b><small>km/l${d.meta!=null?' · meta '+_mf(d.meta):''}</small></span>`:'';
+  let lvlLR,lvlPct;
+  if(catK==='ouro'){ lvlLR='<span>🏆 Nível máximo — mantenha o <b>Ouro</b></span><span><b>Topo</b></span>'; lvlPct=100; }
+  else if(catK==='prata'){ lvlLR=`<span>Rumo ao <b>Ouro 🥇</b></span><span><b>+${scFmt(9-n10)}</b> pts</span>`; lvlPct=Math.max(5,Math.min(100,(n10-5)/4*100)); }
+  else { lvlLR=`<span>Rumo à <b>Prata 🥈</b></span><span><b>+${scFmt(Math.max(0,5-n10))}</b> pts</span>`; lvlPct=Math.max(5,Math.min(100,n10/5*100)); }
+  const track=`<div class="sg-track"><span class="${catK==='bronze'?'on':''}">Bronze</span><span class="${catK==='prata'?'on':''}">Prata</span><span class="${catK==='ouro'?'on':''}">Ouro</span></div>`;
+  let rise=0; for(let i=com.length-1;i>0;i--){ if(com[i].score>=com[i-1].score-0.05) rise++; else break; }
+  let streak;
+  if(com.length>=2 && ult && pen && ult.score>pen.score+0.05) streak=`<div class="sg-streak"><span class="em">📈</span><div><b>${rise+1} ${rise+1>1?'meses':'mês'} em evolução</b> — continue assim que o próximo nível vem!</div></div>`;
+  else if(com.length>=2 && ult && pen && ult.score<pen.score-0.05) streak='<div class="sg-streak cool"><span class="em">💪</span><div>Mês passado caiu um pouco — <b>bora recuperar!</b></div></div>';
+  else if(com.length>=2) streak='<div class="sg-streak"><span class="em">✅</span><div><b>Ritmo mantido</b> — segue firme!</div></div>';
+  else streak='<div class="sg-streak cool"><span class="em">🚀</span><div><b>Primeiro mês medido</b> — seu histórico começa aqui.</div></div>';
+  const byVal=comps.slice().sort((a,b)=>b.v-a.v);
+  const fortes=(byVal.filter(c=>c.v>=75).slice(0,3).length?byVal.filter(c=>c.v>=75).slice(0,3):byVal.slice(0,3));
+  const fortesHtml=fortes.map(c=>{ const f=SC_FRIENDLY[c.k]||{ic:'•',pos:c.lab,posd:''}; return `<div class="sg-ind good"><div class="ic">${f.ic}</div><div class="mid"><b>${f.pos}</b><small>${f.posd}</small></div><div class="val">${Math.round(c.v)}</div></div>`; }).join('');
+  const fracos=byVal.slice().reverse().filter(c=>c.v<75).slice(0,3);
+  const fracosHtml=fracos.length? fracos.map(c=>{ const f=SC_FRIENDLY[c.k]||{ic:'•',area:c.lab,tip:''}; return `<div class="sg-ind warn"><div class="ic">${f.ic}</div><div class="mid"><b>${f.area||f.pos}</b><small>${f.tip}</small></div><div class="val">${Math.round(c.v)}</div></div>`; }).join('')
+    : '<div class="sg-ind good"><div class="ic">🎉</div><div class="mid"><b>Tudo em dia!</b><small>Você está forte em todos os indicadores.</small></div><div class="val">👏</div></div>';
+  const mesRef=ult?scMesLabel(ult.key).toUpperCase():'';
+  const scBrand=`<div class="sc-brand"><span class="mk"><img src="${LOGO_MARONI}" alt="Pulso 360"></span><div class="bt"><b>PULSO 360</b><small>Grupo Maroni</small></div><span class="sc-pulse" aria-hidden="true"></span><button class="sc-close" data-sc-act="close" title="Fechar">✕</button></div>`;
+  const hero=`<section class="sg-hero">
+    <div class="sg-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="12"/><circle cx="60" cy="60" r="52" fill="none" stroke="url(#rg)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${dash}"/><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff2a8"/><stop offset=".5" stop-color="#f5c800"/><stop offset="1" stop-color="#e68a00"/></linearGradient></defs></svg><div class="mid"><span class="nota">${scFmt(n10)}</span><span class="de10">DE 10</span></div></div>
+    <div class="sg-badges"><div class="sg-medal">${medalIc} ${d.tier.lab}</div>${mediaChip}</div>
+    <div class="sg-who"><b>${scEsc(d.nome)}</b><span>${scEsc(d.op)} · ${d.tempo||'—'} de casa</span></div>
+    <div class="sg-level"><div class="lr">${lvlLR}</div><div class="sg-bar"><i style="width:${lvlPct}%"></i></div>${track}</div>
+    ${streak}
+  </section>`;
+  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota (0–10) é a média ponderada dos indicadores. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
+  const body=`<div class="sc-body">
+    <div style="font-family:var(--sg-disp);font-weight:600;font-size:18px;color:var(--sg-ink2);margin:2px 2px 13px">Olá, <b style="color:var(--sg-ink)">${scEsc(firstName(d.nome))}</b> 👋 ${mesRef?('seu desempenho em <b style="color:var(--sg-ink)">'+mesRef+'</b>'):'este é o seu desempenho'}</div>
+    ${hero}
+    <div class="sc-sec"><h4>📊 Sua evolução</h4>${scLineChart(mensal,{})}</div>
+    <div class="sc-sec"><h4>🌟 No que você é destaque</h4>${fortesHtml}</div>
+    <div class="sc-sec"><h4>🎯 Onde dá pra ganhar mais pontos</h4>${fracosHtml}</div>
+    ${gestor}
+    <div class="sc-sec"><h4>🗣️ Tratativas</h4><div class="sc-empty-trat">📊 Histórico de tratativas disponível no computador.</div></div>
+    <div class="sc-foot"><span class="big">Seu gestor está acompanhando e torcendo por você 💪</span>Continue nesse ritmo que o prêmio vem.</div>
+    <div class="sc-actions"><button class="btn" data-sc-act="close">Fechar</button></div>
+  </div>`;
+  shell.innerHTML=scBrand+body;
+}
 function renderAll(){
+  if(MOBILE_LIGHT){ try{ renderMobileLight(); }catch(e){ console.error('[Pulso360] modo leve',e); } return; }
   // Qualquer mudança nos controles pertence somente à aba/filtro corrente.
   saveTopFilterState(CURRENT_FILTER_TAB);
   const view=activeViewName(), fkey=filterStateKey();
@@ -6055,6 +6275,76 @@ async function gerarDadosPublicacao(){
   }catch(e){toast('Erro ao gerar dados: '+(e.message||e));}
   finally{if(btn){btn.disabled=false;btn.textContent=old||'📦 Gerar dados para publicação';}}
 }
+/* ============================================================
+   MODO CELULAR LEVE — GERADOR (ETAPA A)
+   Gera um JSON pequeno (< ~5 MB) com UM resumo por motorista, usando as MESMAS
+   funções do painel (semanaAgg + applyResumoRankScores + bonifTier + metaVeic + mediaAgg),
+   para que a nota/prêmio/média batam com o desktop. SEM dados crus (mov/punches/segs/alertas).
+   ============================================================ */
+// Evolução mensal de TODOS os motoristas de uma só vez (perfis por mês calculados 1x por mês,
+// não por motorista — senão seria O(motoristas²)). Mesmo cálculo de scoreMensalMotorista.
+function _mobileMensalAll(rows){
+  const byMes=Object.create(null);
+  (rows||[]).forEach(r=>{ const mk=r.mesKey; if(!mk)return; (byMes[mk]=byMes[mk]||{key:mk,label:r.mesLabel||mk,rows:[]}).rows.push(r); });
+  const meses=Object.values(byMes).sort((a,b)=>a.key<b.key?-1:1);
+  const saved=RANK_SCORES, out=Object.create(null);
+  for(const mz of meses){
+    const profiles=applyResumoRankScores([], mz.rows);
+    for(const k in profiles){ const p=profiles[k];
+      const cm=Object.create(null); (p.components||[]).forEach(c=>cm[c.k]=Math.round(c.v));
+      const elig=(p.movDays>0&&p.hCond>0);
+      (out[k]=out[k]||[]).push({key:mz.key,label:mz.label,score:elig?Math.round(p.score):null,comps:cm});
+    }
+  }
+  RANK_SCORES=saved;
+  return out;
+}
+async function gerarDadosMobile(){
+  if(!RECORDS||!RECORDS.length){ toast('Importe/abra os dados antes de gerar a versão do celular'); return null; }
+  const btn=$('#btnSnapshotMobile'), old=btn?btn.textContent:''; if(btn){btn.disabled=true;btn.textContent='⏳ Gerando versão do celular…';}
+  try{
+    // mesma proteção da publicação: consolida importações pendentes antes de ler os RECORDS
+    if(IMPORT_DIRTY_ANALYZE||IMPORT_DIRTY_FILTERS){ flushImportChanges(false); await uiYield(); }
+    const rows=filtered();
+    if(btn)btn.textContent='⏳ Calculando notas…'; await uiYield();
+    const agg=semanaAgg(rows), profiles=applyResumoRankScores(agg.data, rows);
+    let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankElegivel(m)) mots.push(m); }));
+    mots=resumoRankUnique(mots).sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));   // 1 por MOTORISTA (nota é por pessoa)
+    // média por motorista (Trimble x Abastecimento x meta) — mesma fonte da aba Média
+    const medMap=Object.create(null);
+    try{ mediaAgg(rows).forEach(mm=>{ medMap[norm(mm.nome)]={t:mm.mediaT,a:mm.mediaA,meta:mm.meta,of:mm.oficial}; }); }catch(e){}
+    if(btn)btn.textContent='⏳ Montando evolução mensal…'; await uiYield();
+    const mensalAll=_mobileMensalAll(rows);
+    const cfg=bonifCfg(), cov=dataCoverageRange(), r2=v=>(v==null||!isFinite(v))?null:Math.round(v*100)/100;
+    const drivers=mots.map(m=>{
+      const nn=norm(m.nome), p=m._rankProfile||profiles[nn]||{};
+      const n10=Math.round(m._rankScore||0)/10, tier=bonifTier(n10), valor=(+cfg.base||0)*n10/10;
+      const media=(p.media!=null&&isFinite(p.media))?p.media:null;
+      const meta=(p.meta!=null&&isFinite(p.meta)&&p.meta>0)?p.meta:null;
+      const md=medMap[nn]||{};
+      const aproveit=(media!=null&&meta)?Math.round(media/meta*100):((md.of!=null&&md.meta>0)?Math.round(md.of/md.meta*100):null);
+      const placas=[...new Set((p.recs||[]).map(r=>r.placa).filter(Boolean))].slice(0,12);
+      const comps=(p.components||[]).map(c=>({k:c.k,lab:c.lab,w:c.w,v:Math.round(c.v)}));
+      const admissao=m.admissao||admissaoDe(m.nome)||'';
+      const mensal=(mensalAll[nn]||[]).map(z=>({key:z.key,label:z.label,score:z.score,comps:z.comps}));
+      return { nn, nome:m.nome, op:m.op||'—', placas, admissao, tempo:tempoDeCasa(admissao),
+        movDays:p.movDays||0, pontoDays:p.pontoDays||0, hCond:Math.round(p.hCond||0), km:Math.round(p.km||0),
+        score:Math.round(p.score!=null?p.score:(m._rankScore||0)), n10:Math.round(n10*10)/10,
+        tier:{k:tier.k,lab:tier.lab,ic:tier.ic}, valor:Math.round(valor*100)/100, idDiv:(p.idDiv||0),
+        components:comps, media:r2(media), meta:r2(meta), aproveit,
+        mediaTrimble:r2(md.t!=null?md.t:null), mediaAbast:r2(md.a!=null?md.a:null), mensal };
+    });
+    // o cálculo mensal mexeu no RANKPROFILE_CACHE; restaura o recorte atual para o desktop seguir normal
+    try{ applyResumoRankScores(agg.data, rows); }catch(e){}
+    const out={ v:1, publishedAt:(DATA_UPDATED_AT||Date.now()), dataMin:cov.min||'', dataMax:cov.max||'', bonifBase:(+cfg.base||0), geradoEm:Date.now(), drivers };
+    const json=JSON.stringify(out), mb=(json.length/1048576).toFixed(2);
+    _baixarBlob(new Blob([json],{type:'application/json'}),'dados-mobile.json');
+    const filtros=(($('#fOp')&&$('#fOp').value)||($('#fMot')&&$('#fMot').value)||($('#fBusca')&&$('#fBusca').value)||($('#fDe')&&$('#fDe').value)||($('#fAte')&&$('#fAte').value)||($('#fDia')&&$('#fDia').value));
+    toast('📱 Versão do celular pronta · '+drivers.length.toLocaleString('pt-BR')+' motoristas · '+mb+' MB'+(filtros?' · ⚠ filtros ativos (gere sem filtros p/ a base inteira)':''));
+    return out;
+  }catch(e){ console.error('[Pulso360] gerarDadosMobile', e); toast('Erro ao gerar versão do celular: '+(e.message||e)); return null; }
+  finally{ if(btn){btn.disabled=false;btn.textContent=old||'📱 Gerar dados do celular';} }
+}
 async function _lerSnapshotMultipart(){
   // O manifesto é pequeno e sempre é validado na origem. As partes grandes só são baixadas
   // quando a publicação mudou; quando não mudou, o cache/IndexedDB já restaurado é reutilizado.
@@ -6191,6 +6481,7 @@ $('#printBtn').onclick=exportPainelPDF;
 $('#fichaPdf').onclick=exportFichaPDF;
 $('#dadosLogin').onclick=()=>spLoginId().then(()=>{ applyDadosGate(); tratSyncFromSP(false); });
 $('#btnSnapshot').onclick=gerarDadosPublicacao;
+{ const _bm=$('#btnSnapshotMobile'); if(_bm)_bm.onclick=gerarDadosMobile; }
 $('#btnTratSync').onclick=()=>tratSyncFromSP(true).then(ok=>{ if(ok&&fichaAtual)renderFicha(); });
 $('#btnTratSyncFicha').onclick=()=>tratSyncFromSP(true).then(ok=>{ if(ok&&fichaAtual)renderFicha(); });
 $('#dadosLogout').onclick=async()=>{ try{ if(_msal) await _msal.logoutPopup({}); }catch(e){} TRAT_CACHE=null; _tratSyncTried=false; applyDadosGate(); goTab('semana'); };
@@ -6305,6 +6596,23 @@ TAB_FILTER_STATES.semana=readTopFilterState(); CURRENT_FILTER_TAB='semana';
 async function bootPulso360(){
   const bt=$('#bootLoadTxt'), pill=$('#dataModePill'), txt=$('#dataModeTxt');
   if(pill)pill.classList.remove('real'); if(txt)txt.textContent='carregando dados…';
+  // ===== ETAPA B — MODO CELULAR LEVE: antes de qualquer carga pesada (446 MB) =====
+  // Em celular (tela pequena + toque), nunca baixamos/parseamos a base cheia (iOS mata a aba).
+  // Buscamos só o arquivo leve. Existindo → modo leve. Não existindo → aviso (sem travar).
+  if(_isMobile){
+    try{
+      if(bt)bt.textContent='Carregando a versão do celular…';
+      let j=null;
+      try{ const r=await fetch('dados-mobile.json?_='+Date.now(),{cache:'no-store'}); if(r.ok) j=await r.json(); }catch(e){ console.warn('Pulso360 mobile fetch',e); }
+      if(j && j.v===1 && Array.isArray(j.drivers) && j.drivers.length){
+        MOBILE_LIGHT=true; MOBILE_DATA=j; _initMobileLight();
+      }else{
+        _mobileNotPublished();
+      }
+    }catch(e){ console.error('Pulso360 mobile boot',e); try{_mobileNotPublished();}catch(_){} }
+    finally{ document.body.classList.remove('booting'); }
+    return;   // NÃO segue para a base pesada no celular
+  }
   let temCache=0, pub=false;
   try{
     if(bt)bt.textContent='Restaurando a última base utilizada…';
