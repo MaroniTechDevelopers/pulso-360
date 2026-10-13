@@ -2743,9 +2743,8 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
       (r.movUnid||[]).forEach(s=> ident.push({a:off+s.ini,b:off+s.fim,ok:false}));
       alertsForRec(r).forEach(al=>{ alertas.push({t:off+al.t,niv:al.niv,tipo:al.tipo}); if(al.niv==='A')nAlto++; });
       dd+=r.horasDedoDuro||0;
-      const ds=(dayStats[r.data]=dayStats[r.data]||{hPonto:0,hExtra:0,hCond:0,km:0,_j:new Set(),_m:new Set()});
-      if(journeyNew&&!ds._j.has(jk)){ ds._j.add(jk); ds.hPonto+=r.horasPonto||0; ds.hExtra+=r.horaExtra||0; }
-      (r.mov||[]).forEach(s=>{ const mk=calcMovementSignature(r,s); if(ds._m.has(mk))return; ds._m.add(mk); ds.hCond+=Math.max(0,(s.fim||0)-(s.ini||0)); ds.km+=+s.km||0; });
+      // dayStats é reconstruído abaixo a partir do audit canônico. Não recalcular aqui:
+      // além de duplicar trabalho, as variáveis antigas de jornada já não existem nesta versão otimizada.
       if(r.interjornada!=null){ restMin=(restMin==null)?r.interjornada:Math.min(restMin,r.interjornada); if(r.interjornada<CFG.interjornadaMin) restViol++;
         if(r.punches&&r.punches.length){ const cs=off+r.punches[0]; interj.push({a:cs-r.interjornada,b:cs,min:r.interjornada,viol:r.interjornada<CFG.interjornadaMin,day:r.data}); } }
     });
