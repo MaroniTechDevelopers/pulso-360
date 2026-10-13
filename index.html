@@ -1533,7 +1533,7 @@ function diagnosticoAdmissaoAtual(){
 }
 // média oficial do motorista: abastecimento real (bombas) > estimativa Trimble (km/litros) > cadastro demo
 function mediaDe(nome){ if(MEDIA_OFF) return null; const nn=norm(nome); if(ABAST){ const a=ABAST[nn]; if(a&&a.media!=null) return a.media; }
-  let km=0,l=0; const src=RECORDS_BY_DRIVER_N[nn]||[]; for(const r of src){ km+=r.km||0; l+=r.litros||0; } return l>0? km/l : (drv(nome).media!=null?drv(nome).media:null); }
+  const src=RECORDS_BY_DRIVER_N[nn]||[], au=auditMetrics(src); return au.litros>0? au.km/au.litros : (drv(nome).media!=null?drv(nome).media:null); }
 const NIVEL_DEF=[{k:'ALTO',lab:'Alto',ic:'🔴'},{k:'MEDIO',lab:'Médio',ic:'🟠'},{k:'BAIXO',lab:'Baixo',ic:'🟡'}];
 function tipoLabel(t){ return String(t||'').replace(/_/g,' ').toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase()); }
 // alertas reais de um motorista — Boletim (todos os tipos) tem prioridade; herda a severidade do relatório de Alertas se houver
@@ -1857,26 +1857,114 @@ function calcMovementSignature(r,s){
   const nome=norm((r&&r.motoristaEscala)||''), data=(r&&r.data)||'', a=(s&&s.ini!=null?s.ini:''), b=(s&&s.fim!=null?s.fim:''), pl=placaKey((s&&s.placa)||'');
   return nome+'|'+data+'|'+a+'|'+b+'|'+pl+'|'+Math.round(((s&&+s.km)||0)*100)/100;
 }
+// Auditoria operacional CANÔNICA do painel.
+// Regra central: um motorista nunca pode acumular mais de 24h de condução no mesmo dia civil.
+// Todos os cálculos consolidados usam a UNIÃO dos intervalos reais, nunca a soma cega de registros
+// que podem estar repetidos/sobrepostos entre jornadas, placas ou arquivos importados.
+let OP_AUDIT_CACHE=new WeakMap();
+function _auditMergeIntervals(xs){
+  const a=(xs||[]).filter(x=>x&&Number.isFinite(x[0])&&Number.isFinite(x[1])&&x[1]>x[0]).map(x=>[x[0],x[1]]).sort((x,y)=>x[0]-y[0]||x[1]-y[1]);
+  const out=[]; for(const x of a){const z=out[out.length-1]; if(z&&x[0]<=z[1])z[1]=Math.max(z[1],x[1]); else out.push(x.slice());} return out;
+}
+function _auditSubtract(a,b,covered){
+  let out=[[a,b]]; for(const c of (covered||[])){const nx=[]; for(const x of out){if(c[1]<=x[0]||c[0]>=x[1])nx.push(x);else{if(c[0]>x[0])nx.push([x[0],Math.min(c[0],x[1])]);if(c[1]<x[1])nx.push([Math.max(c[1],x[0]),x[1]]);}} out=nx;if(!out.length)break;} return out;
+}
+function _auditOverlapLen(a,b,merged){ let n=0; for(const x of (merged||[])){if(x[1]<=a)continue;if(x[0]>=b)break;n+=Math.max(0,Math.min(b,x[1])-Math.max(a,x[0]));} return n; }
+function _auditIsoDay(absMin){ const d=new Date(Math.floor(absMin/1440)*1440*60000); return d.toISOString().slice(0,10); }
+function _auditDayStart(absMin){ return Math.floor(absMin/1440)*1440; }
+function _auditSplitCivil(a,b,cb){ let cur=a; while(cur<b){const ds=_auditDayStart(cur),e=Math.min(b,ds+1440); if(e>cur)cb(ds,cur,e); cur=e;} }
 function auditMetrics(rows){
-  const jornadas=new Set(), movs=new Set(), diasPonto=new Set(), diasMov=new Set(), motoristasHex=new Set();
-  let hPonto=0,hExtra=0,hCond=0,km=0,dupJornada=0,dupMov=0,jornadasExtra=0;
-  for(const r of (rows||[])){
-    if(r&&r.punches&&r.punches.length){
-      const jk=calcJourneySignature(r);
-      if(!jornadas.has(jk)){
-        jornadas.add(jk); hPonto+=r.horasPonto||0; hExtra+=r.horaExtra||0; diasPonto.add(r.data);
-        if((r.horaExtra||0)>0){jornadasExtra++;motoristasHex.add(r.motoristaEscala||'');}
-      } else dupJornada++;
+  rows=rows||[];
+  const tag=String(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|'+String(CFG&&CFG.tol||0)+'|'+String(CFG&&CFG.jornadaMin||440);
+  if(Array.isArray(rows)){const c=OP_AUDIT_CACHE.get(rows);if(c&&c.tag===tag)return c.v;}
+
+  const movGroups=Object.create(null), pointByDriver=Object.create(null), pointByBaseDay=Object.create(null), envByDriver=Object.create(null);
+  const pointDayKeys=new Set(), movementDayKeys=new Set(), motoristasHex=new Set();
+  let invalidMov=0,invalidPoint=0,rawMov=0,dupJornada=0,dupMov=0;
+
+  for(const r of rows){
+    if(!r)continue;
+    const nome=r.motoristaEscala||'—', nn=norm(nome)||'—', baseMs=Date.parse(r.data||'');
+    if(!Number.isFinite(baseMs))continue; const baseMin=baseMs/60000;
+
+    // MOVIMENTAÇÃO: usa o timestamp civil real derivado de data + minuto relativo.
+    for(const s of (r.mov||[])){
+      const ai=+s.ini, bi=+s.fim; if(!Number.isFinite(ai)||!Number.isFinite(bi)||bi<=ai)continue;
+      const dur=bi-ai; rawMov++;
+      // Um único evento de condução com mais de 24h é fisicamente impossível e não entra nos indicadores.
+      if(dur>1440){invalidMov++;continue;}
+      const absA=baseMin+ai, absB=baseMin+bi, km0=Math.max(0,+s.km||0), lit0=Math.max(0,+s.litros||0), pl=placaBR(s.placa||'');
+      _auditSplitCivil(absA,absB,(ds,a,b)=>{
+        const iso=new Date(ds*60000).toISOString().slice(0,10), k=nn+'|'+iso, frac=(b-a)/(absB-absA);
+        (movGroups[k]=movGroups[k]||[]).push({nn,nome,date:iso,dayStart:ds,a:a-ds,b:b-ds,absA:a,absB:b,km:km0*frac,litros:lit0*frac,placa:pl,srcDur:b-a});
+      });
     }
-    const mv=(r&&r.mov)||[];
-    if(mv.length) diasMov.add(r.data);
-    for(const seg of mv){
-      const mk=calcMovementSignature(r,seg);
-      if(movs.has(mk)){dupMov++;continue;}
-      movs.add(mk); hCond+=Math.max(0,(seg.fim||0)-(seg.ini||0)); km+=+seg.km||0;
+
+    // PONTO: preserva a sequência real e deduplica pela união dos intervalos.
+    const P=(r.seqP&&r.seqP.length===r.punches.length)?r.seqP:(r.punches||[]);
+    if(P&&P.length){
+      const pnums=P.map(v=>typeof v==='number'?v:toMin(v)).filter(v=>Number.isFinite(v));
+      if(pnums.length){
+        const p0=pnums[0], p1=pnums[pnums.length-1];
+        if(pnums.length>=2 && p1>p0 && p1-p0<=1440){(envByDriver[nn]=envByDriver[nn]||[]).push([baseMin+p0-(CFG.tol||0),baseMin+p1+(CFG.tol||0)]);}
+        for(let i=0;i+1<pnums.length;i+=2){
+          const a=pnums[i],b=pnums[i+1]; if(!(b>a))continue; const dur=b-a;
+          if(dur>1440){invalidPoint++;continue;}
+          const A=baseMin+a,B=baseMin+b; (pointByDriver[nn]=pointByDriver[nn]||[]).push([A,B]);
+          const bk=nn+'|'+r.data; (pointByBaseDay[bk]=pointByBaseDay[bk]||[]).push([A,B]); pointDayKeys.add(bk);
+        }
+      }
     }
   }
-  return {hPonto,hExtra,hCond,km,diasPonto:diasPonto.size,diasMov:diasMov.size,jornadas:jornadas.size,jornadasExtra,motoristasHex:motoristasHex.size,dupJornada,dupMov};
+
+  // Canoniza a movimentação por motorista + DIA CIVIL. Intervalos sobrepostos contam UMA vez.
+  const segments=[],byDay=Object.create(null),plateMinutes=Object.create(null),driverDayMinutes=Object.create(null);
+  let hCond=0,km=0,litros=0,overlapMovMin=0,conflictPlateMin=0,maxDriverDayCond=0;
+  const canonicalByDriver=Object.create(null);
+  for(const k in movGroups){
+    const arr=movGroups[k].slice().sort((x,y)=>x.a-y.a||(y.b-y.a)-(x.b-x.a)||String(x.placa).localeCompare(String(y.placa)));
+    let covered=[],accepted=[];
+    for(const p of arr){
+      const uncovered=_auditSubtract(p.a,p.b,covered), free=uncovered.reduce((s,x)=>s+x[1]-x[0],0), ov=(p.b-p.a)-free;
+      if(ov>0){overlapMovMin+=ov;dupMov++; for(const q of accepted){const o=Math.max(0,Math.min(p.b,q.b)-Math.max(p.a,q.a));if(o>0&&p.placa&&q.placa&&p.placa!==q.placa)conflictPlateMin+=o;}}
+      for(const u of uncovered){const f=(u[1]-u[0])/(p.b-p.a);accepted.push({nn:p.nn,nome:p.nome,date:p.date,dayStart:p.dayStart,a:u[0],b:u[1],absA:p.dayStart+u[0],absB:p.dayStart+u[1],km:p.km*f,litros:p.litros*f,placa:p.placa});}
+      if(uncovered.length)covered=_auditMergeIntervals(covered.concat(uncovered));
+    }
+    accepted.sort((a,b)=>a.a-b.a||a.b-b.b);
+    const compact=[]; for(const s of accepted){const z=compact[compact.length-1];if(z&&z.b===s.a&&z.placa===s.placa){z.b=s.b;z.absB=s.absB;z.km+=s.km;z.litros+=s.litros;}else compact.push(Object.assign({},s));}
+    const dayMin=compact.reduce((s,x)=>s+(x.b-x.a),0); driverDayMinutes[k]=dayMin; maxDriverDayCond=Math.max(maxDriverDayCond,dayMin);
+    movementDayKeys.add(k); hCond+=dayMin;
+    for(const x of compact){km+=x.km;litros+=x.litros;segments.push(x);(canonicalByDriver[x.nn]=canonicalByDriver[x.nn]||[]).push(x); if(x.placa)plateMinutes[x.placa]=(plateMinutes[x.placa]||0)+(x.b-x.a); const d=(byDay[x.date]=byDay[x.date]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hCond+=x.b-x.a;d.km+=x.km;d.litros+=x.litros;}
+  }
+
+  // Ponto canônico por motorista (tempo efetivamente registrado, sem sobreposição duplicada).
+  const mergedPointByDriver=Object.create(null),pointSegments=[]; let hPonto=0;
+  for(const nn in pointByDriver){const m=_auditMergeIntervals(pointByDriver[nn]);mergedPointByDriver[nn]=m;hPonto+=m.reduce((s,x)=>s+x[1]-x[0],0);for(const x of m)_auditSplitCivil(x[0],x[1],(ds,a,b)=>{const iso=new Date(ds*60000).toISOString().slice(0,10);pointSegments.push({nn,date:iso,dayStart:ds,a:a-ds,b:b-ds,absA:a,absB:b});const d=(byDay[iso]=byDay[iso]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hPonto+=b-a;});}
+
+  // Hora extra por jornada/dia de origem, depois da deduplicação dos pares de ponto.
+  const extraByDay=Object.create(null); let hExtra=0,jornadasExtra=0;
+  const diasPonto=new Set();
+  for(const bk in pointByBaseDay){const m=_auditMergeIntervals(pointByBaseDay[bk]);let dur=m.reduce((s,x)=>s+x[1]-x[0],0);if(dur>1440){invalidPoint++;dur=1440;}const iso=bk.slice(bk.lastIndexOf('|')+1),ex=Math.max(0,dur-(CFG.jornadaMin||440));extraByDay[iso]=(extraByDay[iso]||0)+ex;diasPonto.add(bk);if(ex>0){hExtra+=ex;jornadasExtra++;motoristasHex.add(bk.slice(0,bk.lastIndexOf('|')));}}
+  for(const iso in extraByDay){const d=(byDay[iso]=byDay[iso]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hExtra+=extraByDay[iso];}
+
+  // Fora da jornada: mede sobre a condução canônica. Movimento sem ponto continua separado de "fora real".
+  const mergedEnv=Object.create(null); for(const nn in envByDriver)mergedEnv[nn]=_auditMergeIntervals(envByDriver[nn]);
+  let hForaReal=0,hDedo=0,hCondWithPoint=0; const movNoPoint=new Set(),daysFora=new Set(),driversFora=new Set();
+  for(const nn in canonicalByDriver){const env=mergedEnv[nn]||[];for(const x of canonicalByDriver[nn]){const dayA=x.dayStart,dayB=dayA+1440,dur=x.b-x.a,hasPointDay=env.some(e=>e[1]>dayA&&e[0]<dayB),cov=_auditOverlapLen(x.absA,x.absB,env);let fora=0;if(hasPointDay){fora=Math.max(0,dur-cov);x.foraMin=fora;x.fora=fora>0;x.semPonto=false;hForaReal+=fora;hCondWithPoint+=dur;hDedo+=fora;if(fora>0){daysFora.add(nn+'|'+x.date);driversFora.add(nn);}}else{x.foraMin=0;x.fora=false;x.semPonto=true;hDedo+=dur;movNoPoint.add(nn+'|'+x.date);}const d=(byDay[x.date]=byDay[x.date]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});if(hasPointDay){d.hFora+=fora;d.hDedo+=fora;d.hCondWithPoint+=dur;}else d.hDedo+=dur;}}
+
+  const diasMov=new Set(movementDayKeys),pointNoMov=new Set(); for(const pk of pointDayKeys)if(!movementDayKeys.has(pk))pointNoMov.add(pk);
+  const out={hPonto,hExtra,hCond,km,litros,hForaReal,hDedo,hCondWithPoint,
+    diasPonto:diasPonto.size,diasMov:diasMov.size,jornadas:diasPonto.size,jornadasExtra,motoristasHex:motoristasHex.size,
+    movDaysNoPoint:movNoPoint.size,pointDaysNoMov:pointNoMov.size,daysFora:daysFora.size,driversFora:driversFora.size,
+    dupJornada,dupMov,overlapMovMin,conflictPlateMin,invalidMov,invalidPoint,maxDriverDayCond,
+    segments,pointSegments,byDay,extraByDay,plateMinutes};
+  if(Array.isArray(rows))OP_AUDIT_CACHE.set(rows,{tag,v:out}); return out;
+}
+let RECORD_DAY_AUDIT_CACHE=new WeakMap();
+function auditRecordDay(r){
+  if(!r)return {hCond:0,km:0,hFora:0,hDedo:0,hPonto:0,hExtra:0,prim:null,ult:null};
+  const tag=String(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|'+String(CFG&&CFG.tol||0)+'|'+String(CFG&&CFG.jornadaMin||440),c=RECORD_DAY_AUDIT_CACHE.get(r);if(c&&c.tag===tag)return c.v;
+  const a=auditMetrics([r]),d=(a.byDay&&a.byDay[r.data])||{},segs=(a.segments||[]).filter(s=>s.date===r.data); const v={hCond:d.hCond||0,km:d.km||0,hFora:d.hFora||0,hDedo:d.hDedo||0,hPonto:d.hPonto||0,hExtra:(a.extraByDay&&a.extraByDay[r.data])||0,prim:segs.length?Math.min(...segs.map(s=>s.a)):null,ult:segs.length?Math.max(...segs.map(s=>s.b)):null}; RECORD_DAY_AUDIT_CACHE.set(r,{tag,v});return v;
 }
 
 function build(forceAnalyze=false){
@@ -1916,6 +2004,9 @@ function build(forceAnalyze=false){
     // RAW continua sendo a fonte editável. O marcador ready só existe nas fotografias salvas/publicadas.
     if(REAL && RAW) RAW._readyRecords=0;
   }
+  // Normaliza placas também em snapshots já publicados anteriormente. Assim a correção de placa
+  // vale imediatamente só com a troca do index, sem exigir regenerar a pasta dados.
+  sanitizeRecordPlates(RECORDS);
   // Campos normalizados usados pelos filtros. Evita milhares de chamadas a norm() a cada clique/tecla.
   RECORDS_BY_DRIVER_N=Object.create(null); RECORDS_BY_PLATE_N=Object.create(null); RECORDS_BY_TRIMBLE_N=Object.create(null); RECORDS_BY_OP=Object.create(null); RECORDS_BY_DATE=Object.create(null); RECORDS_BY_STATUS=Object.create(null); RECORDS_BY_FECHA=Object.create(null); RECORD_DRIVER_NAMES_N=new Set(); RECORD_PLATE_KEYS_N=new Set(); RECORD_TRIMBLE_NAMES_N=new Set(); RECORD_DATE_KEYS=[]; PONTO_RECORDS_BY_OP=Object.create(null); PONTO_RECORDS_BY_DATE=Object.create(null); PLATE_RECORD_SUMMARY=Object.create(null); HAS_MOVEMENT_RECORDS=false; GLOBAL_DIV_COUNT=0; DIVERG_RECORDS=[]; PONTO_STATS_GLOBAL={all:Object.create(null),byCpf:Object.create(null),byName:Object.create(null),byCanon:Object.create(null),canonCount:Object.create(null)};
   RECORDS.forEach(r=>{
@@ -2112,7 +2203,10 @@ function renderKpis(rows){
     if(hasP){jCond+=(r.horasMov||0);jFora+=dd;}
     motSetS.add(r.motoristaEscala); if(!MEDIA_OFF){kmTot+=r.km||0;litTot+=r.litros||0;}
   }
-  const total=rows.length, motsDedo=motsDedoS.size, motsHex=audit.motoristasHex, motsInterj=motsInterjS.size, jornadasHex=audit.jornadasExtra;
+  // Todos os indicadores temporais/quilométricos abaixo usam a camada canônica auditada.
+  dedo=audit.hForaReal||0; movSemPonto=audit.movDaysNoPoint||0; pontoSemMov=audit.pointDaysNoMov||0; movDays=audit.diasMov||0;
+  jCond=audit.hCondWithPoint||0; jFora=audit.hForaReal||0; kmTot=audit.km||0; litTot=audit.litros||0;
+  const total=rows.length, motsDedo=audit.driversFora||0, motsHex=audit.motoristasHex, motsInterj=motsInterjS.size, jornadasHex=audit.jornadasExtra;
   const ajFrota=jCond>0?Math.max(0,Math.round((jCond-jFora)/jCond*100)):null;
   const cobPonto=movDays?Math.round((movDays-movSemPonto)/movDays*100):null;
   const motSet=[...motSetS];
@@ -2220,7 +2314,7 @@ function rankProfile(nome,recs){
   // BONIFICAÇÃO: só penaliza hora extra ACIMA de 2h/dia (120 min). Até 2h de extra por dia não conta.
   // IMPORTANTE: mede a MÉDIA DIÁRIA de excesso (por dia trabalhado), NÃO dividido pelo total de horas —
   // dividir por hPonto diluía o excesso (quem trabalha muito "escondia" várias horas acima de 2h/dia).
-  const hExtra2=(recs||[]).reduce((s,r)=>s+Math.max(0,(r.horaExtra||0)-120),0);  // min de excesso acima de 2h/dia, somados
+  const hExtra2=Object.values(audit.extraByDay||{}).reduce((s,v)=>s+Math.max(0,(+v||0)-120),0);  // excesso canônico acima de 2h/dia
   const EXTRA_CAP=120;  // média de 2h de EXCESSO por dia (≈4h de extra/dia) = nota 0
   const extraMediaDia=pontoDays>0?hExtra2/pontoDays:0;  // excesso médio (min) por dia trabalhado
   const extraScore=pontoDays>0?rankClamp(100*(1-Math.min(1,extraMediaDia/EXTRA_CAP))):null;
@@ -2229,10 +2323,10 @@ function rankProfile(nome,recs){
   const datas=(recs||[]).map(r=>r.data).filter(Boolean).sort(), opF=$('#fOp').value; let multaRange=null;
   if(datas.length||opF)multaRange=Object.assign(datas.length?{de:datas[0],ate:datas[datas.length-1]}:{},opF?{op:opF}:{});
   const multaTot=MULTAS_N?multasCondutaMotoristaCount(nome,multaRange):0, multaRate=multaTot*100/hCondH;
-  const d=drv(nome), litros=(recs||[]).reduce((s,r)=>s+(+r.litros||0),0), ab=ABAST&&ABAST[norm(nome)];
+  const d=drv(nome), litros=audit.litros||0, ab=ABAST&&ABAST[norm(nome)];
   const media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(litros>0?audit.km/litros:d.media));
-  // meta = da placa que o motorista MAIS rodou no período (≈ placa atual dele), não a primeira
-  const _plC={}; (recs||[]).forEach(r=>{ if(r.placa)_plC[r.placa]=(_plC[r.placa]||0)+(r.horasMov||1); }); let _plMain='',_plBest=-1; for(const p in _plC){ if(_plC[p]>_plBest){_plBest=_plC[p];_plMain=p;} }
+  // meta = da placa que o motorista MAIS rodou no período, usando minutos canônicos (sem duplicidade)
+  const _plC=audit.plateMinutes||{}; let _plMain='',_plBest=-1; for(const p in _plC){ if(_plC[p]>_plBest){_plBest=_plC[p];_plMain=p;} }
   const rr={placa:_plMain||((recs||[]).find(r=>r.placa)||{}).placa||''}, meta=metaVeic(rr.placa||'',(recs&&recs[0]&&recs[0].operacao)||'');
   // Média via Trimble: km < 0,5 km/l é impossível p/ caminhão = DISTÂNCIA furada no Trimble → NÃO entra no quesito
   // (vira "sem dado", não penaliza com 0). Veículos com sensor ok seguem normais.
@@ -2325,13 +2419,14 @@ function resumoMotoristaConsolidado(ms, rows){
   ms=ms||[]; rows=rows||[]; if(!ms.length||!rows.length)return ms[0]||null;
   const nome=(rows[0]&&rows[0].motoristaEscala)||(ms[0]&&ms[0].nome)||'—';
   const audit=auditMetrics(rows), semanas=Object.create(null), placas=new Set(), ops=new Set();
-  let dd=0,ddReal=0,litros=0,idDiv=0,pend=0;
+  let dd=audit.hDedo||0,ddReal=audit.hForaReal||0,litros=audit.litros||0,idDiv=0,pend=0;
+  const byW=Object.create(null);
   for(const r of rows){
-    if(r.semKey)semanas[r.semKey]=(semanas[r.semKey]||0)+(r.ddReal||0);
-    dd+=r.horasDedoDuro||0; ddReal+=r.ddReal||0; litros+=+r.litros||0;
-    if(r.placa)placas.add(r.placa); if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
+    if(r.semKey)(byW[r.semKey]=byW[r.semKey]||[]).push(r);
+    if(r.placa){const _p=placaBR(r.placa);if(_p)placas.add(_p);} if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
     if(r.idDivergente)idDiv++; if(r.sev==='pendente')pend++;
   }
+  for(const wk in byW)semanas[wk]=auditMetrics(byW[wk]).hForaReal||0;
   const p=(ms.find(x=>x&&x._rankProfile)||{})._rankProfile||null;
   const d=drv(nome), ab=ABAST&&ABAST[norm(nome)];
   const media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(litros>0?audit.km/litros:(p&&p.media!=null?p.media:d.media)));
@@ -2371,9 +2466,16 @@ function semanaAgg(rows){
   const ultima=weeks.length?weeks[weeks.length-1].key:null, rng=activeRange();
   const data=Object.values(opMap).sort((a,b)=>a.op.localeCompare(b.op,'pt-BR')).map(og=>{
     const list=Object.values(og.mots);
-    list.forEach(m=>{ const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)]; m.media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(m.litros>0?(m.km/m.litros):d.media)); m.op=og.op; m.meta=metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
+    list.forEach(m=>{
+      // Consolidação auditável: duração/KM/litros/fora da jornada pela união real dos intervalos.
+      const au=auditMetrics(m.recs); m.mov=au.hCond||0; m.ponto=au.hPonto||0; m.km=au.km||0; m.litros=au.litros||0; m.dd=au.hDedo||0; m.ddReal=au.hForaReal||0; m.dias=au.daysFora||0; m._movDays=au.diasMov||0;
+      // Farol semanal também usa fora da jornada canônico por semana, sem duplicar registros.
+      const byW=Object.create(null); (m.recs||[]).forEach(r=>{ if(r.semKey)(byW[r.semKey]=byW[r.semKey]||[]).push(r); }); m.semanas={}; for(const wk in byW)m.semanas[wk]=auditMetrics(byW[wk]).hForaReal||0;
+      const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)]; m.media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(m.litros>0?(m.km/m.litros):d.media)); m.op=og.op; m.meta=metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
       m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs); m.aj=aderJornada(m.recs);
-      m._alR=alertasResumo(m.nome,rng); m._multaTot=MULTAS_N?multasCondutaMotoristaCount(m.nome,rng):0; m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls; });
+      m._alR=alertasResumo(m.nome,rng); m._multaTot=MULTAS_N?multasCondutaMotoristaCount(m.nome,rng):0; m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls;
+    });
+    og.dd=list.reduce((a,m)=>a+(m.ddReal||0),0); og.motsDedo=new Set(list.filter(m=>(m.ddReal||0)>0).map(m=>m.nome));
     list.sort(resumoRankCmp);
     return {op:og.op,list,dd:og.dd,aj:aderJornada(og.opRows),motsDedo:og.motsDedo.size};
   });
@@ -2586,6 +2688,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
   const shown=groups.slice(0,cap); const ids=[]; const noun=mode==='fecha'?'períodos':(mode==='dia'?'dias':'semanas'); const zoomTxt=mode==='dia'?'dia → horas':(mode==='fecha'?'período → dia → horas':'semana → dia → horas');
   const html=shown.map((g,i)=>{
     const id=prefix+i; ids.push(id); const ponto=[],mov=[],alertas=[],ident=[],interj=[],dayStats=Object.create(null); const multas=multaTimelineEvents(g.nome,g.start,g.total); let dd=0,km=0,hpon=0,hcond=0,hex=0,nAlto=0,restMin=null,restViol=0; const placas=new Set(), dias=new Set(), ops=new Set(), journeySeen=new Set(), movSeen=new Set(), movRecSeen=new Set();
+    const audit=auditMetrics(g.recs);
     const drvInfo=timelineDriversFromRecs(g.recs), cameraDrivers=new Set(drvInfo.actual);
     const feriasDays=feriasPeriodo(g.nome,g.start,g.total);
     g.recs.forEach(r=>{ const dIdx=Math.round((Date.parse(r.data)-Date.parse(g.start))/86400000); const off=dIdx*1440; dias.add(r.data); if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
@@ -2595,7 +2698,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
       // H Condução e Km pela UNIÃO por registro (r.horasMov/r.km já descontam placas simultâneas); dedup por registro
       const recKey=r.shiftId||('MS|'+r.data); if(!movRecSeen.has(recKey)){ movRecSeen.add(recKey); hcond+=r.horasMov||0; km+=r.km||0; }
       const idDiv=!!r.idDivergente; const idWho=r.idDivergente?(r.trimbleMot||'') : '';
-      r.mov.forEach(s=>{ const mk=calcMovementSignature(r,s); if(movSeen.has(mk))return; movSeen.add(mk); const _lo=(r.entradaU!=null?r.entradaU:r.entrada), _hi=(r.saidaU!=null?r.saidaU:r.saida); const fora=(_lo!=null&&(s.ini<_lo-CFG.tol||s.fim>_hi+CFG.tol)); mov.push({a:off+s.ini,b:off+s.fim,km:s.km,placa:s.placa,fora}); if(s.placa)placas.add(s.placa); });
+      r.mov.forEach(s=>{ const mk=calcMovementSignature(r,s); if(movSeen.has(mk))return; movSeen.add(mk); const _lo=(r.entradaU!=null?r.entradaU:r.entrada), _hi=(r.saidaU!=null?r.saidaU:r.saida); const fora=(_lo!=null&&(s.ini<_lo-CFG.tol||s.fim>_hi+CFG.tol)); const pl=placaBR(s.placa); mov.push({a:off+s.ini,b:off+s.fim,km:s.km,placa:pl,fora}); if(pl)placas.add(pl); });
       const camSegs=(r.segs||[]).filter(s=>s&&s.motorista&&s.ini!=null&&s.fim!=null);
       if(camSegs.length){ camSegs.forEach(s=>{cameraDrivers.add(s.motorista); ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:s.motorista,color:driverColor(s.motorista),div:norm(s.motorista)!==norm(r.motoristaEscala),who:s.motorista});}); }
       else r.mov.forEach(s=>ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:r.trimbleMot||r.motoristaEscala,color:driverColor(r.trimbleMot||r.motoristaEscala),div:idDiv,who:idWho||r.trimbleMot||r.motoristaEscala}));
@@ -2608,6 +2711,15 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
       if(r.interjornada!=null){ restMin=(restMin==null)?r.interjornada:Math.min(restMin,r.interjornada); if(r.interjornada<CFG.interjornadaMin) restViol++;
         if(r.punches&&r.punches.length){ const cs=off+r.punches[0]; interj.push({a:cs-r.interjornada,b:cs,min:r.interjornada,viol:r.interjornada<CFG.interjornadaMin,day:r.data}); } }
     });
+    // VALIDAÇÃO GLOBAL: os números e a linha Direção usam a união canônica por motorista + dia civil.
+    // Isso impede 30h/60h/90h em um único dia quando existem registros repetidos ou sobrepostos.
+    ponto.length=0; mov.length=0; placas.clear();
+    hpon=audit.hPonto||0; hcond=audit.hCond||0; hex=audit.hExtra||0; km=audit.km||0; dd=audit.hForaReal||0;
+    (audit.pointSegments||[]).forEach(s=>{ const dIdx=Math.round((Date.parse(s.date)-Date.parse(g.start))/86400000); if(dIdx<0||dIdx*1440>=g.total)return; ponto.push([dIdx*1440+s.a,dIdx*1440+s.b]); });
+    (audit.segments||[]).forEach(s=>{ const dIdx=Math.round((Date.parse(s.date)-Date.parse(g.start))/86400000); if(dIdx<0||dIdx*1440>=g.total)return; const pl=placaBR(s.placa); mov.push({a:dIdx*1440+s.a,b:dIdx*1440+s.b,km:s.km,placa:pl,fora:!!s.fora}); if(pl)placas.add(pl); });
+    for(const k of Object.keys(dayStats)) delete dayStats[k];
+    for(const d in (audit.byDay||{})){ const x=audit.byDay[d]; dayStats[d]={hPonto:x.hPonto||0,hExtra:x.hExtra||0,hCond:x.hCond||0,km:x.km||0}; }
+
     const identPct = aderTrilhaIdent(ident);   // % realmente verde na trilha; vermelho reduz o indicador
     ZTL[id]={weekStart:g.start, ponto, mov, alertas, multas, ident, interj, dayStats, ferias:feriasDays, motorista:g.nome, t0:0, t1:g.total, total:g.total};
     const opsArr=[...ops]; const opTxt=opsArr.join(', ')||'—';
@@ -2949,18 +3061,15 @@ function timelinesHTML(rows){
   let glines=''; for(let t=w.lo;t<=w.hi;t+=60){ glines+=`<div class="gl" style="left:${pos(t,w)}%"></div>`; }
 
   return rows.map(r=>{
+    const va=auditRecordDay(r), ra=auditMetrics([r]);
     // ponto: pares trabalhados
     let pontoSegs='';
     const _P=(r.seqP&&r.seqP.length===r.punches.length)?r.seqP:r.punches;
     for(let i=0;i+1<_P.length;i+=2){ pontoSegs+=seg('ponto',_P[i],_P[i+1],w, clock(_P[i])+'–'+clock(_P[i+1])); }
     if(_P.length===1){ pontoSegs+=`<div class="seg ponto" style="left:${pos(_P[0],w)}%;width:1.2%" title="batida única">•</div>`; }
-    // movimento (rótulo: placa + km)
-    const multiPlaca=(r.placas&&r.placas.length>1);
-    const movSegs=r.mov.map(s=>{
-      const foraFlag = (r.entrada!=null && (s.ini<r.entrada-CFG.tol || s.fim>r.saida+CFG.tol)) ? 'fora':'';
-      const lab=[ (multiPlaca&&s.placa)?s.placa:'', s.km?Math.round(s.km)+' km':'' ].filter(Boolean).join(' · ');
-      return seg('mov',s.ini,s.fim,w, lab, foraFlag);
-    }).join('');
+    // movimento canônico do DIA: sobreposição/duplicidade nunca aumenta a duração acima de 24h.
+    const dayMov=(ra.segments||[]).filter(s=>s.date===r.data),multiPlaca=new Set(dayMov.map(s=>s.placa).filter(Boolean)).size>1;
+    const movSegs=dayMov.map(s=>{ const lab=[(multiPlaca&&s.placa)?s.placa:'',s.km?Math.round(s.km)+' km':''].filter(Boolean).join(' · '); return seg('mov',s.a,s.b,w,lab,s.fora?'fora':''); }).join('');
     // trimble
     const idSegs=r.segs.filter(s=>s.ini!=null&&s.fim!=null).map(s=>{
       const ok = norm(s.motorista)===norm(r.motoristaEscala);
@@ -2973,7 +3082,7 @@ function timelinesHTML(rows){
                                      : `<span class="flag" style="border-color:color-mix(in srgb,var(--good) 45%,var(--border))"><span class="fi" style="background:var(--good)"></span>Tudo confere</span>`;
     const stLabel = SEV_LABEL[r.sev]||r.sev;
 
-    const veicMeta = (r.placas&&r.placas.length)? (r.placas.length>1? r.placas.length+' veíc.' : r.placas[0]) : (r.placa||'—');
+    const veicMeta = (r.placas&&r.placas.length)? (r.placas.length>1? r.placas.map(placaBR).filter(Boolean).length+' veíc.' : (placaBR(r.placas[0])||'—')) : (placaBR(r.placa)||'—');
     const trimbleTrack = BASES.trim ? `<div class="track"><span class="tlab">Trimble</span><div class="lane">${glines}${idLane}</div></div>` : '';
     return `<div class="card tl-card">
       <div class="tl-head">
@@ -2981,11 +3090,11 @@ function timelinesHTML(rows){
         <span class="status ${r.sev}"><span class="d"></span>${stLabel}</span>
         <div class="meta">
           <div class="m"><span>Ponto</span><b>${r.entrada!=null?clock(r.entradaU!=null?r.entradaU:r.entrada)+'–'+clock(r.saidaU!=null?r.saidaU:r.saida):'—'}</b></div>
-          <div class="m"><span>Direção</span><b>${r.primMov!=null?clock(r.primMov)+'–'+clock(r.ultMov):'—'}</b></div>
+          <div class="m"><span>Direção</span><b>${va.prim!=null?clock(va.prim)+'–'+clock(va.ult):'—'}</b></div>
           <div class="m"><span>Condutor</span><b style="color:${r.idDivergente?'var(--crit-ink)':'inherit'}">${firstName(r.trimbleMot||r.motoristaEscala)}</b></div>
-          <div class="m"><span>Fora da jornada</span><b style="color:${r.horasDedoDuro>0?'var(--serious)':'inherit'}">${r.horasDedoDuro>0?hDec(r.horasDedoDuro):'—'}</b></div>
+          <div class="m"><span>Fora da jornada</span><b style="color:${va.hFora>0?'var(--serious)':'inherit'}">${va.hFora>0?hDec(va.hFora):'—'}</b></div>
           <div class="m"><span>Veículo</span><b>${veicMeta}</b></div>
-          <div class="m"><span>Km</span><b>${r.km?Math.round(r.km):'—'}</b></div>
+          <div class="m"><span>Km</span><b>${va.km?Math.round(va.km):'—'}</b></div>
         </div>
       </div>
       <div class="ruler">${ticks}</div>
@@ -3074,12 +3183,11 @@ function fichaMetrics(nome){
     if(_stt && r.sev!==_stt) return false;
     return true; });
   const d=drv(nome);
-  const porSemana={}; recs.forEach(r=>porSemana[r.semKey]=(porSemana[r.semKey]||0)+(r.ddReal||0));  // farol semanal = fora da jornada real
-  const ddTotal=recs.reduce((a,r)=>a+r.horasDedoDuro,0);
-  const ddRealTotal=recs.reduce((a,r)=>a+(r.ddReal||0),0);
-  // Usa a mesma auditoria/deduplicação dos KPIs gerais: jornada única para Ponto/Extra
-  // e trecho único de movimento para Condução/KM.
+  // Usa a mesma auditoria canônica dos KPIs gerais em toda a ficha.
   const audit=auditMetrics(recs);
+  const porSemana={},byW=Object.create(null); recs.forEach(r=>{if(r.semKey)(byW[r.semKey]=byW[r.semKey]||[]).push(r);}); for(const wk in byW)porSemana[wk]=auditMetrics(byW[wk]).hForaReal||0;
+  const ddTotal=audit.hDedo||0;
+  const ddRealTotal=audit.hForaReal||0;
   const hexTotal=audit.hExtra;
   const diasHex=new Set(recs.filter(r=>(r.horaExtra||0)>0).map(r=>r.data)).size;
   const semel=aderRecs(recs);   // aderência da CÂMERA/placa (qualquer condutor) — ponderada pelo tempo
@@ -3089,7 +3197,7 @@ function fichaMetrics(nome){
   const placas=[...new Set(recs.map(r=>r.placa).filter(Boolean))].join(', ');
   const alR=alertasResumo(nome, activeRange()); const totAl=alR.total;
   const adm=admissaoDe(nome); const tempo=tempoDeCasa(adm);
-  const kmR=audit.km, litrosR=recs.reduce((a,r)=>a+(r.litros||0),0);
+  const kmR=audit.km, litrosR=audit.litros||0;
   const abF=ABAST&&ABAST[norm(nome)];
   const mediaR = MEDIA_OFF?null:((abF&&abF.media!=null)?abF.media:(litrosR>0?kmR/litrosR:d.media));   // média oculta até revisão; fonte será validada pela Trimble
   const metaFicha = metaVeic(recs.length?(recs.find(r=>r.placa)||{}).placa:'', recs.length?recs[0].operacao:'');
@@ -3423,13 +3531,9 @@ function exportFichaPDF(){
 function exportPainelPDF(){
   const rows=filtered();
   if(!rows.length){ toast('Sem registros no filtro atual'); return; }
-  // agregados (mesma base dos KPIs)
-  const dedo=rows.reduce((a,r)=>a+(r.ddReal||0),0);
-  const motsDedo=new Set(rows.filter(r=>(r.ddReal||0)>0).map(r=>r.motoristaEscala)).size;
-  const hex=rows.reduce((a,r)=>a+(r.horaExtra||0),0);
-  const movSemPonto=rows.filter(r=>r.movimento.length>0 && r.punches.length===0).length;
-  const pontoSemMov=rows.filter(r=>r.punches.length>0 && r.movimento.length===0).length;
-  const movDays=rows.filter(r=>r.movimento.length>0).length;
+  // agregados canônicos (mesma camada de validação usada na tela)
+  const audit=auditMetrics(rows), dedo=audit.hForaReal||0, motsDedo=audit.driversFora||0, hex=audit.hExtra||0;
+  const movSemPonto=audit.movDaysNoPoint||0, pontoSemMov=audit.pointDaysNoMov||0, movDays=audit.diasMov||0;
   const cobPonto=movDays?Math.round((movDays-movSemPonto)/movDays*100):null;
   const motSet=[...new Set(rows.map(r=>r.motoristaEscala))];
   const identSel=aderRecs(rows);   // ponderado pelo tempo
@@ -3550,18 +3654,19 @@ function renderTable(rows){
   }
   const CAP=600, shown=sorted.slice(0,CAP);
   $('#tblBody').innerHTML = shown.map(r=>{
+    const va=auditRecordDay(r);
     const chip=`<span class="chip ${r.sev}">${SEV_LABEL[r.sev]||r.sev}</span>`;
-    const veic=(r.placas&&r.placas.length)? (r.placas.length>1? r.placas.length+' veíc.' : r.placas[0]) : (r.placa||'—');
-    const ddCell = r.horasDedoDuro>0?`<span class="badcell">${hm(r.horasDedoDuro)}</span>`:'—';
-    const hexCell = r.horaExtra>0?`<span class="badcell" style="background:var(--warning-bg,rgba(245,158,11,.15));color:var(--warning)">${hm(r.horaExtra)}</span>`:'—';
+    const veic=(r.placas&&r.placas.length)? (r.placas.length>1? r.placas.length+' veíc.' : (placaBR(r.placas[0])||'—')) : (placaBR(r.placa)||'—');
+    const ddCell = va.hFora>0?`<span class="badcell">${hm(va.hFora)}</span>`:'—';
+    const hexCell = va.hExtra>0?`<span class="badcell" style="background:var(--warning-bg,rgba(245,158,11,.15));color:var(--warning)">${hm(va.hExtra)}</span>`:'—';
     return `<tr class="tblrow" data-mot="${encodeURIComponent(r.motoristaEscala||'')}" data-dia="${r.data}" title="ver na linha do tempo" style="cursor:pointer">
       <td>${r.operacao}</td><td class="tnum">${brDate(r.data)}</td>
       <td>${r.motoristaEscala||'—'}</td>
       <td title="${(r.placas&&r.placas.join(', '))||''}">${veic}</td>
       <td class="tnum">${r.entrada!=null?clock(r.entradaU!=null?r.entradaU:r.entrada)+'–'+clock(r.saidaU!=null?r.saidaU:r.saida):(r.punches.length?'—':'<span class="pendcell">sem ponto</span>')}</td>
-      <td class="tnum">${r.horasPonto?hDec(r.horasPonto):'—'}</td>
-      <td class="tnum">${r.primMov!=null?clock(r.primMov)+'–'+clock(r.ultMov):(r.movimento.length?'—':'<span class="pendcell">sem direção</span>')}</td>
-      <td class="tnum">${r.horasMov?hDec(r.horasMov):'—'}</td>
+      <td class="tnum">${va.hPonto?hDec(va.hPonto):'—'}</td>
+      <td class="tnum">${va.prim!=null?clock(va.prim)+'–'+clock(va.ult):(r.movimento.length?'—':'<span class="pendcell">sem direção</span>')}</td>
+      <td class="tnum">${va.hCond?hDec(va.hCond):'—'}</td>
       <td class="tnum">${hexCell}</td>
       <td class="tnum">${ddCell}</td>
       <td>${chip}</td></tr>`;
@@ -4286,9 +4391,10 @@ function identCoverageWarning(){
 function renderAderencia(rows){
   const box=$('#aderBox'), kbox=$('#aderKpis'); if(!box) return;
   const ops={};
-  rows.forEach(r=>{ const o=r.operacao||'—'; const g=(ops[o]=ops[o]||{op:o,idW:0,idT:0,mot:new Set(),placas:new Set(),dd:0,hex:0});
-    const v=(r.aderencia!=null)?r.aderencia:r.semelhanca; if(v!=null){ const w=(r.horasMov||1); g.idW+=v*w; g.idT+=w; }
-    g.mot.add(r.motoristaEscala); ((r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[])).forEach(p=>g.placas.add(placaKey(p))); g.dd+=r.horasDedoDuro||0; g.hex+=r.horaExtra||0; });
+  rows.forEach(r=>{ const o=r.operacao||'—'; const g=(ops[o]=ops[o]||{op:o,idW:0,idT:0,mot:new Set(),placas:new Set(),dd:0,hex:0,recs:[]}); g.recs.push(r);
+    const v=(r.aderencia!=null)?r.aderencia:r.semelhanca; if(v!=null){ const w=Math.max(1,auditRecordDay(r).hCond||0); g.idW+=v*w; g.idT+=w; }
+    g.mot.add(r.motoristaEscala); ((r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[])).forEach(p=>{const pl=placaBR(p);if(pl)g.placas.add(pl);}); });
+  Object.values(ops).forEach(g=>{const au=auditMetrics(g.recs);g.dd=au.hForaReal||0;g.hex=au.hExtra||0;});
   // opStats = placas POR OPERAÇÃO na MESMA base da aba "Placas sem ID" (PLACA_MOV, atribuída pela UO/placa)
   // — reconcilia o nº de veículos do card com o detalhamento (OK + p/ ação); carretas/placas sem câmera não entram
   let opStats=null;
@@ -4298,12 +4404,12 @@ function renderAderencia(rows){
       const ader=g.idn/g.tot*100; if(g.idn===0){ s.acao++; s.zero++; } else if(ader<CFG.sem){ s.acao++; } else s.ok++; } }
   // ident da operação: se há stats por placa (PLACA_MOV/Boletim do Veículo) usa a MESMA base do detalhe; senão, média ponderada dos registros
   const list=Object.values(ops).map(g=>{ const st=opStats?opStats[g.op]:null;
-    const ident = (st && st.tot>0) ? Math.round(st.idn/st.tot*100) : (g.idT?Math.round(g.idW/g.idT):null);
+    const ident = (st && st.tot>0) ? Math.round(st.idn/st.tot*100) : aderRecs(g.recs);
     return {op:g.op, ident, motN:g.mot.size, placN:g.placas.size, dd:g.dd, hex:g.hex, st}; })
     .sort((a,b)=> (a.ident==null?9999:a.ident)-(b.ident==null?9999:b.ident) || b.motN-a.motN);
   let frota;
   if(opStats){ const opF=$('#fOp').value; let fi=0,ft=0; for(const o in opStats){ if(opF && o!==opF) continue; fi+=opStats[o].idn; ft+=opStats[o].tot; } frota=ft?Math.round(fi/ft*100):null; }
-  else { let W=0,T=0; rows.forEach(r=>{ const v=(r.aderencia!=null)?r.aderencia:r.semelhanca; if(v!=null){ const w=(r.horasMov||1); W+=v*w; T+=w; } }); frota=T?Math.round(W/T):null; }
+  else { frota=aderRecs(rows); }
   const abaixo=list.filter(g=>g.ident!=null && g.ident<CFG.sem).length;
   const comId=list.filter(g=>g.ident!=null).length;
   // placas puxando a aderência (respeita o filtro de operação) — mesma conta da aba "Placas sem ID"
@@ -4442,8 +4548,9 @@ function farolMediaVs(m,meta){ if(m==null) return 'verde'; if(m>=meta) return 'v
 function mediaAgg(rows){
   if(MEDIA_OFF) return [];
   const mots={};
-  rows.forEach(r=>{ const m=(mots[r.motoristaEscala]=mots[r.motoristaEscala]||{nome:r.motoristaEscala,op:r.operacao,placa:'',kmT:0,litrosT:0}); m.kmT+=r.km||0; m.litrosT+=r.litros||0; if(r.operacao&&r.operacao!=='—')m.op=r.operacao; if(r.placa)m.placa=r.placa; });
+  rows.forEach(r=>{ const m=(mots[r.motoristaEscala]=mots[r.motoristaEscala]||{nome:r.motoristaEscala,op:r.operacao,placa:'',recs:[]}); m.recs.push(r); if(r.operacao&&r.operacao!=='—')m.op=r.operacao; if(r.placa)m.placa=placaBR(r.placa)||''; });
   return Object.values(mots).map(m=>{
+    const au=auditMetrics(m.recs); m.kmT=au.km||0; m.litrosT=au.litros||0;
     const mediaT = m.litrosT>0? m.kmT/m.litrosT : (drv(m.nome).media!=null?drv(m.nome).media:null);
     const ab = ABAST? ABAST[norm(m.nome)] : null;
     const mediaA = ab? ab.media : null;
@@ -4732,6 +4839,27 @@ async function aggAlertasAsync(text, keep){
 }
 
 function placaKey(v){ return String(v||'').toUpperCase().replace(/[\s-]/g,''); }
+// Placa brasileira valida: padrão antigo ABC1234 ou Mercosul ABC1D23.
+// Alguns relatórios da Trimble podem concatenar um identificador interno antes da placa
+// (ex.: ZD20B4A8BUPM3J32). Nesses casos preservamos somente a placa válida no final: UPM3J32.
+function placaBR(v){
+  const s=placaKey(v).replace(/[^A-Z0-9]/g,'');
+  if(/^[A-Z]{3}\d{4}$/.test(s) || /^[A-Z]{3}\d[A-Z]\d{2}$/.test(s)) return s;
+  const m=s.match(/([A-Z]{3}(?:\d{4}|\d[A-Z]\d{2}))$/);
+  return m?m[1]:'';
+}
+// Sanitiza placas de registros já processados/publicados. Mantém somente placas brasileiras válidas
+// e também corrige campos concatenados da Trimble (ex.: ZD20B4A8BUPM3J32 -> UPM3J32).
+function sanitizeRecordPlates(rows){
+  for(const r of (rows||[])){
+    if(!r)continue;
+    const pls=[]; const add=v=>{const p=placaBR(v);if(p&&!pls.includes(p))pls.push(p);};
+    (r.placas||[]).forEach(add); add(r.placa);
+    for(const k of ['mov','movimento']) if(Array.isArray(r[k])) for(const s of r[k]){ if(!s)continue; s.placa=placaBR(s.placa||''); add(s.placa); }
+    r.placas=pls; r.placa=pls[0]||'';
+  }
+  return rows;
+}
 // nome curto da operação a partir da UO da Trimble ("TRANSMARONI - OPERAÇÃO FRIGO" → "FRIGO")
 function uoCurta(uo){ let s=String(uo||'').trim(); const m=s.match(/OPERA[ÇC][ÃA]O\s+(.+)$/i); if(m) return m[1].trim(); s=s.replace(/^GRUPO\s+/i,'').replace(/^TRANSMARONI\s*-?\s*/i,''); return s.trim(); }
 // família da operação — casa a UO Trimble com o centro de resultado do TMS
@@ -4814,14 +4942,12 @@ function aderTrilhaIdent(segs){
   // Se ha qualquer trecho vermelho visivel, nunca arredonda 99,x para 100.
   return temErro ? Math.min(99,Math.floor(pct)) : Math.round(pct);
 }
-// aderência DO MOTORISTA: min reconhecidos COMO ELE ÷ min de movimento do veículo nos dias dele (a da câmera conta qualquer condutor)
-function aderMotoristaRecs(recs){ let meu=0,unid=0; (recs||[]).forEach(r=>{ meu+=(r.horasMov||0); (r.movUnid||[]).forEach(s=>{ const a=+s.ini,b=+s.fim; if(isFinite(a)&&isFinite(b)&&b>a) unid+=(b-a); }); });
-  // Aderência DO CONDUTOR: em cima da movimentação DELE = identificado como ele ÷ (identificado + não-identificado nos dias/placas dele).
-  // NÃO divide pelo movimento dos OUTROS condutores do mesmo veículo.
-  const tot=meu+unid; if(tot>0) return Math.min(100,Math.round(meu/tot*100));
+// aderência DO MOTORISTA: usa a condução canônica (sem sobreposição/duplicidade) como denominador.
+function aderMotoristaRecs(recs){ const au=auditMetrics(recs||[]); let meu=au.hCond||0,unid=0; (recs||[]).forEach(r=>{ (r.movUnid||[]).forEach(s=>{ const a=+s.ini,b=+s.fim; if(isFinite(a)&&isFinite(b)&&b>a) unid+=(b-a); }); });
+  unid=Math.min(unid,meu); const tot=meu>0?meu:0; if(tot>0) return Math.max(0,Math.min(100,Math.round((tot-unid)/tot*100)));
   let s=0,n=0; (recs||[]).forEach(r=>{ if(r.semelhanca!=null){ s+=r.semelhanca; n++; } }); return n?Math.round(s/n):null; }
-// ADERÊNCIA DE JORNADA (score positivo): % da condução que ocorreu DENTRO da janela do ponto (100% = jornada certinha)
-function aderJornada(recs){ let cond=0,fora=0; (recs||[]).forEach(r=>{ if(r.punches&&r.punches.length){ cond+=(r.horasMov||0); fora+=(r.ddReal||0); } }); return cond>0? Math.max(0,Math.round((cond-fora)/cond*100)) : null; }
+// ADERÊNCIA DE JORNADA: condução canônica dentro da janela real do ponto.
+function aderJornada(recs){ const au=auditMetrics(recs||[]),cond=au.hCondWithPoint||0,fora=au.hForaReal||0; return cond>0? Math.max(0,Math.round((cond-fora)/cond*100)) : null; }
 function ajColor(v){ return v==null?'var(--muted)':(v>=90?'var(--good)':(v>=70?'var(--warning)':'var(--critical)')); }
 // JORNADA (ponto): batidas em colunas Entrada N / Saída N, por (motoristaNorm|dia)
 function parseJornada(P){
@@ -4902,7 +5028,7 @@ function accMov(rows, movRaw, roster){
     let tsIni=Date.parse(data)+ini*60000, tsFim=Date.parse(dataFim)+fim*60000;
     if(!isFinite(tsIni)||!isFinite(tsFim)) return;
     if(tsFim<tsIni) tsFim+=86400000; // evento que atravessa 00:00
-    const placa=cP?String(row[cP]).toUpperCase().replace(/\s|-/g,''):'';
+    const placa=cP?placaBR(row[cP]):'';
 
     // ADERÊNCIA: reparte o movimento por dia civil só para os indicadores por placa.
     if(placa){ let cur=tsIni; while(cur<tsFim){
@@ -4946,7 +5072,7 @@ function accMovText(text, movRaw, roster){
     coverageTouch('mov',data,1);
     const dataFim=df.date||data; let tsIni=Date.parse(data)+ini*60000, tsFim=Date.parse(dataFim)+fim*60000;
     if(!isFinite(tsIni)||!isFinite(tsFim))continue; if(tsFim<tsIni)tsFim+=86400000;
-    const placa=iP>=0?placaKey(c[iP]):'';
+    const placa=iP>=0?placaBR(c[iP]):'';
     if(placa){ let cur=tsIni; while(cur<tsFim){
       const d=new Date(cur),day=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()),dayEnd=day+86400000,e=Math.min(tsFim,dayEnd);
       const iso=new Date(day).toISOString().slice(0,10),a=Math.round((cur-day)/60000),b=Math.round((e-day)/60000),dur=Math.max(0,b-a),pk=placa+'|'+iso;
@@ -4981,7 +5107,7 @@ async function accMovTextAsync(text, movRaw, roster){
     const data=di.date||(iD>=0?isoDate(splitDT(c[iD]).date||c[iD]):''),ini=toMin(di.time),fim=toMin(df.time);if(!data||ini==null||fim==null)continue;
     coverageTouch('mov',data,1);
     const dataFim=df.date||data;let tsIni=Date.parse(data)+ini*60000,tsFim=Date.parse(dataFim)+fim*60000;if(!isFinite(tsIni)||!isFinite(tsFim))continue;if(tsFim<tsIni)tsFim+=86400000;
-    const placa=iP>=0?placaKey(c[iP]):'';
+    const placa=iP>=0?placaBR(c[iP]):'';
     if(placa){let cur=tsIni;while(cur<tsFim){const d=new Date(cur),day=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()),dayEnd=day+86400000,e=Math.min(tsFim,dayEnd),iso=new Date(day).toISOString().slice(0,10),a=Math.round((cur-day)/60000),b=Math.round((e-day)/60000),dur=Math.max(0,b-a),pk=placa+'|'+iso;MOV_TOT[pk]=(MOV_TOT[pk]||0)+dur;if(nome)MOV_IDN[pk]=(MOV_IDN[pk]||0)+dur;else{const arr=(MOV_UNSEG[pk]=MOV_UNSEG[pk]||[]);if(arr.length<300)arr.push([a,b]);}cur=e;}}
     if(nome){const nn=norm(nome),g=(movRaw[nn]=movRaw[nn]||{nn,nome,segs:[]});g.segs.push({tsIni,tsFim,km:iKm>=0?numBR(c[iKm]):0,litros:iCons>=0?numBR(c[iCons]):0,placa});n++;}
     rows++; if(rows%2500===0)await uiYield();
@@ -5963,14 +6089,14 @@ function exportCsv(){
   const rows=filtered();
   const head=['Operacao','Dia','Motorista','Veiculos','Ponto_entrada','Ponto_saida','Horas_ponto','Direcao_inicio','Direcao_fim','Horas_conducao','Hora_extra_min','Km','Fora_jornada_min','Situacao','Apontamentos'];
   const lines=[head.join(';')];
-  rows.forEach(r=>lines.push([
-    r.operacao,brDate(r.data),r.motoristaEscala,'"'+((r.placas&&r.placas.join(', '))||r.placa||'')+'"',
-    r.entrada!=null?clock(r.entradaU!=null?r.entradaU:r.entrada):'',r.saida!=null?clock(r.saidaU!=null?r.saidaU:r.saida):'',(r.horasPonto/60).toFixed(2),
-    r.primMov!=null?clock(r.primMov):'',r.ultMov!=null?clock(r.ultMov):'',(r.horasMov/60).toFixed(2),
-    Math.round(r.horaExtra||0),
-    Math.round(r.km),Math.round(r.horasDedoDuro),
+  rows.forEach(r=>{ const va=auditRecordDay(r); lines.push([
+    r.operacao,brDate(r.data),r.motoristaEscala,'"'+(((r.placas||[]).map(placaBR).filter(Boolean).join(', '))||placaBR(r.placa)||'')+'"',
+    r.entrada!=null?clock(r.entradaU!=null?r.entradaU:r.entrada):'',r.saida!=null?clock(r.saidaU!=null?r.saidaU:r.saida):'',(va.hPonto/60).toFixed(2),
+    va.prim!=null?clock(va.prim):'',va.ult!=null?clock(va.ult):'',(va.hCond/60).toFixed(2),
+    Math.round(va.hExtra||0),
+    Math.round(va.km||0),Math.round(va.hFora||0),
     r.sev,'"'+r.flags.map(f=>f.t).join(' | ')+'"'
-  ].join(';')));
+  ].join(';')); });
   baixarCsv(lines,'conferencia_jornada_movimentacao.csv');
 }
 function exportSemana(){
