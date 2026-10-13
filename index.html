@@ -4893,8 +4893,21 @@ function parseCSV(text){
   const head=splitCSVLine(lines[0],delim);
   return lines.slice(1).map(l=>{ const c=splitCSVLine(l,delim); const o={}; head.forEach((h,i)=>o[h]=c[i]!=null?c[i]:''); return o; });
 }
+
+// Assinaturas compactas para impedir que relatórios sobrepostos multipliquem o mesmo registro.
+// Dois hashes independentes de 32 bits formam uma assinatura compacta (~64 bits) e evitam guardar linhas inteiras na memória.
+function _dedupeCell(v){ return String(v==null?'':v).trim().replace(/\s+/g,' ').toUpperCase(); }
+function _dedupeSig(v){
+  const x=String(v||''); let h1=2166136261>>>0,h2=2246822519>>>0;
+  for(let i=0;i<x.length;i++){ const c=x.charCodeAt(i); h1=Math.imul(h1^c,16777619)>>>0; h2=Math.imul(h2^c,3266489917)>>>0; }
+  return h1.toString(36)+'_'+h2.toString(36);
+}
+function rowSigCells(c){ return _dedupeSig((c||[]).map(_dedupeCell).join('\x1f')); }
+function rowSigObj(row){ const ks=Object.keys(row||{}).sort((a,b)=>norm(a).localeCompare(norm(b),'pt-BR')); return _dedupeSig(ks.map(k=>norm(k)+'='+_dedupeCell(row[k])).join('\x1f')); }
+function movementEventSig(nome,placa,tsIni,tsFim){ return _dedupeSig([norm(nome||''),placaKey(placa||''),Math.round(+tsIni||0),Math.round(+tsFim||0)].join('|')); }
+function dedupeAccept(seen,key,diag){ if(!seen||!key)return true; if(seen.has(key)){ if(diag)diag.dup=(diag.dup||0)+1; return false; } seen.add(key); if(diag)diag.unique=(diag.unique||0)+1; return true; }
 // AGREGA o relatório de alertas em streaming (não guarda as ~337 mil linhas)
-function aggAlertas(text, keep){
+function aggAlertas(text, keep, seen, diag){
   text=text.replace(/^﻿/,''); const nl=text.indexOf('\n'); if(nl<0) return {A:{},n:0,tl:{}};
   const first=text.slice(0,nl).replace(/\r$/,'');
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
@@ -4908,6 +4921,7 @@ function aggAlertas(text, keep){
     if(!line) continue;
     const c=splitCSVLine(line,delim); if(iTipo>=0 && c.length<=iTipo) continue;
     if(iDesc>=0 && norm(c[iDesc]||'')[0]==='S') continue;         // desconsiderado
+    if(!dedupeAccept(seen,rowSigCells(c),diag)) continue;        // mesmo evento já veio em outro relatório/ZIP
     // placa → UO (Trimble), independente de ter motorista
     if(iPlaca>=0 && iUO>=0){ const pl=placaKey(c[iPlaca]); const uo=(c[iUO]||'').trim(); if(pl&&uo){ (puo[pl]=puo[pl]||{})[uo]=(puo[pl][uo]||0)+1; } }
     const nome=(c[iMot]||'').trim(); if(!nome) continue; const nn=norm(nome);
@@ -4932,7 +4946,7 @@ function aggAlertas(text, keep){
 
 // Versao assíncrona para muitos ZIPs/CSVs: processa em blocos e devolve o controle
 // ao navegador periodicamente, evitando congelar a tela durante arquivos grandes.
-async function aggAlertasAsync(text, keep){
+async function aggAlertasAsync(text, keep, seen, diag){
   text=String(text||'').replace(/^﻿/,''); const nl=text.indexOf('\n'); if(nl<0) return {A:{},n:0,tl:{}};
   const first=text.slice(0,nl).replace(/\r$/,'');
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
@@ -4945,6 +4959,7 @@ async function aggAlertasAsync(text, keep){
     const line=text.slice(start,text.charCodeAt(end-1)===13?end-1:end); start=end+1; if(!line)continue;
     const c=splitCSVLine(line,delim); if(iTipo>=0&&c.length<=iTipo)continue;
     if(iDesc>=0&&norm(c[iDesc]||'')[0]==='S')continue;
+    if(!dedupeAccept(seen,rowSigCells(c),diag))continue;
     if(iPlaca>=0&&iUO>=0){const pl=placaKey(c[iPlaca]),uo=(c[iUO]||'').trim();if(pl&&uo)(puo[pl]=puo[pl]||{})[uo]=(puo[pl][uo]||0)+1;}
     const nome=(iMot>=0?(c[iMot]||'').trim():''); if(!nome)continue; const nn=norm(nome);
     const tipo=((iTipo>=0?c[iTipo]:'')||'').trim()||'ALERTA',nivel=norm(iNivel>=0?c[iNivel]:'');
@@ -5083,6 +5098,7 @@ function aderMotoristaRecs(recs){ const au=auditMetrics(recs||[]); let meu=au.hC
 function aderJornada(recs){ const au=auditMetrics(recs||[]),cond=au.hCondWithPoint||0,fora=au.hForaReal||0; return cond>0? Math.max(0,Math.round((cond-fora)/cond*100)) : null; }
 function ajColor(v){ return v==null?'var(--muted)':(v>=90?'var(--good)':(v>=70?'var(--warning)':'var(--critical)')); }
 // JORNADA (ponto): batidas em colunas Entrada N / Saída N, por (motoristaNorm|dia)
+// Já deduplica espelhos idênticos e versões parciais/completas sobrepostas do mesmo motorista-dia.
 function parseJornada(P){
   const ponto={}, roster=new Set(), opBy={}, shifts=[], seen=new Set(), ferias={};
   (P||[]).forEach((row,rowIdx)=>{
@@ -5143,7 +5159,7 @@ function parseJornada(P){
   return {ponto:pontoOk, roster, opBy, shifts:shiftsOk, ferias};
 }
 // MOVIMENTAÇÃO: acumula eventos "Movimento" (dos motoristas da jornada) em movRaw — reutilizável (single ou zip)
-function accMov(rows, movRaw, roster){
+function accMov(rows, movRaw, roster, seen, diag){
   let n=0;
   (rows||[]).forEach(row=>{
     const cOcc=col(row,['ocorrencia','status','evento','situacao']);
@@ -5156,12 +5172,13 @@ function accMov(rows, movRaw, roster){
     const di=cIni?splitDT(row[cIni]):{date:'',time:''}, df=cFim?splitDT(row[cFim]):{date:'',time:''};
     const data=di.date||(cD?isoDate(splitDT(row[cD]).date||row[cD]):''); const ini=toMin(di.time), fim=toMin(df.time);
     if(!data||ini==null||fim==null) return;
-    coverageTouch('mov',data,1);
     const dataFim=df.date||data;
     let tsIni=Date.parse(data)+ini*60000, tsFim=Date.parse(dataFim)+fim*60000;
     if(!isFinite(tsIni)||!isFinite(tsFim)) return;
     if(tsFim<tsIni) tsFim+=86400000; // evento que atravessa 00:00
     const placa=cP?placaBR(row[cP]):'';
+    if(!dedupeAccept(seen,movementEventSig(nome,placa,tsIni,tsFim),diag)) return;
+    coverageTouch('mov',data,1);
 
     // ADERÊNCIA: reparte o movimento por dia civil só para os indicadores por placa.
     if(placa){ let cur=tsIni; while(cur<tsFim){
@@ -5182,7 +5199,7 @@ function accMov(rows, movRaw, roster){
 
 // MOVIMENTAÇÃO CSV/TXT: processa linha a linha sem criar um objeto JS por linha.
 // Em bases grandes reduz memória, GC e tempo de importação.
-function accMovText(text, movRaw, roster){
+function accMovText(text, movRaw, roster, seen, diag){
   text=String(text||'').replace(/^﻿/,''); const nl=text.indexOf('\n'); if(nl<0)return 0;
   const first=text.slice(0,nl).replace(/\r$/,'');
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
@@ -5202,10 +5219,11 @@ function accMovText(text, movRaw, roster){
     const di=iIni>=0?splitDT(c[iIni]):{date:'',time:''}, df=iFim>=0?splitDT(c[iFim]):{date:'',time:''};
     const data=di.date||(iD>=0?isoDate(splitDT(c[iD]).date||c[iD]):''), ini=toMin(di.time), fim=toMin(df.time);
     if(!data||ini==null||fim==null)continue;
-    coverageTouch('mov',data,1);
     const dataFim=df.date||data; let tsIni=Date.parse(data)+ini*60000, tsFim=Date.parse(dataFim)+fim*60000;
     if(!isFinite(tsIni)||!isFinite(tsFim))continue; if(tsFim<tsIni)tsFim+=86400000;
     const placa=iP>=0?placaBR(c[iP]):'';
+    if(!dedupeAccept(seen,movementEventSig(nome,placa,tsIni,tsFim),diag))continue;
+    coverageTouch('mov',data,1);
     if(placa){ let cur=tsIni; while(cur<tsFim){
       const d=new Date(cur),day=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()),dayEnd=day+86400000,e=Math.min(tsFim,dayEnd);
       const iso=new Date(day).toISOString().slice(0,10),a=Math.round((cur-day)/60000),b=Math.round((e-day)/60000),dur=Math.max(0,b-a),pk=placa+'|'+iso;
@@ -5223,7 +5241,7 @@ function accMovText(text, movRaw, roster){
 
 // Mesmo parser de movimentacao, mas cooperativo: em bases grandes cede a thread
 // a cada bloco de linhas. Isso permite selecionar dezenas de ZIPs sem a pagina travar.
-async function accMovTextAsync(text, movRaw, roster){
+async function accMovTextAsync(text, movRaw, roster, seen, diag){
   text=String(text||'').replace(/^﻿/,''); const nl=text.indexOf('\n'); if(nl<0)return 0;
   const first=text.slice(0,nl).replace(/\r$/,'');
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
@@ -5238,9 +5256,10 @@ async function accMovTextAsync(text, movRaw, roster){
     const nome=iM>=0?String(c[iM]||'').trim():'';
     const di=iIni>=0?splitDT(c[iIni]):{date:'',time:''},df=iFim>=0?splitDT(c[iFim]):{date:'',time:''};
     const data=di.date||(iD>=0?isoDate(splitDT(c[iD]).date||c[iD]):''),ini=toMin(di.time),fim=toMin(df.time);if(!data||ini==null||fim==null)continue;
-    coverageTouch('mov',data,1);
     const dataFim=df.date||data;let tsIni=Date.parse(data)+ini*60000,tsFim=Date.parse(dataFim)+fim*60000;if(!isFinite(tsIni)||!isFinite(tsFim))continue;if(tsFim<tsIni)tsFim+=86400000;
     const placa=iP>=0?placaBR(c[iP]):'';
+    if(!dedupeAccept(seen,movementEventSig(nome,placa,tsIni,tsFim),diag))continue;
+    coverageTouch('mov',data,1);
     if(placa){let cur=tsIni;while(cur<tsFim){const d=new Date(cur),day=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()),dayEnd=day+86400000,e=Math.min(tsFim,dayEnd),iso=new Date(day).toISOString().slice(0,10),a=Math.round((cur-day)/60000),b=Math.round((e-day)/60000),dur=Math.max(0,b-a),pk=placa+'|'+iso;MOV_TOT[pk]=(MOV_TOT[pk]||0)+dur;if(nome)MOV_IDN[pk]=(MOV_IDN[pk]||0)+dur;else{const arr=(MOV_UNSEG[pk]=MOV_UNSEG[pk]||[]);if(arr.length<300)arr.push([a,b]);}cur=e;}}
     if(nome){const nn=norm(nome),g=(movRaw[nn]=movRaw[nn]||{nn,nome,segs:[]});g.segs.push({tsIni,tsFim,km:iKm>=0?numBR(c[iKm]):0,litros:iCons>=0?numBR(c[iCons]):0,placa});n++;}
     rows++; if(rows%2500===0)await uiYield();
@@ -5357,25 +5376,25 @@ function ingest(){
   const P=pending.ponto||[], M=pending.mov||[];
   if(!P.length && !M.length){ toast('Carregue a jornada (ponto) e a movimentação'); return; }
   MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; coverageReset('mov');
-  const jor=parseJornada(P); const movRaw={}; const n=accMov(M, movRaw, jor.roster);
-  finalizeRecords(jor, movRaw, M.length, P.length);
-  toast('Cruzado ✓ '+((RAW&&RAW.records)?RAW.records.length:0)+' motorista-dias · '+jor.roster.size+' motoristas');
+  const jor=parseJornada(P),movSeen=new Set(),movDiag={dup:0,unique:0}; const movRaw={}; const n=accMov(M, movRaw, jor.roster,movSeen,movDiag);
+  finalizeRecords(jor, movRaw, n, P.length);
+  toast('Cruzado ✓ '+((RAW&&RAW.records)?RAW.records.length:0)+' motorista-dias · '+jor.roster.size+' motoristas'+(movDiag.dup?' · '+movDiag.dup.toLocaleString('pt-BR')+' movimento(s) duplicado(s) ignorado(s)':''));
 }
 // MOVIMENTAÇÃO em ZIP (vários CSVs diários) — processa arquivo por arquivo (streaming)
 function ingestMovZip(file){
   if(!(pending.ponto&&pending.ponto.length)){ toast('Carregue primeiro a jornada (ponto)'); return; }
   if(typeof JSZip==='undefined'){ toast('Sem internet p/ abrir .zip'); return; }
   MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; coverageReset('mov');
-  const jor=parseJornada(pending.ponto); const movRaw={}; let movRows=0, files=0;
+  const jor=parseJornada(pending.ponto),movSeen=new Set(),movDiag={dup:0,unique:0}; const movRaw={}; let movRows=0, files=0;
   const rd=new FileReader();
   rd.onload=e=>{ JSZip.loadAsync(e.target.result).then(zip=>{
     const names=Object.keys(zip.files).filter(f=>/\.csv$/i.test(f) && !zip.files[f].dir).sort();
     if(!names.length){ toast('Zip sem CSVs'); return; }
     let idx=0;
     (function next(){
-      if(idx>=names.length){ finalizeRecords(jor, movRaw, movRows, pending.ponto.length); toast('Movimentação ✓ '+files+' arquivos · '+movRows.toLocaleString('pt-BR')+' movimentos · '+((RAW&&RAW.records)?RAW.records.length:0)+' motorista-dias'); return; }
+      if(idx>=names.length){ finalizeRecords(jor, movRaw, movRows, pending.ponto.length); toast('Movimentação ✓ '+files+' arquivos · '+movRows.toLocaleString('pt-BR')+' movimentos únicos · '+((RAW&&RAW.records)?RAW.records.length:0)+' motorista-dias'+(movDiag.dup?' · '+movDiag.dup.toLocaleString('pt-BR')+' duplicado(s) ignorado(s)':'')); return; }
       const nm=names[idx++]; toast('Movimentação: '+idx+'/'+names.length+'…');
-      zip.files[nm].async('arraybuffer').then(ab=>{ try{ movRows+=accMovText(decodeText(ab), movRaw, jor.roster); files++; }catch(_){} setTimeout(next,0); })
+      zip.files[nm].async('arraybuffer').then(ab=>{ try{ movRows+=accMovText(decodeText(ab), movRaw, jor.roster,movSeen,movDiag); files++; }catch(_){} setTimeout(next,0); })
         .catch(()=>setTimeout(next,0));
     })();
   }).catch(()=>toast('Erro ao abrir o zip')); };
@@ -5386,11 +5405,11 @@ let ALERTS_N=0, PLACA_UO=null;   // PLACA_UO: placa → {uo, uoCurta} (UO Trimbl
 function loadAlertas(file){
   const ext=(file.name.split('.').pop()||'').toLowerCase();
   const done=(text)=>{ try{
-      const r=aggAlertas(text, namesOfInterest()); ALERTS=r.A; ALERTS_N=r.n; PLACA_UO=r.placaUO||{}; AL_TL=r.tl||{};
+      const dedupeSeen=new Set(),dedupeDiag={dup:0,unique:0}; const r=aggAlertas(text, namesOfInterest(),dedupeSeen,dedupeDiag); ALERTS=r.A; ALERTS_N=r.n; PLACA_UO=r.placaUO||{}; AL_TL=r.tl||{};
       if(REAL && RAW){ RAW.alertas=ALERTS; RAW.placaUO=PLACA_UO; RAW.counts=RAW.counts||{}; RAW.counts.alertas=r.n; }
       afterImportChange({reanalyze:true,filters:true,persist:true});   // UO dos alertas pode resolver operação
       const nTl=Object.values(AL_TL).reduce((a,x)=>a+x.length,0);
-      toast('Alertas ✓ '+r.n.toLocaleString('pt-BR')+' eventos · '+Object.keys(r.A).length+' motoristas · '+nTl.toLocaleString('pt-BR')+' na linha do tempo');
+      toast('Alertas ✓ '+r.n.toLocaleString('pt-BR')+' eventos únicos · '+Object.keys(r.A).length+' motoristas · '+nTl.toLocaleString('pt-BR')+' na linha do tempo'+(dedupeDiag.dup?' · '+dedupeDiag.dup.toLocaleString('pt-BR')+' duplicado(s) ignorado(s)':''));
     }catch(err){ toast('Erro ao processar alertas'); } };
   const rd=new FileReader();
   if(ext==='zip'){
@@ -5459,21 +5478,21 @@ function mergeBdvAgg(dst,src){
   }
 }
 async function loadBoletimFilesFast(files){
-  const acc={A:{},n:0,day:{}}; const st=await forEachCsvText(files,async text=>mergeBoletimAgg(acc,aggBoletim(text)),'Boletim');
+  const acc={A:{},n:0,day:{}},seen=new Set(),diag={dup:0,unique:0}; const st=await forEachCsvText(files,async text=>mergeBoletimAgg(acc,aggBoletim(text,seen,diag)),'Boletim');
   BOL=acc.A;BOL_N=acc.n;BOL_DAY=acc.day;rebuildDePara();afterImportChange({reanalyze:true,filters:true,persist:true});
-  toast('Boletim ✓ '+acc.n.toLocaleString('pt-BR')+' registros · '+Object.keys(acc.A).length+' motoristas'+(st.fail?' · '+st.fail+' falha(s)':''));
+  toast('Boletim ✓ '+acc.n.toLocaleString('pt-BR')+' registros únicos · '+Object.keys(acc.A).length+' motoristas'+(diag.dup?' · '+diag.dup.toLocaleString('pt-BR')+' duplicado(s) ignorado(s)':'')+(st.fail?' · '+st.fail+' falha(s)':''));
 }
 async function loadPedidosFilesFast(files){
-  const acc={op:{},drv:{},n:0};const st=await forEachCsvText(files,async text=>mergePedidosAgg(acc,aggPedidos(text)),'Pedidos');
+  const acc={op:{},drv:{},n:0},seen=new Set(),diag={dup:0,unique:0};const st=await forEachCsvText(files,async text=>mergePedidosAgg(acc,aggPedidos(text,seen,diag)),'Pedidos');
   PED_OP=acc.op;PED_DRV=acc.drv;PED_N=acc.n;afterImportChange({reanalyze:true,filters:true,persist:true});
-  toast('Pedidos ✓ '+acc.n.toLocaleString('pt-BR')+' viagens · '+Object.keys(acc.op).length.toLocaleString('pt-BR')+' placa-dia'+(st.fail?' · '+st.fail+' falha(s)':''));
+  toast('Pedidos ✓ '+acc.n.toLocaleString('pt-BR')+' viagens únicas · '+Object.keys(acc.op).length.toLocaleString('pt-BR')+' placa-dia'+(diag.dup?' · '+diag.dup.toLocaleString('pt-BR')+' duplicada(s) ignorada(s)':'')+(st.fail?' · '+st.fail+' falha(s)':''));
 }
 async function loadBdvFilesFast(files){
-  const acc={B:{},n:0};const st=await forEachCsvText(files,async text=>mergeBdvAgg(acc,aggBoletimVeiculo(text)),'Boletim do Veículo');
+  const acc={B:{},n:0},seen=new Set(),diag={dup:0,unique:0};const st=await forEachCsvText(files,async text=>mergeBdvAgg(acc,aggBoletimVeiculo(text,seen,diag)),'Boletim do Veículo');
   for(const pk in acc.B){const b=acc.B[pk];b.mediaTrimble=b.mediaTrimbleN?b.mediaTrimbleSum/b.mediaTrimbleN:null;b.cam=b.camN>0?('CÂMERA obstruída/desconexão ('+b.camN+' evt)'):'';}
   if(acc.noPlaca&&!Object.keys(acc.B).length){toast('Boletim do Veículo: não achei a coluna PLACA');return;}
   BDV=acc.B;BDV_N=acc.n;if(RAW)RAW.bdv=BDV;afterImportChange({reanalyze:true,filters:true,persist:true});
-  const semId=Object.values(BDV).reduce((a,b)=>a+(b.dias-b.diasId),0);toast('Boletim do Veículo ✓ '+Object.keys(BDV).length.toLocaleString('pt-BR')+' placas · '+semId.toLocaleString('pt-BR')+' dia(s) sem ID'+(st.fail?' · '+st.fail+' falha(s)':''));
+  const semId=Object.values(BDV).reduce((a,b)=>a+(b.dias-b.diasId),0);toast('Boletim do Veículo ✓ '+Object.keys(BDV).length.toLocaleString('pt-BR')+' placas · '+semId.toLocaleString('pt-BR')+' dia(s) sem ID'+(diag.dup?' · '+diag.dup.toLocaleString('pt-BR')+' duplicado(s) ignorado(s)':'')+(st.fail?' · '+st.fail+' falha(s)':''));
 }
 // soma alertas de VÁRIOS dias (compatível com o aggAlertas da versão de sexta)
 function mergeAlertas(dst, src){ dst.n=(dst.n||0)+(src.n||0);
@@ -5486,7 +5505,7 @@ async function loadMovLocais(files){
   if(!(pending.ponto&&pending.ponto.length)){ toast('Carregue primeiro a jornada (ponto)'); return; }
   if(typeof JSZip==='undefined' && [...files].some(f=>/\.zip$/i.test(f.name||''))){ toast('Biblioteca ZIP não carregou'); return; }
   MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; coverageReset('mov');
-  const jor=parseJornada(pending.ponto),movRaw={}; let movRows=0,done=0,fail=0,parts=0;
+  const jor=parseJornada(pending.ponto),movSeen=new Set(),movDiag={dup:0,unique:0},movRaw={}; let movRows=0,done=0,fail=0,parts=0;
   const arr=[...files].filter(f=>f&&!/^~\$/.test(f.name||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'));
   if(!arr.length){toast('Nenhum arquivo válido selecionado');return;}
   for(const f of arr){
@@ -5501,12 +5520,12 @@ async function loadMovLocais(files){
         for(let j=0;j<names.length;j++){
           const nm=names[j]; if(st)st.textContent='ZIP '+pos+'/'+arr.length+' · arquivo interno '+(j+1)+'/'+names.length;
           const ab=await zip.files[nm].async('arraybuffer');
-          movRows+=await accMovTextAsync(decodeText(ab),movRaw,jor.roster); parts++; await uiYield();
+          movRows+=await accMovTextAsync(decodeText(ab),movRaw,jor.roster,movSeen,movDiag); parts++; await uiYield();
         }
       }else if(ext==='xlsx'||ext==='xls'){
-        movRows+=accMov(await readFileRowsP(f),movRaw,jor.roster); parts++;
+        movRows+=accMov(await readFileRowsP(f),movRaw,jor.roster,movSeen,movDiag); parts++;
       }else{
-        movRows+=await accMovTextAsync(await fileToText(f),movRaw,jor.roster); parts++;
+        movRows+=await accMovTextAsync(await fileToText(f),movRaw,jor.roster,movSeen,movDiag); parts++;
       }
     }catch(e){fail++;console.warn('Falha na movimentação:',f&&f.name,e);}
     done++; await uiYield();
@@ -5515,12 +5534,12 @@ async function loadMovLocais(files){
   finalizeRecords(jor,movRaw,movRows,pending.ponto.length);
   updateDropStatus();
   if(fail)toast('⚠ Movimentação: '+fail+' arquivo(s) falharam; confira a seleção');
-  toast('Movimentação ✓ '+done+' arquivo(s) · '+parts+' CSV/planilha(s) processado(s) · '+movRows.toLocaleString('pt-BR')+' movimentos');
+  toast('Movimentação ✓ '+done+' arquivo(s) · '+parts+' CSV/planilha(s) · '+movRows.toLocaleString('pt-BR')+' movimentos únicos'+(movDiag.dup?' · '+movDiag.dup.toLocaleString('pt-BR')+' duplicado(s) ignorado(s)':''));
 }
 // ALERTAS local (vários csv/zip) — streaming + merge, soma os dias
 async function loadAlertasLocais(files){
   if(typeof JSZip==='undefined' && [...files].some(f=>/\.zip$/i.test(f.name||''))){ toast('Biblioteca ZIP não carregou'); return; }
-  const acc={A:{},n:0,placaUO:{},tl:{}},keep=namesOfInterest();
+  const acc={A:{},n:0,placaUO:{},tl:{}},keep=namesOfInterest(),alertSeen=new Set(),alertDiag={dup:0,unique:0};
   const arr=[...files].filter(f=>f&&!/^~\$/.test(f.name||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR')); let done=0,fail=0,parts=0;
   if(!arr.length){toast('Nenhum arquivo válido selecionado');return;}
   for(const f of arr){
@@ -5535,10 +5554,10 @@ async function loadAlertasLocais(files){
         for(let j=0;j<names.length;j++){
           if(st)st.textContent='ZIP '+pos+'/'+arr.length+' · arquivo interno '+(j+1)+'/'+names.length;
           const ab=await zip.files[names[j]].async('arraybuffer');
-          mergeAlertas(acc,await aggAlertasAsync(decodeText(ab),keep));parts++;await uiYield();
+          mergeAlertas(acc,await aggAlertasAsync(decodeText(ab),keep,alertSeen,alertDiag));parts++;await uiYield();
         }
       }else{
-        mergeAlertas(acc,await aggAlertasAsync(await fileToText(f),keep));parts++;
+        mergeAlertas(acc,await aggAlertasAsync(await fileToText(f),keep,alertSeen,alertDiag));parts++;
       }
     }catch(e){fail++;console.warn('Falha nos alertas:',f&&f.name,e);}
     done++;await uiYield();
@@ -5547,7 +5566,7 @@ async function loadAlertasLocais(files){
   if(REAL&&RAW){RAW.alertas=ALERTS;RAW.placaUO=PLACA_UO;RAW.counts=RAW.counts||{};RAW.counts.alertas=acc.n;}
   afterImportChange({reanalyze:true,filters:true,persist:true});updateDropStatus();
   if(fail)toast('⚠ Alertas: '+fail+' arquivo(s) falharam; confira a seleção');
-  toast('Alertas ✓ '+done+' arquivo(s) · '+parts+' CSV(s) processado(s) · '+acc.n.toLocaleString('pt-BR')+' eventos');
+  toast('Alertas ✓ '+done+' arquivo(s) · '+parts+' CSV(s) · '+acc.n.toLocaleString('pt-BR')+' eventos únicos'+(alertDiag.dup?' · '+alertDiag.dup.toLocaleString('pt-BR')+' duplicado(s) ignorado(s)':''));
 }
 
 /* ===== BOLETIM DO MOTORISTA (ocorrências): 1 linha por motorista+dia, alertas por tipo em COLUNAS ===== */
@@ -5575,7 +5594,7 @@ const BOL_TIPOS=[
   {c:'PARADO LIGADO', l:'Parado Ligado', k:'d'},
 ];
 function durSec(v){ const m=String(v||'').match(/(\d+):(\d{2}):(\d{2})/); return m?(+m[1]*3600+ +m[2]*60+ +m[3]):0; }
-function aggBoletim(text){
+function aggBoletim(text, seen, diag){
   text=text.replace(/^﻿/,''); const nl=text.indexOf('\n'); if(nl<0) return {A:{},n:0};
   const first=text.slice(0,nl).replace(/\r$/,'');
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
@@ -5588,6 +5607,7 @@ function aggBoletim(text){
     const line=text.slice(start, text.charCodeAt(end-1)===13?end-1:end); start=end+1;
     if(!line) continue;
     const c=splitCSVLine(line,delim); if(iMot==null||c.length<=iMot) continue;
+    if(!dedupeAccept(seen,rowSigCells(c),diag)) continue;
     const nome=(c[iMot]||'').trim(); if(!nome) continue; const nn=norm(nome);
     const a=(A[nn]=A[nn]||{nome, total:0, tipos:{}, dias:0, km:0, litros:0, dep:'', cpf:''});
     if(!a.cpf && iCpf!=null){ const cf=cpfKey(c[iCpf]); if(cf) a.cpf=cf; }
@@ -5606,9 +5626,9 @@ function aggBoletim(text){
 function loadBoletim(file){
   const ext=(file.name.split('.').pop()||'').toLowerCase();
   const done=(text)=>{ try{
-      const r=aggBoletim(text); BOL=r.A; BOL_N=r.n; BOL_DAY=r.day||{}; rebuildDePara();
+      const dedupeSeen=new Set(),dedupeDiag={dup:0,unique:0}; const r=aggBoletim(text,dedupeSeen,dedupeDiag); BOL=r.A; BOL_N=r.n; BOL_DAY=r.day||{}; rebuildDePara();
       afterImportChange({reanalyze:true,filters:true,persist:true});
-      toast('Boletim ✓ '+r.n.toLocaleString('pt-BR')+' registros · '+Object.keys(r.A).length+' motoristas · alertas por tipo');
+      toast('Boletim ✓ '+r.n.toLocaleString('pt-BR')+' registros únicos · '+Object.keys(r.A).length+' motoristas · alertas por tipo'+(dedupeDiag.dup?' · '+dedupeDiag.dup.toLocaleString('pt-BR')+' duplicado(s) ignorado(s)':''));
     }catch(err){ toast('Erro ao processar o Boletim'); } };
   const rd=new FileReader();
   if(ext==='zip'){
@@ -5619,7 +5639,7 @@ function loadBoletim(file){
 }
 
 /* ===== BOLETIM DO VEÍCULO — identificação (dias id ÷ dias moveu) + UO + saúde da câmera por placa ===== */
-function aggBoletimVeiculo(text){
+function aggBoletimVeiculo(text, seen, diag){
   text=text.replace(/^﻿/,''); const nl=text.indexOf('\n'); if(nl<0) return {B:{},n:0};
   const first=text.slice(0,nl).replace(/\r$/,'');
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
@@ -5635,6 +5655,7 @@ function aggBoletimVeiculo(text){
     const line=text.slice(start, text.charCodeAt(end-1)===13?end-1:end); start=end+1;
     if(!line) continue;
     const c=splitCSVLine(line,delim); if(c.length<=iPl) continue;
+    if(!dedupeAccept(seen,rowSigCells(c),diag)) continue;
     const pk=placaKey(c[iPl]); if(!pk) continue;
     const km=iKm!=null?numBR(c[iKm]):0; const tmov=iTmov!=null?durSec(c[iTmov]):0;
     const moveu = km>0 || tmov>0;
@@ -5667,12 +5688,12 @@ function camDaPlaca(pk){ if(SAUDE&&SAUDE[pk]) return SAUDE[pk].func||SAUDE[pk].s
 function loadBoletimVeiculo(file){
   const ext=(file.name.split('.').pop()||'').toLowerCase();
   const done=(text)=>{ try{
-      const r=aggBoletimVeiculo(text);
+      const dedupeSeen=new Set(),dedupeDiag={dup:0,unique:0}; const r=aggBoletimVeiculo(text,dedupeSeen,dedupeDiag);
       if(r.noPlaca){ toast('Boletim do Veículo: não achei a coluna PLACA'); return; }
       BDV=r.B; BDV_N=r.n; if(RAW) RAW.bdv=BDV;
       afterImportChange({reanalyze:true,filters:true,persist:true});
       const nP=Object.keys(BDV).length, semId=Object.values(BDV).reduce((a,b)=>a+(b.dias-b.diasId),0);
-      toast('Boletim do Veículo ✓ '+nP.toLocaleString('pt-BR')+' placas · '+semId.toLocaleString('pt-BR')+' dia(s) sem ID');
+      toast('Boletim do Veículo ✓ '+nP.toLocaleString('pt-BR')+' placas · '+semId.toLocaleString('pt-BR')+' dia(s) sem ID'+(dedupeDiag.dup?' · '+dedupeDiag.dup.toLocaleString('pt-BR')+' duplicado(s) ignorado(s)':''));
     }catch(err){ toast('Erro ao processar o Boletim do Veículo'); } };
   const rd=new FileReader();
   if(ext==='zip'){
@@ -5825,7 +5846,7 @@ function loadSaude(file){
 }
 
 /* ===== PEDIDOS (viagens): placa|dia → operação (centro de resultado) + CPF do condutor planejado ===== */
-function aggPedidos(text){
+function aggPedidos(text, seen, diag){
   text=text.replace(/^﻿/,''); const nl=text.indexOf('\n'); if(nl<0) return {op:{},drv:{},n:0};
   const first=text.slice(0,nl).replace(/\r$/,'');
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
@@ -5838,6 +5859,7 @@ function aggPedidos(text){
     const line=text.slice(start, text.charCodeAt(end-1)===13?end-1:end); start=end+1;
     if(!line) continue;
     const c=splitCSVLine(line,delim); if(iVei<0 || c.length<=iVei) continue;
+    if(!dedupeAccept(seen,rowSigCells(c),diag)) continue;
     const data=iData>=0? isoDate(splitDT(c[iData]).date||c[iData]) : ''; if(!data) continue;
     const centro=iCen>=0?(c[iCen]||'').trim():''; const cpf=iCpf>=0?cpfKey(c[iCpf]):'';
     (c[iVei]||'').split(/[,;/]/).forEach(p=>{ const pk=placaKey(p); if(!pk) return; const k=pk+'|'+data;
@@ -5849,9 +5871,9 @@ function aggPedidos(text){
 function loadPedidos(file){
   const ext=(file.name.split('.').pop()||'').toLowerCase();
   const done=(text)=>{ try{
-    const r=aggPedidos(text); PED_OP=r.op; PED_DRV=r.drv; PED_N=r.n;
+    const dedupeSeen=new Set(),dedupeDiag={dup:0,unique:0}; const r=aggPedidos(text,dedupeSeen,dedupeDiag); PED_OP=r.op; PED_DRV=r.drv; PED_N=r.n;
     afterImportChange({reanalyze:true,filters:true,persist:true});
-    toast('Pedidos ✓ '+r.n.toLocaleString('pt-BR')+' viagens · '+Object.keys(r.op).length.toLocaleString('pt-BR')+' placa-dia');
+    toast('Pedidos ✓ '+r.n.toLocaleString('pt-BR')+' viagens únicas · '+Object.keys(r.op).length.toLocaleString('pt-BR')+' placa-dia'+(dedupeDiag.dup?' · '+dedupeDiag.dup.toLocaleString('pt-BR')+' duplicada(s) ignorada(s)':''));
   }catch(err){ toast('Erro ao processar Pedidos'); } };
   const rd=new FileReader();
   if(ext==='zip'){ if(typeof JSZip==='undefined'){toast('Sem internet p/ zip');return;} rd.onload=e=>{ JSZip.loadAsync(e.target.result).then(zip=>{ const name=Object.keys(zip.files).find(f=>/\.csv$/i.test(f)); if(!name){toast('Zip sem CSV');return;} return zip.files[name].async('arraybuffer').then(ab=>done(decodeText(ab))); }).catch(()=>toast('Erro no zip')); }; rd.readAsArrayBuffer(file); }
@@ -5881,14 +5903,14 @@ function loadAbastecimento(file){
     const r0=rows[0]; const cM=col(r0,['motorista']), cLit=col(r0,['total litros','litros']),
       cVal=col(r0,['total valor','valor']), cDif=col(r0,['diferenca km','diferenca','dif km']), cMed=col(r0,['media']);
     if(!cM || !cLit){ toast('Abastecimento: faltam colunas Motorista/Litros'); return; }
-    const A={};
-    rows.forEach(row=>{ const nome=String(row[cM]||'').trim(); if(!nome) return; const nn=norm(nome);
+    const A={},seen=new Set(); let dup=0;
+    rows.forEach(row=>{ const sig=rowSigObj(row); if(seen.has(sig)){dup++;return;} seen.add(sig); const nome=String(row[cM]||'').trim(); if(!nome) return; const nn=norm(nome);
       const lit=numBR(row[cLit]), med=cMed?numBR(row[cMed]):0, dif=cDif?numBR(row[cDif]):0, val=cVal?numBR(row[cVal]):0;
       if(!(lit>0 && med>=0.5 && med<=9 && dif>0 && dif<3000)) return;    // descarta odômetro absurdo
       const a=(A[nn]=A[nn]||{nome, km:0, litros:0, valor:0, n:0}); a.km+=dif; a.litros+=lit; a.valor+=val; a.n++; });
     Object.values(A).forEach(a=>a.media=a.litros>0?a.km/a.litros:null);
     ABAST=A; ABAST_N=Object.keys(A).length; afterImportChange({reanalyze:false,filters:false,persist:true});
-    toast('Abastecimento ✓ '+ABAST_N.toLocaleString('pt-BR')+' motoristas (média real das bombas)');
+    toast('Abastecimento ✓ '+ABAST_N.toLocaleString('pt-BR')+' motoristas (média real das bombas)'+(dup?' · '+dup.toLocaleString('pt-BR')+' linha(s) duplicada(s) ignorada(s)':''));
   });
 }
 // METAS (Painel de médias / Telemetria): placa→meta (abas com placa) + família (META GLOBAL, fallback)
@@ -5900,7 +5922,7 @@ function loadMetas(file){
   const rd=new FileReader();
   rd.onload=e=>{ try{
     const wb=XLSX.read(e.target.result,{type:'array'});
-    const placa={}, byf={};
+    const placa={}, byf={},seenRows=new Set(); let dup=0;
     wb.SheetNames.forEach(sn=>{
       const M=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:'',header:1});   // linhas como arrays
       const nsn=norm(sn);
@@ -5910,7 +5932,7 @@ function loadMetas(file){
       if(nsn.indexOf('META GLOBAL')>=0 || nsn.indexOf('PAINEL')>=0){
         const hdr=(M[0]||[]).map(norm); const iOp=hdr.findIndex(h=>h.indexOf('OPERACAO')>=0);
         let iMeta=hdr.findIndex(h=>h==='META ATUALIZADA'); if(iMeta<0) iMeta=hdr.findIndex(h=>h==='META');
-        if(iOp>=0 && iMeta>=0) M.slice(1).forEach(r=>{ const op=r[iOp], mt=numBR(r[iMeta]); if(op&&mt>0&&mt<12){ const f=opFamily(op); if(f)(byf[f]=byf[f]||[]).push(mt); } });
+        if(iOp>=0 && iMeta>=0) M.slice(1).forEach(r=>{ const sig=rowSigCells(r); if(seenRows.has(sig)){dup++;return;} seenRows.add(sig); const op=r[iOp], mt=numBR(r[iMeta]); if(op&&mt>0&&mt<12){ const f=opFamily(op); if(f)(byf[f]=byf[f]||[]).push(mt); } });
       }
     });
     META_PLACA=Object.keys(placa).length?placa:null;
@@ -5918,7 +5940,7 @@ function loadMetas(file){
     if(!Object.keys(META_FAM).length) META_FAM=null;
     META_N=(META_PLACA?Object.keys(META_PLACA).length:0);
     updateDropStatus(); renderAll();
-    toast('Metas ✓ '+(META_PLACA?Object.keys(META_PLACA).length+' placas':'')+(META_FAM?' · '+Object.keys(META_FAM).length+' operações':''));
+    toast('Metas ✓ '+(META_PLACA?Object.keys(META_PLACA).length+' placas':'')+(META_FAM?' · '+Object.keys(META_FAM).length+' operações':'')+(dup?' · '+dup.toLocaleString('pt-BR')+' linha(s) duplicada(s) ignorada(s)':''));
   }catch(err){ toast('Erro ao ler as metas'); } };
   rd.readAsArrayBuffer(file);
 }
@@ -5971,19 +5993,19 @@ async function loadSaudeFiles(files){
 async function loadAbastecimentoFiles(files){
   const rows=[]; for(const f of [...files].sort((a,b)=>String(a.name).localeCompare(String(b.name)))){ const r=await loadXlsxSheetP(f,['Abastecimento'],['placa','litros']); rows.push(...r.rows); }
   if(!rows.length){toast('Abastecimento vazio');return;} const r0=rows[0],cM=col(r0,['motorista']),cLit=col(r0,['total litros','litros']),cVal=col(r0,['total valor','valor']),cDif=col(r0,['diferenca km','diferenca','dif km']),cMed=col(r0,['media']); if(!cM||!cLit){toast('Abastecimento: faltam colunas Motorista/Litros');return;}
-  const A={}; rows.forEach(row=>{const nome=String(row[cM]||'').trim();if(!nome)return;const nn=norm(nome),lit=numBR(row[cLit]),med=cMed?numBR(row[cMed]):0,dif=cDif?numBR(row[cDif]):0,val=cVal?numBR(row[cVal]):0;if(!(lit>0&&med>=0.5&&med<=9&&dif>0&&dif<3000))return;const a=(A[nn]=A[nn]||{nome,km:0,litros:0,valor:0,n:0});a.km+=dif;a.litros+=lit;a.valor+=val;a.n++;}); Object.values(A).forEach(a=>a.media=a.litros>0?a.km/a.litros:null); ABAST=A;ABAST_N=Object.keys(A).length;afterImportChange({reanalyze:false,filters:false,persist:true});toast('Abastecimento ✓ '+ABAST_N.toLocaleString('pt-BR')+' motoristas · '+[...files].length+' arquivo(s)');
+  const A={},seen=new Set(); let dup=0; rows.forEach(row=>{const sig=rowSigObj(row);if(seen.has(sig)){dup++;return;}seen.add(sig);const nome=String(row[cM]||'').trim();if(!nome)return;const nn=norm(nome),lit=numBR(row[cLit]),med=cMed?numBR(row[cMed]):0,dif=cDif?numBR(row[cDif]):0,val=cVal?numBR(row[cVal]):0;if(!(lit>0&&med>=0.5&&med<=9&&dif>0&&dif<3000))return;const a=(A[nn]=A[nn]||{nome,km:0,litros:0,valor:0,n:0});a.km+=dif;a.litros+=lit;a.valor+=val;a.n++;}); Object.values(A).forEach(a=>a.media=a.litros>0?a.km/a.litros:null); ABAST=A;ABAST_N=Object.keys(A).length;afterImportChange({reanalyze:false,filters:false,persist:true});toast('Abastecimento ✓ '+ABAST_N.toLocaleString('pt-BR')+' motoristas · '+[...files].length+' arquivo(s)'+(dup?' · '+dup.toLocaleString('pt-BR')+' linha(s) duplicada(s) ignorada(s)':''));
 }
 async function loadMetasFiles(files){
   if(typeof XLSX==='undefined' && [...files].some(f=>/\.xlsx?$/i.test(f.name))){toast('Sem internet p/ ler Excel');return;}
-  const placa={},byf={},cm={}; const cmAdd=(k,v)=>{const o=cm[k]||(cm[k]={s:0,n:0});o.s+=v;o.n++;}; let ok=0;
+  const placa={},byf={},cm={},seenRows=new Set(); let dup=0; const cmAdd=(k,v)=>{const o=cm[k]||(cm[k]={s:0,n:0});o.s+=v;o.n++;}; let ok=0;
   for(const f of [...files].sort((a,b)=>String(a.name).localeCompare(String(b.name)))){ try{ const ext=(f.name.split('.').pop()||'').toLowerCase();
-    if(ext==='xlsx'||ext==='xls'){ const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}); wb.SheetNames.forEach(sn=>{ const M=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:'',header:1}),nsn=norm(sn); M.forEach(r=>{for(let c=0;c<r.length-1;c++){const v=norm(r[c]).replace(/[\s-]/g,'');if(PLACA_PAT.test(v)){const mt=numBR(r[c+1]);if(mt>0.5&&mt<12)placa[v]=mt;}}}); if(nsn.indexOf('META GLOBAL')>=0||nsn.indexOf('PAINEL')>=0){const hdr=(M[0]||[]).map(norm),iOp=hdr.findIndex(h=>h.indexOf('OPERACAO')>=0);let iMeta=hdr.findIndex(h=>h==='META ATUALIZADA');if(iMeta<0)iMeta=hdr.findIndex(h=>h==='META');const iMM=hdr.findIndex(h=>h.indexOf('MARCA')>=0||h.indexOf('MODELO')>=0),iTp=hdr.findIndex(h=>h==='TIPO');if(iOp>=0&&iMeta>=0)M.slice(1).forEach(r=>{const op=r[iOp],mt=numBR(r[iMeta]);if(op&&mt>0&&mt<12){const fam=opFamily(op);if(fam)(byf[fam]=byf[fam]||[]).push(mt);const mk=iMM>=0?metaModelKey('',r[iMM]):'';if(mk){const ex=(iTp>=0?metaEixo(r[iTp]):'')||(iMM>=0?metaEixo(r[iMM]):'');if(fam&&ex)cmAdd('FME|'+fam+'|'+mk+'|'+ex,mt);if(fam)cmAdd('FM|'+fam+'|'+mk,mt);if(ex)cmAdd('ME|'+mk+'|'+ex,mt);cmAdd('M|'+mk,mt);}}});}}); }
-    else { const rows=await readFileRowsP(f); if(rows.length){const r0=rows[0],cP=col(r0,['placa']),cO=col(r0,['operacao']),cM=col(r0,['meta']);rows.forEach(r=>{const mt=cM?numBR(r[cM]):0;if(cP){const pk=placaKey(r[cP]);if(pk&&mt>0.5&&mt<12)placa[pk]=mt;}if(cO&&mt>0&&mt<12){const fam=opFamily(r[cO]);if(fam)(byf[fam]=byf[fam]||[]).push(mt);}});} } ok++;
+    if(ext==='xlsx'||ext==='xls'){ const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}); wb.SheetNames.forEach(sn=>{ const M=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:'',header:1}),nsn=norm(sn); M.forEach(r=>{for(let c=0;c<r.length-1;c++){const v=norm(r[c]).replace(/[\s-]/g,'');if(PLACA_PAT.test(v)){const mt=numBR(r[c+1]);if(mt>0.5&&mt<12)placa[v]=mt;}}}); if(nsn.indexOf('META GLOBAL')>=0||nsn.indexOf('PAINEL')>=0){const hdr=(M[0]||[]).map(norm),iOp=hdr.findIndex(h=>h.indexOf('OPERACAO')>=0);let iMeta=hdr.findIndex(h=>h==='META ATUALIZADA');if(iMeta<0)iMeta=hdr.findIndex(h=>h==='META');const iMM=hdr.findIndex(h=>h.indexOf('MARCA')>=0||h.indexOf('MODELO')>=0),iTp=hdr.findIndex(h=>h==='TIPO');if(iOp>=0&&iMeta>=0)M.slice(1).forEach(r=>{const sig=rowSigCells(r);if(seenRows.has(sig)){dup++;return;}seenRows.add(sig);const op=r[iOp],mt=numBR(r[iMeta]);if(op&&mt>0&&mt<12){const fam=opFamily(op);if(fam)(byf[fam]=byf[fam]||[]).push(mt);const mk=iMM>=0?metaModelKey('',r[iMM]):'';if(mk){const ex=(iTp>=0?metaEixo(r[iTp]):'')||(iMM>=0?metaEixo(r[iMM]):'');if(fam&&ex)cmAdd('FME|'+fam+'|'+mk+'|'+ex,mt);if(fam)cmAdd('FM|'+fam+'|'+mk,mt);if(ex)cmAdd('ME|'+mk+'|'+ex,mt);cmAdd('M|'+mk,mt);}}});}}); }
+    else { const rows=await readFileRowsP(f); if(rows.length){const r0=rows[0],cP=col(r0,['placa']),cO=col(r0,['operacao']),cM=col(r0,['meta']);rows.forEach(r=>{const sig=rowSigObj(r);if(seenRows.has(sig)){dup++;return;}seenRows.add(sig);const mt=cM?numBR(r[cM]):0;if(cP){const pk=placaKey(r[cP]);if(pk&&mt>0.5&&mt<12)placa[pk]=mt;}if(cO&&mt>0&&mt<12){const fam=opFamily(r[cO]);if(fam)(byf[fam]=byf[fam]||[]).push(mt);}});} } ok++;
   }catch(e){} }
   META_PLACA=Object.keys(placa).length?placa:null; META_FAM={}; for(const fam in byf)META_FAM[fam]=byf[fam].reduce((a,b)=>a+b,0)/byf[fam].length; if(!Object.keys(META_FAM).length)META_FAM=null;
   META_CM=(()=>{const o={};for(const k in cm)o[k]=Math.round(cm[k].s/cm[k].n*100)/100;return Object.keys(o).length?o:null;})();
   const nMod=META_CM?Object.keys(META_CM).filter(k=>k.indexOf('M|')===0).length:0;
-  META_N=META_PLACA?Object.keys(META_PLACA).length:0;afterImportChange({reanalyze:false,filters:false,persist:true});toast('Metas ✓ '+(META_PLACA?Object.keys(META_PLACA).length+' placas':'')+(META_FAM?' · '+Object.keys(META_FAM).length+' operações':'')+(nMod?' · '+nMod+' modelos':'')+' · '+ok+' arquivo(s)');
+  META_N=META_PLACA?Object.keys(META_PLACA).length:0;afterImportChange({reanalyze:false,filters:false,persist:true});toast('Metas ✓ '+(META_PLACA?Object.keys(META_PLACA).length+' placas':'')+(META_FAM?' · '+Object.keys(META_FAM).length+' operações':'')+(nMod?' · '+nMod+' modelos':'')+' · '+ok+' arquivo(s)'+(dup?' · '+dup.toLocaleString('pt-BR')+' linha(s) duplicada(s) ignorada(s)':''));
 }
 
 
