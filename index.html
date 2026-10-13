@@ -209,6 +209,16 @@
   .lane .plate-mark .pm-br{background:#123a8e;color:#fff;font-size:8px;font-weight:800;letter-spacing:.04em;display:flex;align-items:center;padding:0 3px}
   .lane .plate-mark .pm-no{color:#0b0b0b;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:.05em;padding:1px 4px;display:flex;align-items:center}
   .seg.ponto{background:color-mix(in srgb,var(--track-ponto) 82%,#000 4%);color:#3a2e00}
+  /* No modo placa, o ponto usa a MESMA cor do motorista da Direcao, mas em tom claramente mais claro. */
+  .seg.ponto.driver-point{background:color-mix(in srgb,var(--drv-color) 36%,#fff 64%);color:color-mix(in srgb,var(--drv-color) 78%,#111 22%);border:1px solid color-mix(in srgb,var(--drv-color) 58%,#fff 42%);text-shadow:none;font-weight:750}
+  /* Modo placa: Direcao e Identificacao compartilham a mesma faixa. A cor principal identifica o motorista;
+     a fita inferior verde/vermelha informa o status da identificacao da camera. */
+  .lane.combined-mi{height:22px}
+  .lane.combined-mi .seg.mov{top:1px;bottom:6px}
+  .lane .ident-band{position:absolute;bottom:1px;height:4px;border-radius:2px;z-index:5;min-width:2px;cursor:help;box-shadow:0 0 0 1px rgba(255,255,255,.45)}
+  .lane .ident-band.ok{background:var(--track-id-ok)}
+  .lane .ident-band.bad{background:var(--track-id-bad)}
+  .lane .ident-band.div{background:var(--serious)}
   .seg.mov{background:var(--track-mov)}
   .seg.mov.unid{background:repeating-linear-gradient(45deg,var(--track-id-bad),var(--track-id-bad) 5px,color-mix(in srgb,var(--track-id-bad) 55%,#000) 5px,color-mix(in srgb,var(--track-id-bad) 55%,#000) 10px);color:#fff}
   .seg.idok{background:var(--track-id-ok)}
@@ -2646,10 +2656,26 @@ function multaSyntheticRecord(nome,m){
 function multaTimelineIcon(t){ return t==='CELULAR'?'📱':t==='VELOCIDADE'?'🚨':'🧾'; }
 function multaTimelineLabel(t){ return t==='CELULAR'?'Multa · celular':t==='VELOCIDADE'?'Multa · velocidade':'Multa'; }
 // monta os cards semanais (agrupa por motorista+semana), registra o estado de zoom e devolve {html, ids}
-const DRIVER_COLOR_PALETTE=['#2563eb','#7c3aed','#0f766e','#c2410c','#be123c','#0891b2','#4d7c0f','#9333ea','#0369a1','#b45309'];
+const DRIVER_COLOR_PALETTE=['#2563eb','#7c3aed','#0f766e','#c2410c','#be123c','#0891b2','#4d7c0f','#9333ea','#0369a1','#b45309','#db2777','#059669','#dc2626','#4f46e5','#0e7490','#a16207'];
 function driverColor(nome){
   const n=norm(nome||''); let h=0; for(let i=0;i<n.length;i++)h=((h<<5)-h+n.charCodeAt(i))|0;
   return DRIVER_COLOR_PALETTE[Math.abs(h)%DRIVER_COLOR_PALETTE.length];
+}
+// No modo PLACA, motoristas visíveis no mesmo card nunca devem receber a mesma cor.
+// Mantém a cor hash como preferência e resolve colisões localmente por probing na paleta.
+function driverColorMap(names){
+  const uniq=[]; const seen=new Set();
+  (names||[]).forEach(n=>{const k=norm(n);if(n&&k&&!seen.has(k)){seen.add(k);uniq.push(n);}});
+  uniq.sort((a,b)=>norm(a).localeCompare(norm(b),'pt-BR'));
+  const out=new Map(), used=new Set();
+  uniq.forEach((n,idx)=>{
+    const k=norm(n); let h=0; for(let i=0;i<k.length;i++)h=((h<<5)-h+k.charCodeAt(i))|0;
+    let base=Math.abs(h)%DRIVER_COLOR_PALETTE.length, pick=-1;
+    for(let step=0;step<DRIVER_COLOR_PALETTE.length;step++){ const j=(base+step)%DRIVER_COLOR_PALETTE.length; if(!used.has(j)){pick=j;break;} }
+    if(pick>=0){ used.add(pick); out.set(k,DRIVER_COLOR_PALETTE[pick]); }
+    else { const hue=Math.round((idx*137.508)%360); out.set(k,`hsl(${hue} 68% 42%)`); }
+  });
+  return out;
 }
 function timelineDriversFromRecs(recs){
   const actual=new Map(), expected=new Map(); let divergence=false;
@@ -2666,10 +2692,11 @@ function timelineDriversFromRecs(recs){
   return {actual:[...actual.values()],expected:[...expected.values()],kind};
 }
 function timelineFilterOk(kind){ const el=$('#fCondTimeline'); const f=el?el.value:''; return !f||f===kind; }
-function driverLegendHtml(names,kind){
+function driverLegendHtml(names,kind,colorOf){
   const uniq=[]; const seen=new Set(); (names||[]).forEach(n=>{const k=norm(n);if(n&&k&&!seen.has(k)){seen.add(k);uniq.push(n);}});
   const state=kind==='divergencia'?'<span class="driver-state divergencia">⚠ Divergência</span>':kind==='dupla'?('<span class="driver-state dupla">👥 '+(uniq.length===2?'Dupla identificada':(uniq.length+' motoristas no período'))+'</span>'):(uniq.length?'<span class="driver-state unico">● Motorista único</span>':'');
-  const chips=uniq.map(n=>`<span class="driver-chip"><i class="dot" style="--drv-color:${driverColor(n)}"></i>${firstName(n)}</span>`).join('');
+  const c=colorOf||driverColor;
+  const chips=uniq.map(n=>`<span class="driver-chip"><i class="dot" style="--drv-color:${c(n)}"></i>${firstName(n)}</span>`).join('');
   return (state||chips)?`<div class="driver-legend">${state}${chips}</div>`:'';
 }
 function buildWeekCards(rows, prefix, cap, showNome, mode){
@@ -2828,6 +2855,34 @@ function resolvePlateDirection(pd){
   }
   return out;
 }
+// Pontos dos motoristas que aparecem conduzindo a placa no período do card.
+// O ponto vem da base de jornada do MOTORISTA, não da placa; por isso é cruzado aqui pelo nome identificado.
+function plateDriverPointSegments(g, driverNames, colorMap){
+  const out=[], seenJourney=new Set(), base=Date.parse(g.start), end=base+(g.total||0)*60000;
+  if(!isFinite(base)||!isFinite(end)||end<=base)return out;
+  (driverNames||[]).forEach(drv=>{
+    const nn=norm(drv); if(!nn)return;
+    const recs=(RECORDS_BY_DRIVER_N&&RECORDS_BY_DRIVER_N[nn])||[];
+    recs.forEach(r=>{
+      if(!r||!(r.punches&&r.punches.length))return;
+      const sig=nn+'|'+calcJourneySignature(r); if(seenJourney.has(sig))return; seenJourney.add(sig);
+      const P=(r.seqP&&r.seqP.length===r.punches.length)?r.seqP:r.punches;
+      const rb=Date.parse(r.data); if(!isFinite(rb))return;
+      const pairs=[];
+      for(let j=0;j+1<P.length;j+=2)pairs.push([P[j],P[j+1]]);
+      if(P.length===1)pairs.push([P[0],P[0]+8]);
+      pairs.forEach(([a0,b0])=>{
+        let a=rb+(+a0||0)*60000, b=rb+(+b0||0)*60000; if(!(b>a))return;
+        if(b<=base||a>=end)return; a=Math.max(a,base); b=Math.min(b,end);
+        const ar=Math.round((a-base)/60000), br=Math.round((b-base)/60000); if(br<=ar)return;
+        const cor=(colorMap&&colorMap.get(nn))||driverColor(drv);
+        out.push({a:ar,b:br,drv,color:cor,lab:firstName(drv)+' · '+hm(ar%1440)+'–'+hm(br%1440)});
+      });
+    });
+  });
+  return out.sort((a,b)=>a.a-b.a||a.b-b.b||norm(a.drv).localeCompare(norm(b.drv),'pt-BR'));
+}
+
 // MODO PLACA: agrupa a linha do tempo por PLACA (todos os condutores) — mostra a movimentação da placa
 function buildPlacaCards(placaQ, prefix, cap){
   for(const k in ZTL) if(k.indexOf(prefix)===0) delete ZTL[k];
@@ -2860,23 +2915,25 @@ function buildPlacaCards(placaQ, prefix, cap){
   const shown=groups.slice(0,cap); const ids=[];
   const html=shown.map((g,idx)=>{
     const id=prefix+idx; ids.push(id); const mov=[],ident=[]; let km=0,idMin=0,unMin=0; const drivers=new Set(), dias=new Set();
-    g.days.forEach(pd=>{ const dIdx=Math.round((Date.parse(pd.data)-Date.parse(g.start))/86400000); const off=dIdx*1440; dias.add(pd.data);
+    // Primeiro resolve todos os motoristas do card; depois distribui cores SEM colisão dentro desta placa.
+    const dayResolved=g.days.map(pd=>({pd,dir:resolvePlateDirection(pd),cams:resolvePlateCamera(pd)}));
+    dayResolved.forEach(x=>{ (x.pd.id||[]).forEach(s=>{if(s.drv)drivers.add(s.drv);}); (x.dir||[]).forEach(s=>{if(s.drv)drivers.add(s.drv);}); (x.cams||[]).forEach(s=>{if(s.drv)drivers.add(s.drv);}); });
+    const plateColors=driverColorMap([...drivers]); const plateColor=n=>plateColors.get(norm(n))||driverColor(n);
+    dayResolved.forEach(({pd,dir:dirSegs,cams})=>{ const dIdx=Math.round((Date.parse(pd.data)-Date.parse(g.start))/86400000); const off=dIdx*1440; dias.add(pd.data);
       // KM permanece calculado pela base original; somente a faixa visual de Direção é normalizada.
-      pd.id.forEach(s=>{ if(s.drv)drivers.add(s.drv); km+=s.km||0; });
-      const dirSegs=resolvePlateDirection(pd);
+      pd.id.forEach(s=>{ km+=s.km||0; });
       dirSegs.forEach(s=>{
-        if(s.drv)drivers.add(s.drv);
         if(!s.drv)return;
         const lab=firstName(s.drv)+' · '+hm(s.ini%1440)+'–'+hm(s.fim%1440);
-        mov.push({a:off+s.ini,b:off+s.fim,km:0,drv:s.drv,color:driverColor(s.drv),lab,unid:false});
+        mov.push({a:off+s.ini,b:off+s.fim,km:0,drv:s.drv,color:plateColor(s.drv),lab,unid:false});
       });
-      const cams=resolvePlateCamera(pd);
-      cams.forEach(s=>{ if(s.drv)drivers.add(s.drv); ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:s.drv,color:s.drv?driverColor(s.drv):'',div:false,who:s.who||s.drv}); idMin+=(s.fim-s.ini); });
+      cams.forEach(s=>{ ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:s.drv,color:s.drv?plateColor(s.drv):'',div:false,who:s.who||s.drv}); idMin+=(s.fim-s.ini); });
       // Movimento sem leitura de camera continua sinalizado somente na faixa de Identificacao.
       // Nao cria um falso "condutor nao identificado" na faixa Direcao.
       pd.un.forEach(s=>{ ident.push({a:off+s[0],b:off+s[1],ok:false}); unMin+=(s[1]-s[0]); });
     });
-    ZTL[id]={weekStart:g.start, ponto:[], mov, alertas:[], ident, t0:0, t1:g.total, total:g.total};
+    const ponto=plateDriverPointSegments(g,[...drivers],plateColors);
+    ZTL[id]={weekStart:g.start, ponto, mov, alertas:[], ident, combineMovIdent:true, t0:0, t1:g.total, total:g.total};
     const ader = (idMin+unMin)>0? Math.round(idMin/(idMin+unMin)*100) : null;
     const meta=`<div class="meta">
       <div class="m"><span>Fechamento</span><b>${g.label}</b></div>
@@ -2884,13 +2941,13 @@ function buildPlacaCards(placaQ, prefix, cap){
       <div class="m"><span>Identif.</span><b style="color:${ader==null?'var(--muted)':(ader>=CFG.sem?'var(--good)':'var(--critical)')}">${ader==null?'—':ader+'%'}</b></div>
       <div class="m"><span>Motoristas</span><b style="color:${drivers.size>1?'var(--serious)':(drivers.size?'inherit':'var(--critical)')}">${drivers.size||'—'}</b></div>
       <div class="m"><span>Km</span><b>${km?Math.round(km).toLocaleString('pt-BR'):'—'}</b></div></div>`;
-    const drvLegend=driverLegendHtml(g._drvInfo&&g._drvInfo.actual.length?g._drvInfo.actual:[...drivers],g._drvInfo?g._drvInfo.kind:'unico');
+    const drvLegend=driverLegendHtml(g._drvInfo&&g._drvInfo.actual.length?g._drvInfo.actual:[...drivers],g._drvInfo?g._drvInfo.kind:'unico',plateColor);
     return `<div class="card wtl-card"><div class="tl-head"><div class="who"><b>🚚 ${g.placa}</b><small>${[...drivers].map(firstName).join(', ')||'⚠ sem condutor identificado'}</small></div>${meta}</div>${drvLegend}
       <div class="wtl" id="${id}">
         <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
-        <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
-        <div class="track"><span class="tlab">Identificação</span><div class="lane" data-k="ident"></div></div>
+        <div class="track"><span class="tlab">Direção / ID</span><div class="lane combined-mi" data-k="mov"></div></div>
+        <div class="track"><span class="tlab">Ponto motorista</span><div class="lane lane-pt" data-k="ponto"></div></div>
       </div>
       <div class="wtl-hint">🖱️ role o mouse para <b>zoom</b> (período → dia → horas) · arraste p/ navegar · duplo-clique reseta <span class="wtl-hint-touch">· 📱 no celular: <b>pinça</b> p/ zoom, 1 dedo p/ navegar ou use os botões +/−</span></div>
     </div>`;
@@ -2956,7 +3013,8 @@ function renderZoom(id){
   el.querySelector('.wtl-ruler').innerHTML=ruler;
   const laneP=el.querySelector('.lane[data-k="ponto"]');
   if(laneP){ const imk=(st.interj||[]).filter(s=>s.viol).map(s=>{ const p=pos(s.b); if(p<-1||p>101) return ''; const ttl='Interjornada '+hDec(s.min)+' (< 11h · CLT) · '+brDate(s.day); return `<span class="imark" style="left:${p}%" title="${ttl}"><i>🛌</i></span>`; }).join('');
-    laneP.innerHTML=vacationBg+gl+(st.ponto||[]).map(p=>seg('ponto',p[0],p[1],hm(p[0]%1440)+'–'+hm(p[1]%1440))).join('')+imk+vacLbl(); }
+    const phtml=(st.ponto||[]).map(p=>{ const obj=!Array.isArray(p)&&p&&typeof p==='object'; const a=obj?p.a:p[0], b=obj?p.b:p[1]; const lab=obj?(p.lab||((p.drv?firstName(p.drv)+' · ':'')+hm(a%1440)+'–'+hm(b%1440))):(hm(a%1440)+'–'+hm(b%1440)); const sty=obj&&p.color?'--drv-color:'+p.color+';':''; return seg(obj&&p.color?'ponto driver-point':'ponto',a,b,lab,'',lab,sty); }).join('');
+    laneP.innerHTML=vacationBg+gl+phtml+imk+vacLbl(); }
   const laneM=el.querySelector('.lane[data-k="mov"]');
   // Limpeza visual: conduções de até 1 minuto continuam nos dados/cálculos,
   // mas não são desenhadas na timeline para evitar microblocos sem valor analítico.
@@ -2968,7 +3026,21 @@ function renderZoom(id){
     const withPlaca=movSegs.filter(s=>s.placa).slice().sort((x,y)=>x.a-y.a);
     let prevPl='', marks='';
     withPlaca.forEach(s=>{ const pl=String(s.placa); if(prevPl && norm(prevPl)!==norm(pl)){ const p=pos(s.a); if(p>=-1&&p<=101){ const ttl='Trocou de placa às '+hm(s.a%1440)+' · de '+prevPl+' → para '+pl; marks+=`<span class="plate-mark" style="left:${p}%" title="${ttl}"><span class="pm-swap">⇄</span><span class="pm-plate"><span class="pm-br">BR</span><span class="pm-no">${pl}</span></span></span>`; } } prevPl=pl; });
-    laneM.innerHTML=vacationBg+gl+segsHtml+marks;
+    let identBands='';
+    if(st.combineMovIdent){
+      identBands=(st.ident||[]).map(s=>{
+        if(!Number.isFinite(s.a)||!Number.isFinite(s.b)||s.b<=s.a)return '';
+        const l=pos(s.a),r=pos(s.b); if(r<0||l>100)return '';
+        const L=Math.max(l,0),W=Math.max(Math.min(r,100)-L,0.3);
+        const nm=s.drv||s.who||'';
+        const cls=!s.ok?'bad':(s.div?'div':'ok');
+        const ttl=!s.ok
+          ? ('Identificação · '+hm(s.a%1440)+'–'+hm(s.b%1440)+' · SEM identificação')
+          : ('Identificação · '+hm(s.a%1440)+'–'+hm(s.b%1440)+(nm?' · '+firstName(nm):'')+(s.div?' · ⚠ divergência':' · identificada'));
+        return `<span class="ident-band ${cls}" style="left:${L}%;width:${W}%" title="${ttl}"></span>`;
+      }).join('');
+    }
+    laneM.innerHTML=vacationBg+gl+segsHtml+marks+identBands;
   }
   const laneAl=el.querySelector('.lane[data-k="alertas"]');
   if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const cls=al.niv==='A'?'alto':al.niv==='M'?'medio':'baixo'; return `<span class="amark ${cls}" style="left:${p}%" title="${hm(al.t%1440)} · ${tipoLabel(al.tipo)} · ${nivName(al.niv)}"><i>${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
