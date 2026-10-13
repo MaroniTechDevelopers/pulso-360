@@ -1977,11 +1977,19 @@ function auditMetrics(rows){
     segments,pointSegments,byDay,extraByDay,plateMinutes};
   if(Array.isArray(rows))OP_AUDIT_CACHE.set(rows,{tag,v:out}); return out;
 }
-let RECORD_DAY_AUDIT_CACHE=new WeakMap();
+let RECORD_DAY_AUDIT_CACHE=new WeakMap(), RECORD_FULL_AUDIT_CACHE=new WeakMap();
+function auditRecordFull(r){
+  if(!r)return auditMetrics([]);
+  const tag=String(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|'+String(CFG&&CFG.tol||0)+'|'+String(CFG&&CFG.jornadaMin||440),c=RECORD_FULL_AUDIT_CACHE.get(r);if(c&&c.tag===tag)return c.v;
+  const v=auditMetrics([r]); RECORD_FULL_AUDIT_CACHE.set(r,{tag,v}); return v;
+}
 function auditRecordDay(r){
   if(!r)return {hCond:0,km:0,hFora:0,hDedo:0,hPonto:0,hExtra:0,prim:null,ult:null};
   const tag=String(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|'+String(CFG&&CFG.tol||0)+'|'+String(CFG&&CFG.jornadaMin||440),c=RECORD_DAY_AUDIT_CACHE.get(r);if(c&&c.tag===tag)return c.v;
-  const a=auditMetrics([r]),d=(a.byDay&&a.byDay[r.data])||{},segs=(a.segments||[]).filter(s=>s.date===r.data); const v={hCond:d.hCond||0,km:d.km||0,hFora:d.hFora||0,hDedo:d.hDedo||0,hPonto:d.hPonto||0,hExtra:(a.extraByDay&&a.extraByDay[r.data])||0,prim:segs.length?Math.min(...segs.map(s=>s.a)):null,ult:segs.length?Math.max(...segs.map(s=>s.b)):null}; RECORD_DAY_AUDIT_CACHE.set(r,{tag,v});return v;
+  const a=auditRecordFull(r),d=(a.byDay&&a.byDay[r.data])||{},segs=(a.segments||[]).filter(s=>s.date===r.data); const v={hCond:d.hCond||0,km:d.km||0,hFora:d.hFora||0,hDedo:d.hDedo||0,hPonto:d.hPonto||0,hExtra:(a.extraByDay&&a.extraByDay[r.data])||0,prim:segs.length?Math.min(...segs.map(s=>s.a)):null,ult:segs.length?Math.max(...segs.map(s=>s.b)):null}; RECORD_DAY_AUDIT_CACHE.set(r,{tag,v});return v;
+}
+function auditWeeksFromDay(audit){
+  const out=Object.create(null); for(const d in ((audit&&audit.byDay)||{})){ const wi=weekInfo(d), x=audit.byDay[d]; if(wi&&wi.key) out[wi.key]=(out[wi.key]||0)+((x&&x.hFora)||0); } return out;
 }
 
 function build(forceAnalyze=false){
@@ -2401,7 +2409,9 @@ function applyResumoRankScores(data,rows){
     _rankAnnotate(data,profiles);
     return profiles;
   }
-  const by=Object.create(null); (rows||[]).forEach(r=>{const k=norm(r.motoristaEscala||'');if(k)(by[k]=by[k]||[]).push(r);});
+  // Sem filtros, reaproveita o índice estável por motorista criado no build.
+  // Além de evitar milhares de arrays temporários, permite que auditMetrics reutilize o WeakMap entre telas.
+  const by=(rows===RECORDS)?RECORDS_BY_DRIVER_N:(()=>{const x=Object.create(null);(rows||[]).forEach(r=>{const k=r._nMot||norm(r.motoristaEscala||'');if(k)(x[k]=x[k]||[]).push(r);});return x;})();
   const profiles=Object.create(null); for(const k in by){const nm=(by[k][0]&&by[k][0].motoristaEscala)||k;profiles[k]=rankProfile(nm,by[k]);}
   _rankScoreProfiles(profiles);
   _rankCacheSet(sig,rows,profiles);   // guarda p/ as próximas chamadas com o mesmo recorte + mapa RANK_SCORES p/ a ficha
@@ -2414,9 +2424,9 @@ function applyResumoRankScores(data,rows){
 async function _prewarmRankAsync(rows){
   const sig=_rankSig();
   if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles) return;   // já pronto
-  const by=Object.create(null); (rows||[]).forEach(r=>{const k=norm(r.motoristaEscala||'');if(k)(by[k]=by[k]||[]).push(r);});
+  const by=(rows===RECORDS)?RECORDS_BY_DRIVER_N:(()=>{const x=Object.create(null);(rows||[]).forEach(r=>{const k=r._nMot||norm(r.motoristaEscala||'');if(k)(x[k]=x[k]||[]).push(r);});return x;})();
   const profiles=Object.create(null), keys=Object.keys(by);
-  for(let i=0;i<keys.length;i++){ const k=keys[i], nm=(by[k][0]&&by[k][0].motoristaEscala)||k; profiles[k]=rankProfile(nm,by[k]); if((i&63)===63) await uiYield(); }
+  for(let i=0;i<keys.length;i++){ const k=keys[i], nm=(by[k][0]&&by[k][0].motoristaEscala)||k; profiles[k]=rankProfile(nm,by[k]); if((i&7)===7) await uiYield(); }
   _rankScoreProfiles(profiles);
   _rankCacheSet(sig,rows,profiles);
 }
@@ -2437,13 +2447,11 @@ function resumoMotoristaConsolidado(ms, rows){
   const nome=(rows[0]&&rows[0].motoristaEscala)||(ms[0]&&ms[0].nome)||'—';
   const audit=auditMetrics(rows), semanas=Object.create(null), placas=new Set(), ops=new Set();
   let dd=audit.hDedo||0,ddReal=audit.hForaReal||0,litros=audit.litros||0,idDiv=0,pend=0;
-  const byW=Object.create(null);
   for(const r of rows){
-    if(r.semKey)(byW[r.semKey]=byW[r.semKey]||[]).push(r);
     if(r.placa){const _p=placaBR(r.placa);if(_p)placas.add(_p);} if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
     if(r.idDivergente)idDiv++; if(r.sev==='pendente')pend++;
   }
-  for(const wk in byW)semanas[wk]=auditMetrics(byW[wk]).hForaReal||0;
+  Object.assign(semanas,auditWeeksFromDay(audit));
   const p=(ms.find(x=>x&&x._rankProfile)||{})._rankProfile||null;
   const d=drv(nome), ab=ABAST&&ABAST[norm(nome)];
   const media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(litros>0?audit.km/litros:(p&&p.media!=null?p.media:d.media)));
@@ -2486,8 +2494,8 @@ function semanaAgg(rows){
     list.forEach(m=>{
       // Consolidação auditável: duração/KM/litros/fora da jornada pela união real dos intervalos.
       const au=auditMetrics(m.recs); m.mov=au.hCond||0; m.ponto=au.hPonto||0; m.km=au.km||0; m.litros=au.litros||0; m.dd=au.hDedo||0; m.ddReal=au.hForaReal||0; m.dias=au.daysFora||0; m._movDays=au.diasMov||0;
-      // Farol semanal também usa fora da jornada canônico por semana, sem duplicar registros.
-      const byW=Object.create(null); (m.recs||[]).forEach(r=>{ if(r.semKey)(byW[r.semKey]=byW[r.semKey]||[]).push(r); }); m.semanas={}; for(const wk in byW)m.semanas[wk]=auditMetrics(byW[wk]).hForaReal||0;
+      // Farol semanal deriva do mesmo audit já calculado acima. Evita reprocessar motorista × semana várias vezes.
+      m.semanas=auditWeeksFromDay(au);
       const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)]; m.media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(m.litros>0?(m.km/m.litros):d.media)); m.op=og.op; m.meta=metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
       m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs); m.aj=aderJornada(m.recs);
       m._alR=alertasResumo(m.nome,rng); m._multaTot=MULTAS_N?multasCondutaMotoristaCount(m.nome,rng):0; m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls;
@@ -2721,18 +2729,14 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
   const groups=Object.values(grp).filter(g=>timelineFilterOk(timelineDriversFromRecs(g.recs).kind)).sort((a,b)=> a.gkey<b.gkey?1:a.gkey>b.gkey?-1:a.nome.localeCompare(b.nome));
   const shown=groups.slice(0,cap); const ids=[]; const noun=mode==='fecha'?'períodos':(mode==='dia'?'dias':'semanas'); const zoomTxt=mode==='dia'?'dia → horas':(mode==='fecha'?'período → dia → horas':'semana → dia → horas');
   const html=shown.map((g,i)=>{
-    const id=prefix+i; ids.push(id); const ponto=[],mov=[],alertas=[],ident=[],interj=[],dayStats=Object.create(null); const multas=multaTimelineEvents(g.nome,g.start,g.total); let dd=0,km=0,hpon=0,hcond=0,hex=0,nAlto=0,restMin=null,restViol=0; const placas=new Set(), dias=new Set(), ops=new Set(), journeySeen=new Set(), movSeen=new Set(), movRecSeen=new Set();
+    const id=prefix+i; ids.push(id); const ponto=[],mov=[],alertas=[],ident=[],interj=[],dayStats=Object.create(null); const multas=multaTimelineEvents(g.nome,g.start,g.total); let dd=0,km=0,hpon=0,hcond=0,hex=0,nAlto=0,restMin=null,restViol=0; const placas=new Set(), dias=new Set(), ops=new Set();
     const audit=auditMetrics(g.recs);
     const drvInfo=timelineDriversFromRecs(g.recs), cameraDrivers=new Set(drvInfo.actual);
     const feriasDays=feriasPeriodo(g.nome,g.start,g.total);
     g.recs.forEach(r=>{ const dIdx=Math.round((Date.parse(r.data)-Date.parse(g.start))/86400000); const off=dIdx*1440; dias.add(r.data); if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
-      const P = (r.seqP && r.seqP.length===r.punches.length) ? r.seqP : r.punches;
-      const jk=calcJourneySignature(r), journeyNew=!!(P&&P.length&&!journeySeen.has(jk));
-      if(journeyNew){ journeySeen.add(jk); for(let j=0;j+1<P.length;j+=2) ponto.push([off+P[j],off+P[j+1]]); if(P.length===1) ponto.push([off+P[0],off+P[0]+8]); hpon+=r.horasPonto||0; hex+=r.horaExtra||0; }
-      // H Condução e Km pela UNIÃO por registro (r.horasMov/r.km já descontam placas simultâneas); dedup por registro
-      const recKey=r.shiftId||('MS|'+r.data); if(!movRecSeen.has(recKey)){ movRecSeen.add(recKey); hcond+=r.horasMov||0; km+=r.km||0; }
+      // Ponto, direção, H Condução, KM e fora da jornada vêm do `audit` canônico logo abaixo.
+      // Aqui mantemos apenas as camadas que não são substituídas: identificação, alertas e interjornada.
       const idDiv=!!r.idDivergente; const idWho=r.idDivergente?(r.trimbleMot||'') : '';
-      r.mov.forEach(s=>{ const mk=calcMovementSignature(r,s); if(movSeen.has(mk))return; movSeen.add(mk); const _lo=(r.entradaU!=null?r.entradaU:r.entrada), _hi=(r.saidaU!=null?r.saidaU:r.saida); const fora=(_lo!=null&&(s.ini<_lo-CFG.tol||s.fim>_hi+CFG.tol)); const pl=placaBR(s.placa); mov.push({a:off+s.ini,b:off+s.fim,km:s.km,placa:pl,fora}); if(pl)placas.add(pl); });
       const camSegs=(r.segs||[]).filter(s=>s&&s.motorista&&s.ini!=null&&s.fim!=null);
       if(camSegs.length){ camSegs.forEach(s=>{cameraDrivers.add(s.motorista); ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:s.motorista,color:driverColor(s.motorista),div:norm(s.motorista)!==norm(r.motoristaEscala),who:s.motorista});}); }
       else r.mov.forEach(s=>ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:r.trimbleMot||r.motoristaEscala,color:driverColor(r.trimbleMot||r.motoristaEscala),div:idDiv,who:idWho||r.trimbleMot||r.motoristaEscala}));
@@ -3147,7 +3151,7 @@ function timelinesHTML(rows){
   let glines=''; for(let t=w.lo;t<=w.hi;t+=60){ glines+=`<div class="gl" style="left:${pos(t,w)}%"></div>`; }
 
   return rows.map(r=>{
-    const va=auditRecordDay(r), ra=auditMetrics([r]);
+    const ra=auditRecordFull(r), va=auditRecordDay(r);
     // ponto: pares trabalhados
     let pontoSegs='';
     const _P=(r.seqP&&r.seqP.length===r.punches.length)?r.seqP:r.punches;
@@ -3271,7 +3275,7 @@ function fichaMetrics(nome){
   const d=drv(nome);
   // Usa a mesma auditoria canônica dos KPIs gerais em toda a ficha.
   const audit=auditMetrics(recs);
-  const porSemana={},byW=Object.create(null); recs.forEach(r=>{if(r.semKey)(byW[r.semKey]=byW[r.semKey]||[]).push(r);}); for(const wk in byW)porSemana[wk]=auditMetrics(byW[wk]).hForaReal||0;
+  const porSemana=auditWeeksFromDay(audit);
   const ddTotal=audit.hDedo||0;
   const ddRealTotal=audit.hForaReal||0;
   const hexTotal=audit.hExtra;
