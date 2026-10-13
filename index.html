@@ -750,9 +750,16 @@
   body.booting main{visibility:hidden}
   body.booting #tabs{pointer-events:none;opacity:.55}
   .boot-card{display:flex;flex-direction:column;align-items:center;gap:12px;padding:28px 34px;border:1px solid var(--border);background:var(--surface);border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.12);min-width:280px}
-  .boot-spin{width:32px;height:32px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--gold);animation:bootspin .8s linear infinite}
+  .boot-pulse{width:156px;height:42px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .boot-pulse svg{width:156px;height:42px;display:block;overflow:visible}
+  .boot-pulse-track,.boot-pulse-line{fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .boot-pulse-track{stroke:color-mix(in srgb,var(--border) 88%,transparent);stroke-width:2.2}
+  .boot-pulse-line{stroke:var(--gold);stroke-width:2.6;stroke-dasharray:205;stroke-dashoffset:205;animation:bootpulse 1.55s ease-in-out infinite;filter:drop-shadow(0 0 3px color-mix(in srgb,var(--gold) 45%,transparent))}
+  .boot-pulse-dot{fill:var(--gold);opacity:0;animation:bootdot 1.55s ease-in-out infinite}
   .boot-title{font-weight:800;font-size:15px}.boot-sub{font-size:12px;color:var(--muted);text-align:center}
-  @keyframes bootspin{to{transform:rotate(360deg)}}
+  @keyframes bootpulse{0%{stroke-dashoffset:205;opacity:.3}18%{opacity:1}68%{stroke-dashoffset:0;opacity:1}100%{stroke-dashoffset:-18;opacity:.25}}
+  @keyframes bootdot{0%,72%,100%{opacity:0;transform:translateX(0)}48%,62%{opacity:1;transform:translateX(0)}}
+  @media (prefers-reduced-motion:reduce){.boot-pulse-line{animation:none;stroke-dashoffset:0}.boot-pulse-dot{animation:none;opacity:1}}
 
   /* ============================================================
      RESPONSIVO / MOBILE (adicionado) — só afeta telas pequenas;
@@ -842,7 +849,7 @@
 </style>
 </head>
 <body class="booting">
-<div id="bootLoader"><div class="boot-card"><div class="boot-spin"></div><div class="boot-title">Carregando dados atualizados</div><div class="boot-sub" id="bootLoadTxt">Verificando a última publicação…</div></div></div>
+<div id="bootLoader"><div class="boot-card"><div class="boot-pulse" aria-hidden="true"><svg viewBox="0 0 156 42" preserveAspectRatio="xMidYMid meet"><polyline class="boot-pulse-track" points="2,22 43,22 52,22 58,17 63,23 72,5 80,37 88,22 97,22 104,14 111,28 118,22 154,22"/><polyline class="boot-pulse-line" points="2,22 43,22 52,22 58,17 63,23 72,5 80,37 88,22 97,22 104,14 111,28 118,22 154,22"/><circle class="boot-pulse-dot" cx="154" cy="22" r="2.5"/></svg></div><div class="boot-title">Carregando dados atualizados</div><div class="boot-sub" id="bootLoadTxt">Verificando a última publicação…</div></div></div>
 <header>
   <div class="head-top">
     <div class="brand">
