@@ -1465,8 +1465,19 @@ const ALERTA_DEF=[
   {k:'velocidade',lab:'Velocidade',ic:'⏱️'}
 ];
 function drv(nome){ return DRIVERS[nome]||{admissao:'',media:null,alertas:{}}; }
-// Média RELIGADA (08/10/2026): usa a média da Trimble (km ÷ litros da coluna CONSUMO da movimentação). Frota ≈ 3,65 km/l.
+// Média Trimble: km ÷ litros da movimentação, com validação de coluna, plausibilidade (0,5–10 km/l) e cobertura mínima de 60%.
 const MEDIA_OFF = false;
+// Faixa operacional plausível para caminhões. Valores fora disso NÃO entram em média, ranking ou bonificação.
+const MEDIA_KML_MIN=0.5, MEDIA_KML_MAX=10, MEDIA_MIN_COVERAGE=0.60;
+function mediaPlausivel(v){ v=+v; return Number.isFinite(v)&&v>=MEDIA_KML_MIN&&v<=MEDIA_KML_MAX; }
+function mediaSegura(km,litros){ km=+km||0; litros=+litros||0; if(!(km>0&&litros>0))return null; const v=km/litros; return mediaPlausivel(v)?v:null; }
+function mediaAudit(a){
+  if(!a)return null;
+  if(a.mediaTrimble!=null)return mediaPlausivel(a.mediaTrimble)?a.mediaTrimble:null;
+  return mediaSegura(a.kmMedia!=null?a.kmMedia:a.km,a.litrosMedia!=null?a.litrosMedia:a.litros);
+}
+function mediaAbastecimento(a){ return a&&mediaPlausivel(a.media)?+a.media:null; }
+
 // Relatório de Motoristas: data de admissão por CPF / nome exato / nome canônico (real > cadastro demo)
 let ADMISSAO=null, ADMISSAO_CPF=null, ADMISSAO_N=0;
 let ADMISSAO_CANON=null, ADMISSAO_NOMECPF=null, ADMISSAO_CANONCPF=null;
@@ -1549,8 +1560,8 @@ function diagnosticoAdmissaoAtual(){
   return {total:nomes.length,ok,semData,semMatch,faltam};
 }
 // média oficial do motorista: abastecimento real (bombas) > estimativa Trimble (km/litros) > cadastro demo
-function mediaDe(nome){ if(MEDIA_OFF) return null; const nn=norm(nome); if(ABAST){ const a=ABAST[nn]; if(a&&a.media!=null) return a.media; }
-  const src=RECORDS_BY_DRIVER_N[nn]||[], au=auditMetrics(src); return au.litros>0? au.km/au.litros : (drv(nome).media!=null?drv(nome).media:null); }
+function mediaDe(nome){ if(MEDIA_OFF) return null; const nn=norm(nome); if(ABAST){ const a=ABAST[nn],m=mediaAbastecimento(a); if(m!=null) return m; }
+  const src=RECORDS_BY_DRIVER_N[nn]||[], au=auditMetrics(src), mt=mediaAudit(au); return mt!=null?mt:(mediaPlausivel(drv(nome).media)?drv(nome).media:null); }
 const NIVEL_DEF=[{k:'ALTO',lab:'Alto',ic:'🔴'},{k:'MEDIO',lab:'Médio',ic:'🟠'},{k:'BAIXO',lab:'Baixo',ic:'🟡'}];
 function tipoLabel(t){ return String(t||'').replace(/_/g,' ').toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase()); }
 // alertas reais de um motorista — Boletim (todos os tipos) tem prioridade; herda a severidade do relatório de Alertas se houver
@@ -1770,7 +1781,7 @@ function analyze(rec){
   let horasMov=movMerged.reduce((a,s)=>a+(s.fim-s.ini),0);
   let km=movMerged.reduce((a,s)=>a+s.km,0);
   let litros=movMerged.reduce((a,s)=>a+s.litros,0);
-  let media=litros>0?(km/litros):null;   // média realizada (km/l) da Trimble
+  let media=mediaSegura(km,litros);   // média realizada validada (km/l) da Trimble
   let primMov=mov.length?Math.min(...mov.map(s=>s.ini)):null;
   let ultMov=mov.length?Math.max(...mov.map(s=>s.fim)):null;
   // --- trimble ---
@@ -1936,7 +1947,7 @@ function auditMetrics(rows){
 
   // Canoniza a movimentação por motorista + DIA CIVIL. Intervalos sobrepostos contam UMA vez.
   const segments=[],byDay=Object.create(null),plateMinutes=Object.create(null),driverDayMinutes=Object.create(null);
-  let hCond=0,km=0,litros=0,overlapMovMin=0,conflictPlateMin=0,maxDriverDayCond=0;
+  let hCond=0,km=0,litros=0,kmMedia=0,litrosMedia=0,kmMediaPotencial=0,fuelValidSegments=0,fuelInvalidSegments=0,overlapMovMin=0,conflictPlateMin=0,maxDriverDayCond=0;
   const canonicalByDriver=Object.create(null);
   for(const k in movGroups){
     const arr=movGroups[k].slice().sort((x,y)=>x.a-y.a||(y.b-y.a)-(x.b-x.a)||String(x.placa).localeCompare(String(y.placa)));
@@ -1951,7 +1962,18 @@ function auditMetrics(rows){
     const compact=[]; for(const s of accepted){const z=compact[compact.length-1];if(z&&z.b===s.a&&z.placa===s.placa){z.b=s.b;z.absB=s.absB;z.km+=s.km;z.litros+=s.litros;}else compact.push(Object.assign({},s));}
     const dayMin=compact.reduce((s,x)=>s+(x.b-x.a),0); driverDayMinutes[k]=dayMin; maxDriverDayCond=Math.max(maxDriverDayCond,dayMin);
     movementDayKeys.add(k); hCond+=dayMin;
-    for(const x of compact){km+=x.km;litros+=x.litros;segments.push(x);(canonicalByDriver[x.nn]=canonicalByDriver[x.nn]||[]).push(x); if(x.placa)plateMinutes[x.placa]=(plateMinutes[x.placa]||0)+(x.b-x.a); const d=(byDay[x.date]=byDay[x.date]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hCond+=x.b-x.a;d.km+=x.km;d.litros+=x.litros;}
+    for(const x of compact){
+      km+=x.km; litros+=x.litros;
+      // Média Trimble usa somente trechos com relação km/l fisicamente plausível.
+      // Trechos curtos (<0,5 km) são ignorados na cobertura para não amplificar ruído do sensor.
+      if(x.km>=0.5){
+        kmMediaPotencial+=x.km;
+        const mr=mediaSegura(x.km,x.litros);
+        if(mr!=null){kmMedia+=x.km;litrosMedia+=x.litros;fuelValidSegments++;}
+        else fuelInvalidSegments++;
+      }
+      segments.push(x);(canonicalByDriver[x.nn]=canonicalByDriver[x.nn]||[]).push(x); if(x.placa)plateMinutes[x.placa]=(plateMinutes[x.placa]||0)+(x.b-x.a); const d=(byDay[x.date]=byDay[x.date]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hCond+=x.b-x.a;d.km+=x.km;d.litros+=x.litros;
+    }
   }
 
   // Ponto canônico por motorista (tempo efetivamente registrado, sem sobreposição duplicada).
@@ -1970,7 +1992,10 @@ function auditMetrics(rows){
   for(const nn in canonicalByDriver){const env=mergedEnv[nn]||[];for(const x of canonicalByDriver[nn]){const dayA=x.dayStart,dayB=dayA+1440,dur=x.b-x.a,hasPointDay=env.some(e=>e[1]>dayA&&e[0]<dayB),cov=_auditOverlapLen(x.absA,x.absB,env);let fora=0;if(hasPointDay){fora=Math.max(0,dur-cov);x.foraMin=fora;x.fora=fora>0;x.semPonto=false;hForaReal+=fora;hCondWithPoint+=dur;hDedo+=fora;if(fora>0){daysFora.add(nn+'|'+x.date);driversFora.add(nn);}}else{x.foraMin=0;x.fora=false;x.semPonto=true;hDedo+=dur;movNoPoint.add(nn+'|'+x.date);}const d=(byDay[x.date]=byDay[x.date]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});if(hasPointDay){d.hFora+=fora;d.hDedo+=fora;d.hCondWithPoint+=dur;}else d.hDedo+=dur;}}
 
   const diasMov=new Set(movementDayKeys),pointNoMov=new Set(); for(const pk of pointDayKeys)if(!movementDayKeys.has(pk))pointNoMov.add(pk);
-  const out={hPonto,hExtra,hCond,km,litros,hForaReal,hDedo,hCondWithPoint,
+  const mediaCoverage=kmMediaPotencial>0?kmMedia/kmMediaPotencial:0;
+  const mediaRaw=litros>0?km/litros:null;
+  const mediaTrimble=(mediaCoverage>=MEDIA_MIN_COVERAGE)?mediaSegura(kmMedia,litrosMedia):null;
+  const out={hPonto,hExtra,hCond,km,litros,kmMedia,litrosMedia,kmMediaPotencial,mediaCoverage,mediaRaw,mediaTrimble,fuelValidSegments,fuelInvalidSegments,hForaReal,hDedo,hCondWithPoint,
     diasPonto:diasPonto.size,diasMov:diasMov.size,jornadas:diasPonto.size,jornadasExtra,motoristasHex:motoristasHex.size,
     movDaysNoPoint:movNoPoint.size,pointDaysNoMov:pointNoMov.size,daysFora:daysFora.size,driversFora:driversFora.size,
     dupJornada,dupMov,overlapMovMin,conflictPlateMin,invalidMov,invalidPoint,maxDriverDayCond,
@@ -2235,7 +2260,7 @@ function renderKpis(rows){
   const ajFrota=jCond>0?Math.max(0,Math.round((jCond-jFora)/jCond*100)):null;
   const cobPonto=movDays?Math.round((movDays-movSemPonto)/movDays*100):null;
   const motSet=[...motSetS];
-  const medFrota=(function(){ if(MEDIA_OFF)return null; if(ABAST){let km=0,l=0;motSet.forEach(m=>{const a=ABAST[norm(m)];if(a){km+=a.km;l+=a.litros;}});if(l>0)return km/l;} if(litTot>0)return kmTot/litTot; const a=motSet.map(m=>drv(m).media).filter(v=>v!=null); return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; })();
+  const medFrota=(function(){ if(MEDIA_OFF)return null; if(ABAST){let km=0,l=0;motSet.forEach(m=>{const a=ABAST[norm(m)];if(a&&mediaAbastecimento(a)!=null){km+=a.km;l+=a.litros;}});const ma=mediaSegura(km,l);if(ma!=null)return ma;} const mt=mediaAudit(audit); if(mt!=null)return mt; const a=motSet.map(m=>drv(m).media).filter(mediaPlausivel); return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; })();
   let alertKpi=null;
   if(ALERTS||BOL){ const rng=activeRange(); let tot=0,alto=0,nmot=0; motSet.forEach(m=>{ const a=alertasResumo(m,rng); if(a&&a.total){tot+=a.total;nmot++;if(a.niveis&&a.niveis.ALTO)alto++;} }); alertKpi={tot,alto,nmot}; }
   const identSel=aderRecs(rows);
@@ -2348,14 +2373,14 @@ function rankProfile(nome,recs){
   const datas=(recs||[]).map(r=>r.data).filter(Boolean).sort(), opF=$('#fOp').value; let multaRange=null;
   if(datas.length||opF)multaRange=Object.assign(datas.length?{de:datas[0],ate:datas[datas.length-1]}:{},opF?{op:opF}:{});
   const multaTot=MULTAS_N?multasCondutaMotoristaCount(nome,multaRange):0, multaRate=multaTot*100/hCondH;
-  const d=drv(nome), litros=audit.litros||0, ab=ABAST&&ABAST[norm(nome)];
-  const media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(litros>0?audit.km/litros:d.media));
+  const d=drv(nome), litros=audit.litros||0, ab=ABAST&&ABAST[norm(nome)], mediaA=mediaAbastecimento(ab), mediaT=mediaAudit(audit);
+  const media=MEDIA_OFF?null:(mediaA!=null?mediaA:(mediaT!=null?mediaT:(mediaPlausivel(d.media)?d.media:null)));
   // meta = da placa que o motorista MAIS rodou no período, usando minutos canônicos (sem duplicidade)
   const _plC=audit.plateMinutes||{}; let _plMain='',_plBest=-1; for(const p in _plC){ if(_plC[p]>_plBest){_plBest=_plC[p];_plMain=p;} }
   const rr={placa:_plMain||((recs||[]).find(r=>r.placa)||{}).placa||''}, meta=metaVeic(rr.placa||'',(recs&&recs[0]&&recs[0].operacao)||'');
   // Média via Trimble: km < 0,5 km/l é impossível p/ caminhão = DISTÂNCIA furada no Trimble → NÃO entra no quesito
   // (vira "sem dado", não penaliza com 0). Veículos com sensor ok seguem normais.
-  const mediaScore=(!MEDIA_OFF&&media!=null&&media>=0.5&&meta>0)?rankClamp(media/meta*100):null;
+  const mediaScore=(!MEDIA_OFF&&mediaPlausivel(media)&&meta>0)?rankClamp(media/meta*100):null;
   const pend=(recs||[]).filter(r=>r.sev==='pendente').length, idDiv=(recs||[]).filter(r=>r.idDivergente||r.condutorDivergente).length;
   return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,ajPonto,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
 }
@@ -2453,8 +2478,8 @@ function resumoMotoristaConsolidado(ms, rows){
   }
   Object.assign(semanas,auditWeeksFromDay(audit));
   const p=(ms.find(x=>x&&x._rankProfile)||{})._rankProfile||null;
-  const d=drv(nome), ab=ABAST&&ABAST[norm(nome)];
-  const media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(litros>0?audit.km/litros:(p&&p.media!=null?p.media:d.media)));
+  const d=drv(nome), ab=ABAST&&ABAST[norm(nome)], mediaA=mediaAbastecimento(ab), mediaT=mediaAudit(audit);
+  const media=MEDIA_OFF?null:(mediaA!=null?mediaA:(mediaT!=null?mediaT:(p&&mediaPlausivel(p.media)?p.media:(mediaPlausivel(d.media)?d.media:null))));
   const placa=[...placas][0]||'', opList=[...ops], meta=(p&&p.meta!=null)?p.meta:metaVeic(placa,opList[0]||'');
   const alR=alertasResumo(nome,activeRange());
   const multaTot=MULTAS_N?multasCondutaMotoristaCount(nome,activeRange()):0;
@@ -2496,7 +2521,7 @@ function semanaAgg(rows){
       const au=auditMetrics(m.recs); m.mov=au.hCond||0; m.ponto=au.hPonto||0; m.km=au.km||0; m.litros=au.litros||0; m.dd=au.hDedo||0; m.ddReal=au.hForaReal||0; m.dias=au.daysFora||0; m._movDays=au.diasMov||0;
       // Farol semanal deriva do mesmo audit já calculado acima. Evita reprocessar motorista × semana várias vezes.
       m.semanas=auditWeeksFromDay(au);
-      const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)]; m.media=MEDIA_OFF?null:((ab&&ab.media!=null)?ab.media:(m.litros>0?(m.km/m.litros):d.media)); m.op=og.op; m.meta=metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
+      const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)],ma=mediaAbastecimento(ab),mt=mediaAudit(au); m.media=MEDIA_OFF?null:(ma!=null?ma:(mt!=null?mt:(mediaPlausivel(d.media)?d.media:null))); m.op=og.op; m.meta=metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
       m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs); m.aj=aderJornada(m.recs);
       m._alR=alertasResumo(m.nome,rng); m._multaTot=MULTAS_N?multasCondutaMotoristaCount(m.nome,rng):0; m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls;
     });
@@ -3287,8 +3312,9 @@ function fichaMetrics(nome){
   const alR=alertasResumo(nome, activeRange()); const totAl=alR.total;
   const adm=admissaoDe(nome); const tempo=tempoDeCasa(adm);
   const kmR=audit.km, litrosR=audit.litros||0;
-  const abF=ABAST&&ABAST[norm(nome)];
-  const mediaR = MEDIA_OFF?null:((abF&&abF.media!=null)?abF.media:(litrosR>0?kmR/litrosR:d.media));   // média oculta até revisão; fonte será validada pela Trimble
+  const abF=ABAST&&ABAST[norm(nome)], mediaAb=mediaAbastecimento(abF), mediaTrimble=mediaAudit(audit), mediaRawTrimble=audit.mediaRaw;
+  const mediaInconsistente = !MEDIA_OFF && mediaAb==null && mediaRawTrimble!=null && mediaTrimble==null;
+  const mediaR = MEDIA_OFF?null:(mediaAb!=null?mediaAb:(mediaTrimble!=null?mediaTrimble:(mediaPlausivel(d.media)?d.media:null)));
   const metaFicha = metaVeic(recs.length?(recs.find(r=>r.placa)||{}).placa:'', recs.length?recs[0].operacao:'');
   const medaOk=mediaR!=null&&mediaR>=metaFicha;
   const reco=recomendacao(tempo,mediaR,totAl,ddTotal);
@@ -3299,7 +3325,7 @@ function fichaMetrics(nome){
   const hCondAudit=audit.hCond;
   const interjViol=recs.filter(r=>r.interjornada!=null && r.interjornada<CFG.interjornadaMin).length;
   const restMinF=recs.reduce((m,r)=>(r.interjornada!=null?(m==null?r.interjornada:Math.min(m,r.interjornada)):m),null);
-  const out={nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,risco,condDiv,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF,audit}; FICHA_METRICS_CACHE.set(cacheKey,out); return out;
+  const out={nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaTrimble,mediaRawTrimble,mediaInconsistente,mediaCoverage:audit.mediaCoverage||0,metaFicha,medaOk,reco,risco,condDiv,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF,audit}; FICHA_METRICS_CACHE.set(cacheKey,out); return out;
 }
 // pontos críticos e positivos p/ o relatório executivo
 function fichaPontos(M){
@@ -3316,6 +3342,9 @@ function fichaPontos(M){
   const alto=(M.alR.velocidade&&M.alR.velocidade.alto)||0;
   if(alto>0) crit.push(`<b>${alto}</b> excesso(s) de velocidade em nível alto no período.`);
   if(M.totAl<=2 && M.alR.real) pos.push(`Poucos alertas no período (${M.totAl}).`);
+  if(M.mediaInconsistente){
+    crit.push(`Média Trimble descartada por inconsistência (${M.mediaRawTrimble!=null?nf(M.mediaRawTrimble)+' km/l':'consumo inválido'}). Revisar a coluna de consumo do relatório de movimentação.`);
+  }
   if(M.mediaR!=null){
     if(!M.medaOk) crit.push(`Média <b>${nf(M.mediaR)}</b> km/l abaixo da meta (${nf(M.metaFicha)}).`);
     else pos.push(`Média <b>${nf(M.mediaR)}</b> km/l dentro da meta (${nf(M.metaFicha)}).`);
@@ -3381,7 +3410,7 @@ function fichaEvolTratativas(nome){
 function renderFicha(){
   const nome=fichaAtual; if(!nome){ $('#fichaBox').innerHTML=''; return; }
   const M=fichaMetrics(nome);
-  const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,metaFicha,medaOk,reco,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF}=M;
+  const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaInconsistente,mediaRawTrimble,mediaCoverage,metaFicha,medaOk,reco,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF}=M;
   const fichaRisco=M.risco;
   const weeks=GLOBAL_WEEKS.length?GLOBAL_WEEKS:Object.values(recs.reduce((a,r)=>{if(r.semKey&&!a[r.semKey])a[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};return a;},{})).sort((a,b)=>a.key<b.key?-1:1);
   const _dayF=dayFilter(); let _recsEvid=(_dayF?recs.filter(r=>r.data===_dayF):recs).slice();
@@ -3454,7 +3483,7 @@ function renderFicha(){
 
     <div class="grid kpis" style="margin-bottom:6px">
       ${MEDIA_OFF?'':`<div class="card kpi"><div class="accent" style="background:${medaOk?'var(--good)':'var(--critical)'}"></div>
-        <div class="lab">④ Média realizada</div><div class="val tnum">${mediaR!=null?mediaR.toFixed(2).replace('.',','):'—'}</div><div class="sub">${abF?'real (bomba)':(litrosR>0?'estim. Trimble':'—')} · meta ${metaFicha.toFixed(2).replace('.',',')}${mediaR!=null?(medaOk?' ✓':' ✗'):''}</div></div>`}
+        <div class="lab">④ Média realizada</div><div class="val tnum">${mediaR!=null?mediaR.toFixed(2).replace('.',','):'—'}</div><div class="sub">${abF&&mediaAbastecimento(abF)!=null?'real (bomba)':(mediaInconsistente?'⚠ Trimble inconsistente':(mediaR!=null?'estim. Trimble':'—'))} · meta ${metaFicha.toFixed(2).replace('.',',')}${mediaR!=null?(medaOk?' ✓':' ✗'):''}${mediaInconsistente&&mediaRawTrimble!=null?' · bruto '+mediaRawTrimble.toFixed(2).replace('.',','):''}</div></div>`}
       <div class="card kpi"><div class="accent" style="background:${semel==null?'var(--muted)':(semel>=CFG.sem?'var(--good)':'var(--critical)')}"></div>
         <div class="lab">① Aderência (câmera)</div><div class="val tnum">${semel==null?'—':semel+'<small>%</small>'}</div><div class="sub">movimento do veículo identificado</div></div>
       <div class="card kpi"><div class="accent" style="background:${semelMot==null?'var(--muted)':(semelMot>=CFG.sem?'var(--good)':'var(--critical)')}"></div>
@@ -4639,24 +4668,26 @@ function mediaAgg(rows){
   const mots={};
   rows.forEach(r=>{ const m=(mots[r.motoristaEscala]=mots[r.motoristaEscala]||{nome:r.motoristaEscala,op:r.operacao,placa:'',recs:[]}); m.recs.push(r); if(r.operacao&&r.operacao!=='—')m.op=r.operacao; if(r.placa)m.placa=placaBR(r.placa)||''; });
   return Object.values(mots).map(m=>{
-    const au=auditMetrics(m.recs); m.kmT=au.km||0; m.litrosT=au.litros||0;
-    const mediaT = m.litrosT>0? m.kmT/m.litrosT : (drv(m.nome).media!=null?drv(m.nome).media:null);
+    const au=auditMetrics(m.recs); m.kmT=au.kmMedia||0; m.litrosT=au.litrosMedia||0;
+    const mediaT = mediaAudit(au), mediaTRaw=au.mediaRaw, mediaInconsistente=mediaTRaw!=null&&mediaT==null;
     const ab = ABAST? ABAST[norm(m.nome)] : null;
-    const mediaA = ab? ab.media : null;
+    const mediaA = mediaAbastecimento(ab);
     const meta = metaVeic(m.placa, m.op);
     const oficial = mediaA!=null? mediaA : mediaT;             // abastecimento é a média oficial quando existe
-    return {...m, mediaT, mediaA, ab, meta, oficial, diff:(mediaA!=null&&mediaT!=null)?(mediaA-mediaT):null};
-  }).filter(m=>m.oficial!=null).sort((a,b)=> (a.oficial-a.meta)-(b.oficial-b.meta));   // pior (mais abaixo da meta) primeiro
+    return {...m, mediaT, mediaTRaw, mediaInconsistente, mediaCoverage:au.mediaCoverage||0, mediaA, ab, meta, oficial, diff:(mediaA!=null&&mediaT!=null)?(mediaA-mediaT):null};
+  }).filter(m=>m.oficial!=null||m.mediaInconsistente).sort((a,b)=>{
+    if(a.oficial==null&&b.oficial!=null)return 1;if(a.oficial!=null&&b.oficial==null)return -1;if(a.oficial==null&&b.oficial==null)return a.nome.localeCompare(b.nome,'pt-BR');return (a.oficial-a.meta)-(b.oficial-b.meta);
+  });
 }
 function renderMedia(rows){
   const kbox=$('#mediaKpis'), box=$('#mediaBox');
   const list=mediaAgg(rows); const temAb=ABAST&&list.some(m=>m.mediaA!=null);
-  const abaixo=list.filter(m=>m.oficial<m.meta).length;
+  const abaixo=list.filter(m=>m.oficial!=null&&m.oficial<m.meta).length;
   // frota (oficial) e conciliação
   let kmA=0,litA=0,valA=0; list.forEach(m=>{ if(m.ab){kmA+=m.ab.km;litA+=m.ab.litros;valA+=m.ab.valor;} });
-  const medFrotaA = litA>0? kmA/litA : null;
+  const medFrotaA = mediaSegura(kmA,litA);
   const kmTr=list.reduce((a,m)=>a+m.kmT,0), litTr=list.reduce((a,m)=>a+m.litrosT,0);
-  const medFrotaTr = litTr>0? kmTr/litTr : null;
+  const medFrotaTr = mediaSegura(kmTr,litTr);
   const medFrota = medFrotaA!=null?medFrotaA:medFrotaTr;
   const rsL = litA>0? valA/litA : (CFG.precoLitro||0);
   const litMeta = list.reduce((a,m)=>{ const km=m.ab?m.ab.km:m.kmT; return a+(m.meta>0?km/m.meta:0); },0);
@@ -4675,23 +4706,23 @@ function renderMedia(rows){
   const nf=v=>v==null?'—':v.toFixed(2).replace('.',',');
   box.innerHTML=`<div class="tblwrap"><table style="min-width:820px"><thead><tr>
       <th>Motorista</th><th>Operação</th><th>Meta</th><th>Trimble (est.)</th><th>Abastec. (real)</th><th>Aproveit.</th><th>Δ bomba×telem.</th><th>Custo R$</th><th>Farol</th></tr></thead><tbody>${
-      list.map(m=>{ const of=m.oficial; const cor=of>=m.meta?'var(--good-ink)':'var(--crit-ink)';
+      list.map(m=>{ const of=m.oficial; const cor=of!=null&&of>=m.meta?'var(--good-ink)':'var(--crit-ink)';
         return `<tr class="mediarow" data-mot="${encodeURIComponent(m.nome)}" title="ver ficha do motorista" style="cursor:pointer"><td>${m.nome}</td><td>${m.op||'—'}</td>
           <td class="tnum" title="meta por operação">${nf(m.meta)}</td>
-          <td class="tnum" style="color:var(--muted)">${nf(m.mediaT)}</td>
+          <td class="tnum" style="color:${m.mediaInconsistente?'var(--critical)':'var(--muted)'}" title="${m.mediaInconsistente?'média bruta '+nf(m.mediaTRaw)+' km/l descartada · cobertura válida '+Math.round((m.mediaCoverage||0)*100)+'%':''}">${m.mediaInconsistente?'⚠ inconsistente':nf(m.mediaT)}</td>
           <td class="tnum" style="font-weight:650;color:${m.mediaA!=null?cor:'var(--muted)'}">${m.mediaA!=null?nf(m.mediaA):'—'}</td>
           <td class="tnum" style="font-weight:700;color:${(of!=null&&m.meta>0)?(of>=m.meta?'var(--good-ink)':'var(--crit-ink)'):'var(--muted)'}" title="realizada ÷ meta">${(of!=null&&m.meta>0)?Math.round(of/m.meta*100)+'%':'—'}</td>
           <td class="tnum" style="color:${m.diff==null?'var(--muted)':(Math.abs(m.diff)>0.3?'var(--serious)':'var(--muted)')}">${m.diff==null?'—':(m.diff>=0?'+':'')+nf(m.diff)}</td>
           <td class="tnum">${m.ab?('R$ '+Math.round(m.ab.valor).toLocaleString('pt-BR')):'—'}</td>
-          <td><span class="fdot" style="background:${FAROL_COR[farolMediaVs(of,m.meta)]}" title="oficial ${nf(of)} vs meta ${nf(m.meta)}"></span></td></tr>`;
+          <td><span class="fdot" style="background:${of==null?'var(--baseline)':FAROL_COR[farolMediaVs(of,m.meta)]}" title="${of==null?'sem média válida':'oficial '+nf(of)+' vs meta '+nf(m.meta)}"></span></td></tr>`;
       }).join('')
     }</tbody></table></div>`;
 }
 function exportMedia(){
   const list=mediaAgg(filtered()); if(!list.length){ toast('Sem média no filtro'); return; }
-  const head=['Motorista','Operacao','Meta','Media_Trimble','Media_Abastecimento','Diferenca','Km_abast','Litros_abast','Custo_RS','Abaixo_meta'];
+  const head=['Motorista','Operacao','Meta','Media_Trimble','Media_Trimble_Bruta','Trimble_Inconsistente','Cobertura_Trimble_pct','Media_Abastecimento','Diferenca','Km_abast','Litros_abast','Custo_RS','Abaixo_meta'];
   const lines=[head.join(';')]; const nf=v=>v==null?'':v.toFixed(2);
-  list.forEach(m=>lines.push([m.nome,m.op||'',nf(m.meta),nf(m.mediaT),nf(m.mediaA),nf(m.diff),m.ab?Math.round(m.ab.km):'',m.ab?Math.round(m.ab.litros):'',m.ab?Math.round(m.ab.valor):'',(m.oficial<m.meta?'SIM':'nao')].join(';')));
+  list.forEach(m=>lines.push([m.nome,m.op||'',nf(m.meta),nf(m.mediaT),nf(m.mediaTRaw),m.mediaInconsistente?'SIM':'NAO',Math.round((m.mediaCoverage||0)*100),nf(m.mediaA),nf(m.diff),m.ab?Math.round(m.ab.km):'',m.ab?Math.round(m.ab.litros):'',m.ab?Math.round(m.ab.valor):'',(m.oficial!=null&&m.oficial<m.meta?'SIM':'nao')].join(';')));
   baixarCsv(lines,'media_por_motorista.csv');
 }
 
@@ -4965,6 +4996,19 @@ function opFamily(s){
 }
 // localizar coluna por apelidos (sem acento, contém)
 function col(row, aliases){ const keys=Object.keys(row); for(const a of aliases){ const na=norm(a); const k=keys.find(k=>norm(k).includes(na)); if(k) return k; } return null; }
+// Coluna de combustível da movimentação: evita confundir "MÉDIA CONSUMO" (km/l) com litros consumidos.
+function fuelHeaderScore(h){
+  const n=norm(h); if(!n||n.includes('MEDIA'))return -1;
+  if(n.includes('CONSUMO DE COMBUSTIVEL'))return 100;
+  if(n.includes('COMBUSTIVEL CONSUMIDO'))return 95;
+  if(n.includes('LITROS CONSUMIDOS')||n==='LITROS'||n.includes('TOTAL LITROS'))return 90;
+  if(n.includes('VOLUME')&&n.includes('COMBUST'))return 85;
+  if(n==='CONSUMO'||n.includes('CONSUMO COMBUSTIVEL'))return 70;
+  if(n.includes('COMBUSTIVEL')||n.includes('LITROS'))return 60;
+  return -1;
+}
+function fuelCol(row){ let best=null,score=-1; for(const k of Object.keys(row||{})){const sc=fuelHeaderScore(k);if(sc>score){score=sc;best=k;}} return score>=0?best:null; }
+function fuelColIndex(headers){ let best=-1,score=-1; for(let i=0;i<(headers||[]).length;i++){const sc=fuelHeaderScore(headers[i]);if(sc>score){score=sc;best=i;}} return score>=0?best:-1; }
 function splitDT(v){ // "dd/mm/yyyy HH:MM" | "HH:MM" | "yyyy-mm-dd HH:MM"
   v=String(v||'').trim(); const t=v.match(/(\d{1,2}:\d{2})/); const d=v.match(/(\d{4}-\d{2}-\d{2})|(\d{1,2}\/\d{1,2}\/\d{2,4})/);
   return { date:d?isoDate(d[0]):'', time:t?t[1]:'' }; }
@@ -5108,7 +5152,7 @@ function accMov(rows, movRaw, roster){
     const cIni=col(row,['data/hora inicial','inicial','datahora_inicial','inicio','ini']);
     const cFim=col(row,['data/hora final','final','datahora_final','fim']);
     const cP=col(row,['veiculo','placa','patante']); const cKm=col(row,['distancia','km','percorrida']);
-    const cCons=col(row,['consumo','combustivel','litros']); const cD=col(row,['data_arquivo','data','dia']);
+    const cCons=fuelCol(row); const cD=col(row,['data_arquivo','data','dia']);
     const di=cIni?splitDT(row[cIni]):{date:'',time:''}, df=cFim?splitDT(row[cFim]):{date:'',time:''};
     const data=di.date||(cD?isoDate(splitDT(row[cD]).date||row[cD]):''); const ini=toMin(di.time), fim=toMin(df.time);
     if(!data||ini==null||fim==null) return;
@@ -5147,7 +5191,7 @@ function accMovText(text, movRaw, roster){
   const iOcc=find('ocorrencia','status','evento','situacao'), iM=find('motorista','condutor'),
         iIni=find('data/hora inicial','datahora_inicial','inicial','inicio','ini'),
         iFim=find('data/hora final','datahora_final','final','fim'), iP=find('veiculo','placa','patante'),
-        iKm=find('distancia','km','percorrida'), iCons=find('consumo','combustivel','litros'), iD=find('data_arquivo','data','dia');
+        iKm=find('distancia','km','percorrida'), iCons=fuelColIndex(head), iD=find('data_arquivo','data','dia');
   let n=0,start=nl+1;
   while(start<text.length){
     let end=text.indexOf('\n',start); if(end<0)end=text.length;
@@ -5185,7 +5229,7 @@ async function accMovTextAsync(text, movRaw, roster){
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
   const head=splitCSVLine(first,delim),H=head.map(norm);
   const find=(...aliases)=>{for(const a0 of aliases){const a=norm(a0);for(let i=0;i<H.length;i++)if(H[i].includes(a))return i;}return -1;};
-  const iOcc=find('ocorrencia','status','evento','situacao'),iM=find('motorista','condutor'),iIni=find('data/hora inicial','datahora_inicial','inicial','inicio','ini'),iFim=find('data/hora final','datahora_final','final','fim'),iP=find('veiculo','placa','patante'),iKm=find('distancia','km','percorrida'),iCons=find('consumo','combustivel','litros'),iD=find('data_arquivo','data','dia');
+  const iOcc=find('ocorrencia','status','evento','situacao'),iM=find('motorista','condutor'),iIni=find('data/hora inicial','datahora_inicial','inicial','inicio','ini'),iFim=find('data/hora final','datahora_final','final','fim'),iP=find('veiculo','placa','patante'),iKm=find('distancia','km','percorrida'),iCons=fuelColIndex(head),iD=find('data_arquivo','data','dia');
   let n=0,start=nl+1,rows=0;
   while(start<text.length){
     let end=text.indexOf('\n',start);if(end<0)end=text.length;
