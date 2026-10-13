@@ -2857,11 +2857,14 @@ function resolvePlateDirection(pd){
 }
 // Pontos dos motoristas que aparecem conduzindo a placa no período do card.
 // O ponto vem da base de jornada do MOTORISTA, não da placa; por isso é cruzado aqui pelo nome identificado.
-function plateDriverPointSegments(g, driverNames, colorMap){
+function plateDriverPointSegments(g, driverNames, colorMap, movWindows){
   const out=[], seenJourney=new Set(), base=Date.parse(g.start), end=base+(g.total||0)*60000;
   if(!isFinite(base)||!isFinite(end)||end<=base)return out;
+  const byDrv=new Map();
+  (movWindows||[]).forEach(w=>{ if(!w||!w.drv||!Number.isFinite(w.a)||!Number.isFinite(w.b)||w.b<=w.a)return; const k=norm(w.drv); const a=byDrv.get(k)||[]; a.push(w); byDrv.set(k,a); });
   (driverNames||[]).forEach(drv=>{
     const nn=norm(drv); if(!nn)return;
+    const wins=byDrv.get(nn)||[]; if(!wins.length)return;
     const recs=(RECORDS_BY_DRIVER_N&&RECORDS_BY_DRIVER_N[nn])||[];
     recs.forEach(r=>{
       if(!r||!(r.punches&&r.punches.length))return;
@@ -2875,8 +2878,12 @@ function plateDriverPointSegments(g, driverNames, colorMap){
         let a=rb+(+a0||0)*60000, b=rb+(+b0||0)*60000; if(!(b>a))return;
         if(b<=base||a>=end)return; a=Math.max(a,base); b=Math.min(b,end);
         const ar=Math.round((a-base)/60000), br=Math.round((b-base)/60000); if(br<=ar)return;
+        // No modo placa, o ponto so aparece quando o mesmo motorista tem conducao desta placa
+        // em algum trecho sobreposto ao intervalo de ponto. O bloco continua mostrando o horario
+        // real do ponto para permitir comparar visualmente ponto x direcao.
+        const bate=wins.some(w=>w.a<br && w.b>ar); if(!bate)return;
         const cor=(colorMap&&colorMap.get(nn))||driverColor(drv);
-        out.push({a:ar,b:br,drv,color:cor,lab:firstName(drv)+' · '+hm(ar%1440)+'–'+hm(br%1440)});
+        out.push({a:ar,b:br,drv,color:cor,lab:firstName(drv)+' · '+hm(ar%1440)+'-'+hm(br%1440)});
       });
     });
   });
@@ -2932,7 +2939,7 @@ function buildPlacaCards(placaQ, prefix, cap){
       // Nao cria um falso "condutor nao identificado" na faixa Direcao.
       pd.un.forEach(s=>{ ident.push({a:off+s[0],b:off+s[1],ok:false}); unMin+=(s[1]-s[0]); });
     });
-    const ponto=plateDriverPointSegments(g,[...drivers],plateColors);
+    const ponto=plateDriverPointSegments(g,[...drivers],plateColors,mov);
     ZTL[id]={weekStart:g.start, ponto, mov, alertas:[], ident, combineMovIdent:true, t0:0, t1:g.total, total:g.total};
     const ader = (idMin+unMin)>0? Math.round(idMin/(idMin+unMin)*100) : null;
     const meta=`<div class="meta">
@@ -2946,8 +2953,8 @@ function buildPlacaCards(placaQ, prefix, cap){
       <div class="wtl" id="${id}">
         <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
-        <div class="track"><span class="tlab">Direção / ID</span><div class="lane combined-mi" data-k="mov"></div></div>
         <div class="track"><span class="tlab">Ponto motorista</span><div class="lane lane-pt" data-k="ponto"></div></div>
+        <div class="track"><span class="tlab">Direção / ID</span><div class="lane combined-mi" data-k="mov"></div></div>
       </div>
       <div class="wtl-hint">🖱️ role o mouse para <b>zoom</b> (período → dia → horas) · arraste p/ navegar · duplo-clique reseta <span class="wtl-hint-touch">· 📱 no celular: <b>pinça</b> p/ zoom, 1 dedo p/ navegar ou use os botões +/−</span></div>
     </div>`;
