@@ -846,6 +846,59 @@
   .ml-unpub{max-width:440px;margin:44px auto;text-align:center;padding:30px 22px}
   .ml-unpub h2{font-size:19px;margin:10px 0 6px}
   .ml-unpub p{color:var(--muted);font-size:13.5px;line-height:1.5}
+
+
+
+  /* ===== FICHA DO MOTORISTA: KPIs compactos no corredor lateral durante a evidencia =====
+     O visual original permanece intacto. Uma copia compacta surge somente quando a area
+     Evidencia — Ponto x Movimento entra na viewport. */
+  .ficha-kpi-rail{
+    position:fixed;z-index:28;display:none;flex-direction:column;gap:6px;
+    width:98px;overflow:auto;padding:4px 0 7px;scrollbar-width:none;
+    overscroll-behavior:contain;pointer-events:auto;
+  }
+  .ficha-kpi-rail::-webkit-scrollbar{display:none}
+  .ficha-kpi-rail.on{display:flex;animation:fichaKpiRailIn .14s ease-out}
+  @keyframes fichaKpiRailIn{from{opacity:0;transform:translateX(-3px)}to{opacity:1;transform:none}}
+  .ficha-kpi-rail .rail-title{
+    padding:0 4px 3px;color:var(--muted);font-size:8.6px;font-weight:750;
+    text-transform:uppercase;letter-spacing:.035em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .ficha-kpi-rail .kpi{
+    flex:none;height:var(--rail-card-h,54px);min-height:0;padding:7px 6px 6px 9px;
+    border-radius:11px;box-shadow:var(--shadow-sm);transform:none!important;
+    transition:border-color .15s,box-shadow .15s;background:var(--surface);
+  }
+  .ficha-kpi-rail .kpi:hover{box-shadow:var(--shadow);border-color:color-mix(in srgb,var(--gold) 38%,var(--border))}
+  .ficha-kpi-rail .kpi .accent{width:3px;border-radius:11px 0 0 11px}
+  .ficha-kpi-rail .kpi .lab{
+    display:-webkit-box;font-size:8.1px;line-height:1.06;letter-spacing:.008em;
+    white-space:normal;overflow:hidden;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    padding-right:2px;min-height:16px;
+  }
+  .ficha-kpi-rail .kpi .val{
+    font-size:18px;line-height:1;margin:4px 0 0;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;
+  }
+  .ficha-kpi-rail .kpi .val small{font-size:8.5px}
+  .ficha-kpi-rail .kpi .sub{display:none}
+  .ficha-kpi-rail.narrow{gap:4px}
+  .ficha-kpi-rail.narrow .rail-title{display:none}
+  .ficha-kpi-rail.narrow .kpi{padding:6px 4px 5px 7px;border-radius:10px}
+  .ficha-kpi-rail.narrow .kpi .accent{width:3px;border-radius:10px 0 0 10px}
+  .ficha-kpi-rail.narrow .kpi .lab{font-size:7.2px;min-height:14px}
+  .ficha-kpi-rail.narrow .kpi .val{font-size:15.5px;margin-top:3px}
+  .ficha-kpi-rail.ultra .kpi .lab{display:none}
+  .ficha-kpi-rail.ultra .kpi{display:flex;align-items:center;justify-content:center;padding:5px 4px 5px 6px}
+  .ficha-kpi-rail.ultra .kpi .val{font-size:14px;margin:0;text-align:center;max-width:100%}
+  @media(max-width:900px){.ficha-kpi-rail{display:none!important}}
+
+  /* ===== PERFORMANCE: evita layout/pintura de blocos fora da viewport ===== */
+  .op-block,.tl-card,.divcard,.score-section{content-visibility:auto;contain-intrinsic-size:auto 520px}
+  .capinha{contain:layout paint style}
+  #semanaBox,#timelineBox,#divList{contain:layout style}
+  .perf-loading{padding:34px;text-align:center;color:var(--muted);font-weight:650}
+  .perf-loading small{display:block;margin-top:7px;font-weight:400}
 </style>
 </head>
 <body class="booting">
@@ -2216,9 +2269,11 @@ function motMark(nome,q){
 }
 function renderMotMenu(){
   const input=$('#fMot'), menu=$('#fMotMenu'); if(!input||!menu) return;
-  const q=input.value.trim();
-  const arr=MOT_FILTER_LIST.slice().sort((a,b)=>motScore(a,q)-motScore(b,q)||a.localeCompare(b,'pt-BR'));
-  menu.innerHTML=arr.length ? arr.map((m,i)=>`<button type="button" class="combo-opt ${motScore(m,q)<4?'match':''}" role="option" data-mot="${encodeURIComponent(m)}">${motMark(m,q)}</button>`).join('') : '<div class="combo-empty">Nenhum motorista disponível</div>';
+  const q=input.value.trim(), qn=norm(q);
+  // Não cria milhares de botões no autocomplete. Mantém somente as melhores 80 opções visíveis.
+  let arr=qn?MOT_FILTER_LIST.filter(m=>norm(m).includes(qn)):MOT_FILTER_LIST.slice();
+  arr.sort((a,b)=>motScore(a,q)-motScore(b,q)||a.localeCompare(b,'pt-BR')); const total=arr.length; arr=arr.slice(0,80);
+  menu.innerHTML=arr.length ? arr.map((m,i)=>`<button type="button" class="combo-opt ${motScore(m,q)<4?'match':''}" role="option" data-mot="${encodeURIComponent(m)}">${motMark(m,q)}</button>`).join('')+(total>arr.length?`<div class="combo-empty">Digite mais letras para refinar · ${total.toLocaleString('pt-BR')} resultados</div>`:'') : '<div class="combo-empty">Nenhum motorista disponível</div>';
   menu.querySelectorAll('.combo-opt').forEach(b=>b.addEventListener('mousedown',e=>{ e.preventDefault(); input.value=decodeURIComponent(b.dataset.mot); closeMotMenu(); renderAll(); }));
 }
 function openMotMenu(){ const c=$('#fMotCombo'); if(!c)return; c.classList.add('open'); $('#fMot').setAttribute('aria-expanded','true'); renderMotMenu(); }
@@ -2448,10 +2503,16 @@ function applyResumoRankScores(data,rows){
 // _rankScoreProfiles), só fatiado — resultado idêntico. renderAll depois só reaproveita o cache.
 async function _prewarmRankAsync(rows){
   const sig=_rankSig();
-  if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles) return;   // já pronto
+  if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles) return;
   const by=(rows===RECORDS)?RECORDS_BY_DRIVER_N:(()=>{const x=Object.create(null);(rows||[]).forEach(r=>{const k=r._nMot||norm(r.motoristaEscala||'');if(k)(x[k]=x[k]||[]).push(r);});return x;})();
   const profiles=Object.create(null), keys=Object.keys(by);
-  for(let i=0;i<keys.length;i++){ const k=keys[i], nm=(by[k][0]&&by[k][0].motoristaEscala)||k; profiles[k]=rankProfile(nm,by[k]); if((i&7)===7) await uiYield(); }
+  // Time-slicing por orçamento de CPU em vez de yield a cada 8 motoristas.
+  // Mantém a interface responsiva sem pagar centenas de setTimeouts desnecessários.
+  let sliceStart=performance.now();
+  for(let i=0;i<keys.length;i++){
+    const k=keys[i], nm=(by[k][0]&&by[k][0].motoristaEscala)||k; profiles[k]=rankProfile(nm,by[k]);
+    if(performance.now()-sliceStart>=14){ await uiYield(); sliceStart=performance.now(); }
+  }
   _rankScoreProfiles(profiles);
   _rankCacheSet(sig,rows,profiles);
 }
@@ -2546,6 +2607,41 @@ function feriasNoPeriodo(rows, shownNn){
     const g=(byNn[nn]=byNn[nn]||{nn,dias:0,min:d,max:d}); g.dias++; if(d<g.min)g.min=d; if(d>g.max)g.max=d; }
   return Object.values(byNn).sort((a,b)=>a.nn.localeCompare(b.nn,'pt-BR'));
 }
+function _renderSemanaProgressivo(box, groups, weeks, ferias){
+  const token=++SUMMARY_CARD_RENDER_TOKEN; SUMMARY_PROGRESSIVE=true;
+  const blocks=[], jobs=[];
+  groups.forEach((g,gi)=>{
+    if(!g.vis.length)return;
+    const id='sg-'+token+'-'+gi;
+    blocks.push(`<div class="card op-block"><div class="op-head"><h3>${g.title}</h3><div class="op-kpi">${g.kpi}</div></div><div class="capgrid" id="${id}"></div></div>`);
+    jobs.push({id,list:g.vis,pos:0});
+  });
+  if(ferias&&ferias.length){
+    const id='sg-'+token+'-ferias';
+    blocks.push(`<div class="card op-block"><div class="op-head"><h3>🏖️ Em férias no período <span class="op-ranknote">${ferias.length} motorista(s)</span></h3><div class="op-kpi">de férias no período selecionado · não entram no ranking (sem nota)</div></div><div class="capgrid" id="${id}"></div></div>`);
+    jobs.push({id,list:ferias,pos:0,ferias:true});
+  }
+  box.innerHTML=blocks.join('')||'<div class="empty">Nenhum motorista encontrado neste ranking.</div>';
+  let ji=0;
+  const pump=(deadline)=>{
+    if(token!==SUMMARY_CARD_RENDER_TOKEN)return;
+    const start=performance.now(); let made=0;
+    while(ji<jobs.length){
+      const j=jobs[ji], el=document.getElementById(j.id); if(!el){ji++;continue;}
+      const chunk=[];
+      while(j.pos<j.list.length && chunk.length<36){ const m=j.list[j.pos++]; chunk.push(j.ferias?capinhaFerias(m):capinha(m,weeks)); }
+      if(chunk.length){el.insertAdjacentHTML('beforeend',chunk.join(''));made+=chunk.length;}
+      if(j.pos>=j.list.length)ji++;
+      const noTime=deadline&&typeof deadline.timeRemaining==='function'?deadline.timeRemaining()<3:(performance.now()-start>12);
+      if(noTime||made>=72)break;
+    }
+    if(ji<jobs.length){ if('requestIdleCallback' in window)requestIdleCallback(pump,{timeout:120}); else setTimeout(()=>pump(null),0); }
+    else SUMMARY_PROGRESSIVE=false;
+  };
+  // Primeira leva já no próximo frame; restante só ocupa tempos ociosos.
+  requestAnimationFrame(()=>pump(null));
+}
+
 function renderSemana(rows){
   const box=$('#semanaBox');
   if(!rows.length){ box.innerHTML='<div class="empty">Nenhum registro para o filtro atual.</div>'; return; }
@@ -2576,26 +2672,21 @@ function renderSemana(rows){
     }
   }
 
-  const html=[];
+  const html=[], progressiveGroups=[]; let visibleTotal=0;
   data.forEach(g=>{
     let vis=chosen?g.list.filter(m=>chosen.has(m)):g.list.slice();
     if(bestMode)vis.sort((a,b)=>resumoRankCmp(b,a)); else vis.sort(resumoRankCmp);
-    if(!vis.length)return;
+    if(!vis.length)return; visibleTotal+=vis.length;
     const eligOp=g.list.filter(resumoRankElegivel).length;
     const note=chosen?`<span class="op-ranknote">${vis.length} selecionado(s) · ${eligOp} elegível(is) de ${g.list.length}</span>`:'';
-    html.push(`<div class="card op-block">
-      <div class="op-head"><h3>${g.op}${note}</h3>
-        <div class="op-kpi"><span style="color:${ajColor(g.aj)}">${g.aj==null?'—':g.aj+'%'}</span> aderência de jornada · ${hDec(g.dd)} fora da jornada · <b>${g.motsDedo}</b> motorista(s) · ${g.list.length} no total</div></div>
-      <div class="capgrid">${vis.map(m=>capinha(m,weeks)).join('')}</div>
-    </div>`);
+    const kpi=`<span style="color:${ajColor(g.aj)}">${g.aj==null?'—':g.aj+'%'}</span> aderência de jornada · ${hDec(g.dd)} fora da jornada · <b>${g.motsDedo}</b> motorista(s) · ${g.list.length} no total`;
+    progressiveGroups.push({title:g.op+note,kpi,vis});
+    if(visibleTotal<=220) html.push(`<div class="card op-block"><div class="op-head"><h3>${g.op}${note}</h3><div class="op-kpi">${kpi}</div></div><div class="capgrid">${vis.map(m=>capinha(m,weeks)).join('')}</div></div>`);
   });
-  let feriasHtml='';
-  if(SEMANA_RANK_MODE==='all'){
-    const shownNn=new Set(global.map(m=>norm(m.nome))); const fer=feriasNoPeriodo(rows, shownNn);
-    if(fer.length) feriasHtml=`<div class="card op-block"><div class="op-head"><h3>🏖️ Em férias no período <span class="op-ranknote">${fer.length} motorista(s)</span></h3>
-      <div class="op-kpi">de férias no período selecionado · não entram no ranking (sem nota)</div></div>
-      <div class="capgrid">${fer.map(capinhaFerias).join('')}</div></div>`;
-  }
+  let fer=[];
+  if(SEMANA_RANK_MODE==='all'){ const shownNn=new Set(global.map(m=>norm(m.nome))); fer=feriasNoPeriodo(rows, shownNn); visibleTotal+=fer.length; }
+  if(visibleTotal>220){ _renderSemanaProgressivo(box,progressiveGroups,weeks,fer); return; }
+  let feriasHtml=''; if(fer.length) feriasHtml=`<div class="card op-block"><div class="op-head"><h3>🏖️ Em férias no período <span class="op-ranknote">${fer.length} motorista(s)</span></h3><div class="op-kpi">de férias no período selecionado · não entram no ranking (sem nota)</div></div><div class="capgrid">${fer.map(capinhaFerias).join('')}</div></div>`;
   box.innerHTML=(html.join('')+feriasHtml)||'<div class="empty">Nenhum motorista encontrado neste ranking.</div>';
 }
 // "capinha" do motorista — clicável, leva ao detalhamento (ficha)
@@ -3481,7 +3572,7 @@ function renderFicha(){
     <div class="sec-title"><h2>Plano de ação</h2><span>o que fazer com base nos sinais do período</span></div>
     <div class="card"><ul class="planolist">${PL.map(a=>`<li><span class="pa-ic">${a.ic}</span><div><b>${a.t}</b> — ${a.d}</div></li>`).join('')}</ul></div>
 
-    <div class="grid kpis" style="margin-bottom:6px">
+    <div class="grid kpis" id="fichaKpis" style="margin-bottom:6px">
       ${MEDIA_OFF?'':`<div class="card kpi"><div class="accent" style="background:${medaOk?'var(--good)':'var(--critical)'}"></div>
         <div class="lab">④ Média realizada</div><div class="val tnum">${mediaR!=null?mediaR.toFixed(2).replace('.',','):'—'}</div><div class="sub">${abF&&mediaAbastecimento(abF)!=null?'real (bomba)':(mediaInconsistente?'⚠ Trimble inconsistente':(mediaR!=null?'estim. Trimble':'—'))} · meta ${metaFicha.toFixed(2).replace('.',',')}${mediaR!=null?(medaOk?' ✓':' ✗'):''}${mediaInconsistente&&mediaRawTrimble!=null?' · bruto '+mediaRawTrimble.toFixed(2).replace('.',','):''}</div></div>`}
       <div class="card kpi"><div class="accent" style="background:${semel==null?'var(--muted)':(semel>=CFG.sem?'var(--good)':'var(--critical)')}"></div>
@@ -4403,6 +4494,35 @@ function renderScorecardLight(nome){
   </div>`;
   shell.innerHTML=scBrand+body;
 }
+let SUMMARY_ASYNC_SEQ=0, SUMMARY_ASYNC_KEY='';
+let SUMMARY_PROGRESSIVE=false, SUMMARY_CARD_RENDER_TOKEN=0;
+function _rankReadyForRows(rows){
+  const sig=_rankSig();
+  return !!(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles);
+}
+function _scheduleSemanaAsync(rows,viewKey){
+  if(SUMMARY_ASYNC_KEY===viewKey) return;
+  const seq=++SUMMARY_ASYNC_SEQ; SUMMARY_ASYNC_KEY=viewKey;
+  const box=$('#semanaBox'), kp=$('#kpis');
+  if(kp)kp.innerHTML='';
+  if(box)box.innerHTML='<div class="perf-loading">Preparando resumo semanal…<small>O painel já está disponível; os indicadores estão sendo calculados em segundo plano.</small></div>';
+  setTimeout(async()=>{
+    try{
+      await uiYield();
+      if(seq!==SUMMARY_ASYNC_SEQ)return;
+      // KPIs primeiro: entrega informação útil antes do ranking completo.
+      try{renderKpis(rows);}catch(e){console.error('[Pulso360] KPI assíncrono',e);}
+      await uiYield();
+      if(seq!==SUMMARY_ASYNC_SEQ)return;
+      await _prewarmRankAsync(rows);
+      if(seq!==SUMMARY_ASYNC_SEQ)return;
+      SUMMARY_ASYNC_KEY='';
+      // Só desenha se o usuário ainda estiver no mesmo recorte/aba.
+      if(activeViewName()==='semana') renderAll();
+    }catch(e){ SUMMARY_ASYNC_KEY=''; console.error('[Pulso360] resumo assíncrono',e); if(box)box.innerHTML='<div class="empty">Não foi possível montar o resumo. Tente novamente.</div>'; }
+  },0);
+}
+
 function renderAll(){
   if(MOBILE_LIGHT){ try{ renderMobileLight(); }catch(e){ console.error('[Pulso360] modo leve',e); } return; }
   // Qualquer mudança nos controles pertence somente à aba/filtro corrente.
@@ -4430,7 +4550,13 @@ function renderAll(){
     atualizaDataMode(); return;
   }
   let rows=null; if(rowViews.has(view)) rows=filtered();
-  if(view==='semana'){ renderKpis(rows); renderSemana(rows); const c={kpis:$('#kpis').innerHTML,semana:$('#semanaBox').innerHTML,badge:FILTER_CACHE_DIV_COUNT}; SUMMARY_DOM_CACHE.set(viewKey,c); while(SUMMARY_DOM_CACHE.size>6)SUMMARY_DOM_CACHE.delete(SUMMARY_DOM_CACHE.keys().next().value); }
+  if(view==='semana'){
+    // Em bases grandes, não bloqueia a primeira pintura calculando milhares de perfis.
+    // O resumo é preparado em segundo plano e o restante do painel fica utilizável imediatamente.
+    if(rows.length>1500 && !_rankReadyForRows(rows)){ _scheduleSemanaAsync(rows,viewKey); atualizaDataMode(); return; }
+    renderKpis(rows); renderSemana(rows);
+    if(!SUMMARY_PROGRESSIVE){ const c={kpis:$('#kpis').innerHTML,semana:$('#semanaBox').innerHTML,badge:FILTER_CACHE_DIV_COUNT}; SUMMARY_DOM_CACHE.set(viewKey,c); while(SUMMARY_DOM_CACHE.size>6)SUMMARY_DOM_CACHE.delete(SUMMARY_DOM_CACHE.keys().next().value); }
+  }
   else if(view==='bonificacao') renderBonificacao(rows);
   else if(view==='motoristas') renderMotoristas();
   else if(view==='aderencia') renderAderencia(rows);
@@ -4767,7 +4893,7 @@ function scheduleImportAutoFlush(){
         toast('Base consolidada ✓'+(cov.max?' dados até '+brDate(cov.max):''));
       }catch(e){ console.error('Falha ao consolidar importação',e); toast('Erro ao consolidar as novas importações'); }
     },30);
-  },700);
+  },2500);
 }
 function afterImportChange(opts){
   opts=opts||{};
@@ -4783,6 +4909,8 @@ function afterImportChange(opts){
   flushImportChanges(opts.render!==false);
 }
 function uiYield(){ return new Promise(r=>setTimeout(r,0)); }
+let _UI_YIELD_BUDGET_TS=0;
+async function uiYieldBudget(ms=24){ const now=performance.now(); if(now-_UI_YIELD_BUDGET_TS>=ms){ await uiYield(); _UI_YIELD_BUDGET_TS=performance.now(); } }
 
 /* ============================================================
    IMPORTAÇÃO DE ARQUIVOS
@@ -4801,7 +4929,7 @@ function readFile(file, cb){
 }
 const FILE_READ_TIMEOUT_MS=300000; // rede/arquivos grandes: até 5 min antes de considerar falha
 function readFileRowsP(file){ return new Promise(resolve=>{ let done=false; const finish=rows=>{ if(done)return; done=true; resolve(rows||[]); }; try{ readFile(file,finish); }catch(e){ console.warn('Falha ao ler '+(file&&file.name||'arquivo'),e); finish([]); } setTimeout(()=>{ if(!done)console.warn('Timeout de leitura: '+(file&&file.name||'arquivo')); finish([]); },FILE_READ_TIMEOUT_MS); }); }
-async function readFilesRows(files){ const all=[]; const arr=[...files].sort((a,b)=>String(a.name).localeCompare(String(b.name))); for(const f of arr){ if(BULK_IMPORT_CANCEL)break; const rows=await readFileRowsP(f); if(rows&&rows.length) all.push(...rows); await uiYield(); } return all; }
+async function readFilesRows(files){ const all=[]; const arr=[...files].sort((a,b)=>String(a.name).localeCompare(String(b.name))); for(const f of arr){ if(BULK_IMPORT_CANCEL)break; const rows=await readFileRowsP(f); if(rows&&rows.length) all.push(...rows); await uiYieldBudget(); } return all; }
 
 // Jornada/Ponto: leitor robusto para vários Excel/CSV.
 // Procura a linha de cabeçalho nas primeiras linhas de TODAS as abas e usa raw:false
@@ -5450,17 +5578,17 @@ async function forEachCsvText(files, cb, label){
       const ext=(f.name.split('.').pop()||'').toLowerCase();
       if(ext==='zip'){
         if(typeof JSZip==='undefined')throw new Error('sem JSZip');
-        await uiYield();
+        await uiYieldBudget();
         const zip=await JSZip.loadAsync(await f.arrayBuffer());
         const names=Object.keys(zip.files).filter(n=>/\.(csv|txt)$/i.test(n)&&!zip.files[n].dir).sort();
         if(!names.length)throw new Error('ZIP sem CSV/TXT');
         for(let j=0;j<names.length;j++){
           if(statusSel)setImportStatus(statusSel,'ZIP '+(done+1)+'/'+arr.length+' · arquivo interno '+(j+1)+'/'+names.length);
-          const text=decodeText(await zip.files[names[j]].async('arraybuffer')); await cb(text,f,names[j]); parts++; await uiYield();
+          const text=decodeText(await zip.files[names[j]].async('arraybuffer')); await cb(text,f,names[j]); parts++; await uiYieldBudget();
         }
       }else{ const text=decodeText(await f.arrayBuffer()); await cb(text,f,f.name); parts++; }
     }catch(e){ fail++; console.warn('Falha ao processar',f&&f.name,e); }
-    done++; if(label)toast(label+': '+done+'/'+arr.length+(fail?(' · '+fail+' falha(s)'):'')+'…'); await uiYield();
+    done++; if(label)toast(label+': '+done+'/'+arr.length+(fail?(' · '+fail+' falha(s)'):'')+'…'); await uiYieldBudget();
   }
   return {files:arr.length,parts,fail};
 }
@@ -5520,7 +5648,7 @@ async function loadMovLocais(files){
         for(let j=0;j<names.length;j++){
           const nm=names[j]; if(st)st.textContent='ZIP '+pos+'/'+arr.length+' · arquivo interno '+(j+1)+'/'+names.length;
           const ab=await zip.files[nm].async('arraybuffer');
-          movRows+=await accMovTextAsync(decodeText(ab),movRaw,jor.roster,movSeen,movDiag); parts++; await uiYield();
+          movRows+=await accMovTextAsync(decodeText(ab),movRaw,jor.roster,movSeen,movDiag); parts++; await uiYieldBudget();
         }
       }else if(ext==='xlsx'||ext==='xls'){
         movRows+=accMov(await readFileRowsP(f),movRaw,jor.roster,movSeen,movDiag); parts++;
@@ -5528,7 +5656,7 @@ async function loadMovLocais(files){
         movRows+=await accMovTextAsync(await fileToText(f),movRaw,jor.roster,movSeen,movDiag); parts++;
       }
     }catch(e){fail++;console.warn('Falha na movimentação:',f&&f.name,e);}
-    done++; await uiYield();
+    done++; await uiYieldBudget();
   }
   if(!movRows){ if($('#stMov'))$('#stMov').textContent='nenhum movimento válido encontrado'; toast('Não encontrei movimentos válidos nos arquivos'); return; }
   finalizeRecords(jor,movRaw,movRows,pending.ponto.length);
@@ -5554,13 +5682,13 @@ async function loadAlertasLocais(files){
         for(let j=0;j<names.length;j++){
           if(st)st.textContent='ZIP '+pos+'/'+arr.length+' · arquivo interno '+(j+1)+'/'+names.length;
           const ab=await zip.files[names[j]].async('arraybuffer');
-          mergeAlertas(acc,await aggAlertasAsync(decodeText(ab),keep,alertSeen,alertDiag));parts++;await uiYield();
+          mergeAlertas(acc,await aggAlertasAsync(decodeText(ab),keep,alertSeen,alertDiag));parts++;await uiYieldBudget();
         }
       }else{
         mergeAlertas(acc,await aggAlertasAsync(await fileToText(f),keep,alertSeen,alertDiag));parts++;
       }
     }catch(e){fail++;console.warn('Falha nos alertas:',f&&f.name,e);}
-    done++;await uiYield();
+    done++;await uiYieldBudget();
   }
   ALERTS=acc.A;ALERTS_N=acc.n;if(acc.placaUO&&Object.keys(acc.placaUO).length)PLACA_UO=acc.placaUO;AL_TL=acc.tl;
   if(REAL&&RAW){RAW.alertas=ALERTS;RAW.placaUO=PLACA_UO;RAW.counts=RAW.counts||{};RAW.counts.alertas=acc.n;}
@@ -6477,6 +6605,12 @@ async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const da
    ============================================================ */
 async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz:false,b:bytes}; const cs=new CompressionStream('gzip'); const w=cs.writable.getWriter(); w.write(bytes); w.close(); return {gz:true,b:new Uint8Array(await new Response(cs.readable).arrayBuffer())}; }
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
+const CACHE_PUB_KEY='pulso360_cache_pub_v1';
+async function _fetchPublishedManifest(){
+  try{ const r=await fetch('dados/manifesto.json?_='+Date.now(),{cache:'no-store'}); if(!r.ok)return null; const m=await r.json(); return (m&&m.v===1&&Array.isArray(m.parts)&&m.parts.length)?m:null; }catch(e){return null;}
+}
+function _cachePubGet(){try{return +(localStorage.getItem(CACHE_PUB_KEY)||0);}catch(e){return 0;}}
+function _cachePubSet(v){try{if(v)localStorage.setItem(CACHE_PUB_KEY,String(+v||0));}catch(e){}}
 function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0,_dedupeDone:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_CM,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
 async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_CM=S.META_CM||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs(); await _finalizeBootUI(); return true; }
@@ -6486,12 +6620,11 @@ async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return 
 // build();fillFilters();renderAll();updateDropStatus() — só time-slicing (mesmo cálculo, fatiado).
 async function _finalizeBootUI(){
   const bt=$('#bootLoadTxt');
-  if(bt)bt.textContent='Preparando base…';         await uiYield(); build();
-                                                   await uiYield(); fillFilters();
-  // O recálculo do ranking (o maior bloco: ~2663 perfis) é fatiado ANTES do render → renderAll
-  // apenas reaproveita o cache (sem bloquear). filtered() sem filtro retorna RECORDS.
-  if(bt)bt.textContent='Calculando indicadores…';  await _prewarmRankAsync(filtered());
-  if(bt)bt.textContent='Montando painel…';         await uiYield(); renderAll();
+  if(bt)bt.textContent='Preparando base…'; await uiYield(); build();
+  if(bt)bt.textContent='Montando filtros…'; await uiYield(); fillFilters();
+  // Não segura mais o loader esperando ranking/resumo completo. renderAll agenda o bloco pesado
+  // em segundo plano quando a base é grande e devolve o controle imediatamente ao navegador.
+  if(bt)bt.textContent='Abrindo painel…'; await uiYield(); renderAll();
   updateDropStatus();
 }
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
@@ -6505,9 +6638,9 @@ async function cacheSalvar(){
     const S=snapshotState(), ts=Date.now();
     // Caminho rápido: structured clone do IndexedDB, sem stringify/gzip na próxima abertura.
     const ok=await idbSet('estadoFast',{v:1,s:S,ts});
-    if(ok)return;
+    if(ok){ _cachePubSet(PUBLISHED_AT_LOADED||S.publishedAt||S.dataUpdatedAt||0); return; }
     // Fallback para navegadores/quota que recusarem o objeto estruturado.
-    const raw=new TextEncoder().encode(JSON.stringify(S)),g=await _gz(raw); await idbSet('estado',{gz:g.gz,b:g.b,ts});
+    const raw=new TextEncoder().encode(JSON.stringify(S)),g=await _gz(raw); const ok2=await idbSet('estado',{gz:g.gz,b:g.b,ts}); if(ok2)_cachePubSet(PUBLISHED_AT_LOADED||S.publishedAt||S.dataUpdatedAt||0);
   }catch(e){}
 }
 async function cacheRestaurar(){
@@ -6516,7 +6649,7 @@ async function cacheRestaurar(){
     if(f&&(f.v===1||f.v===2)&&f.s&&await restoreState(f.s))return f.ts||1;   // lê o snapshot (compatível com caches v:1 e v:2)
   }catch(e){}
   try{
-    const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);const S=JSON.parse(new TextDecoder().decode(bytes));if(!(await restoreState(S)))return 0;return c.ts||1;
+    const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);const S=await new Response(bytes).json();if(!(await restoreState(S)))return 0;return c.ts||1;
   }catch(e){return 0;}
 }
 function _baixarBlob(blob,nome){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
@@ -6626,11 +6759,11 @@ async function gerarDadosMobile(){
   }catch(e){ console.error('[Pulso360] gerarDadosMobile', e); toast('Erro ao gerar versão do celular: '+(e.message||e)); return null; }
   finally{ if(btn){btn.disabled=false;btn.textContent=old||'📱 Gerar dados do celular';} }
 }
-async function _lerSnapshotMultipart(){
-  // O manifesto é pequeno e sempre é validado na origem. As partes grandes só são baixadas
-  // quando a publicação mudou; quando não mudou, o cache/IndexedDB já restaurado é reutilizado.
-  const mr=await fetch('dados/manifesto.json?_='+Date.now(),{cache:'no-store'}); if(!mr.ok)return null;
-  const M=await mr.json(); if(!M||M.v!==1||!Array.isArray(M.parts)||!M.parts.length)throw new Error('Manifesto de dados inválido');
+async function _lerSnapshotMultipart(prefetchedManifest){
+  // O manifesto é pequeno e pode ser buscado antes do cache para evitar restaurar/processar uma base velha.
+  let M=prefetchedManifest||null;
+  if(!M){ const mr=await fetch('dados/manifesto.json?_='+Date.now(),{cache:'no-store'}); if(!mr.ok)return null; M=await mr.json(); }
+  if(!M||M.v!==1||!Array.isArray(M.parts)||!M.parts.length)throw new Error('Manifesto de dados inválido');
   const pub=+(M.publishedAt||0);
   // Só pula o download se ESTE manifesto já estiver carregado. Timestamp de importação local
   // não pode ser tratado como versão publicada.
@@ -6642,19 +6775,19 @@ async function _lerSnapshotMultipart(){
     const b=new Uint8Array(await r.arrayBuffer());if(p.bytes&&b.byteLength!==p.bytes)throw new Error('Parte incompleta: '+p.file);return b;
   }));
   const total=arr.reduce((n,b)=>n+b.byteLength,0), joined=new Uint8Array(total); let off=0;arr.forEach(b=>{joined.set(b,off);off+=b.byteLength;});
-  const raw=M.compression==='gzip'?await _gunz(joined):joined, S=JSON.parse(new TextDecoder().decode(raw));
+  const raw=M.compression==='gzip'?await _gunz(joined):joined, S=await new Response(raw).json();
   if(!S.publishedAt&&M.publishedAt)S.publishedAt=M.publishedAt; return S;
 }
 async function _lerSnapshotLegado(){ try{const r=await fetch('dados-pulso360.json?_='+Date.now(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
-async function carregarDadosPublicados(){
+async function carregarDadosPublicados(prefetchedManifest){
   try{
-    let S=null; try{S=await _lerSnapshotMultipart();}catch(e){console.warn('Pulso 360: falha na publicação multipart',e);}
+    let S=null; try{S=await _lerSnapshotMultipart(prefetchedManifest);}catch(e){console.warn('Pulso 360: falha na publicação multipart',e);}
     if(S&&S.__cached){ PUBLISHED_AT_LOADED=+(S.publishedAt||PUBLISHED_AT_LOADED||0); DATA_UPDATED_AT=+(S.publishedAt||DATA_UPDATED_AT||0); atualizaDataMode(); return true; }
     if(!S)S=await _lerSnapshotLegado();
     if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3)return false;
     const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);
     if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}
-    await restoreState(S);DATA_UPDATED_AT=pub||DATA_UPDATED_AT;atualizaDataMode();
+    await restoreState(S);DATA_UPDATED_AT=pub||DATA_UPDATED_AT;_cachePubSet(pub||PUBLISHED_AT_LOADED||0);atualizaDataMode();
     // Guarda a fotografia publicada no IndexedDB em segundo plano para a próxima abertura.
     if(typeof agendarCache==='function')agendarCache();
     return true;
@@ -6867,6 +7000,104 @@ $('#recalc').onclick=()=>{ ingest(); };
 $('#resetDemo').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; SOURCE_COVERAGE={ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}}; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Voltou à demonstração'); };
 $('#clearData').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=false; SOURCE_COVERAGE={ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}}; JORNADA_FERIAS={}; ALERTS=null; ALERTS_N=0; AL_TL=null; PLACA_UO=null; PLACA_MOV=null; MOV_UNSEG_STORE=null; MOV_TOT={}; MOV_IDN={}; MOV_UNSEG={}; TMS=null; TMS_N=0; ABAST=null; ABAST_N=0; META_FAM=null; META_PLACA=null; META_N=0; BOL=null; BOL_N=0; BOL_DAY=null; SAUDE=null; SAUDE_N=0; BDV=null; BDV_N=0; ADMISSAO=null; ADMISSAO_CPF=null; ADMISSAO_N=0; ADMISSAO_CANON=null; ADMISSAO_NOMECPF=null; ADMISSAO_CANONCPF=null; ADMISSAO_PRESENTES=null; ADMISSAO_PRESENTES_CANON=null; ADMISSAO_DIAG=null; MOTORISTAS_TMS=null; MOTORISTAS_TMS_N=0; PED_OP=null; PED_DRV=null; PED_N=0; CPF2NOME=null; NOME2CPF=null; MULTAS=null; MULTAS_N=0; MULTAS_DIAG=null; MULTAS_REV++; rebuildMultasIndex(); MULTA_CTX_CACHE.clear(); try{localStorage.removeItem(LS.data);}catch(e){} build(); fillFilters(); renderAll(); updateDropStatus(); toast('Bases removidas'); };
 
+
+
+/* ===== FICHA DO MOTORISTA: KPIs compactos durante a evidencia =====
+   O video de referencia mostra a ficha individual do motorista. Portanto o rail acompanha
+   os KPIs da ficha (nao os KPIs do Resumo Semanal) e aparece somente na area das timelines. */
+(function initFichaKpiScrollRail(){
+  const fichaView=document.getElementById('view-ficha');
+  const fichaBox=document.getElementById('fichaBox');
+  const main=document.querySelector('main');
+  const header=document.querySelector('header');
+  if(!fichaView||!fichaBox||!main)return;
+
+  const rail=document.createElement('aside');
+  rail.id='fichaKpiRail';
+  rail.className='ficha-kpi-rail';
+  rail.setAttribute('aria-label','Indicadores do motorista em visao compacta');
+  document.body.appendChild(rail);
+
+  let raf=0,lastSig='';
+  function hide(){ rail.classList.remove('on'); }
+  function current(){
+    return {
+      kpis:document.getElementById('fichaKpis'),
+      evid:document.getElementById('fichaEvidBox')
+    };
+  }
+  function sync(kpis){
+    const cards=[...kpis.children].filter(x=>x.classList&&x.classList.contains('kpi'));
+    const sig=cards.map(c=>(c.innerText||'').trim()).join('||');
+    if(sig===lastSig&&rail.querySelectorAll('.kpi').length===cards.length)return cards.length;
+    lastSig=sig;
+    rail.innerHTML='<div class="rail-title">Indicadores</div>';
+    cards.forEach(card=>{
+      const c=card.cloneNode(true);
+      c.removeAttribute('id');
+      c.removeAttribute('data-tab');
+      c.removeAttribute('data-goplacas-all');
+      c.title=((card.querySelector('.lab')||{}).textContent||'Indicador')+' · '+((card.querySelector('.sub')||{}).textContent||'');
+      rail.appendChild(c);
+    });
+    return cards.length;
+  }
+  function update(){
+    raf=0;
+    if(!fichaView.classList.contains('active')||window.innerWidth<900){hide();return;}
+    const {kpis,evid}=current();
+    if(!kpis||!evid||!kpis.children.length){hide();return;}
+
+    const headerBottom=header?Math.max(0,header.getBoundingClientRect().bottom):0;
+    const kRect=kpis.getBoundingClientRect();
+    const eRect=evid.getBoundingClientRect();
+    const viewRect=fichaView.getBoundingClientRect();
+
+    // Ativa apenas quando chegamos nas linhas do tempo e os KPIs originais ja ficaram para cima.
+    const evidenceVisible=eRect.top<=window.innerHeight-70 && eRect.bottom>headerBottom+24;
+    const originalsGone=kRect.bottom<headerBottom+10;
+    const fichaStillVisible=viewRect.bottom>headerBottom+40;
+    if(!(evidenceVisible&&originalsGone&&fichaStillVisible)){hide();return;}
+
+    const count=sync(kpis);
+    if(!count){hide();return;}
+
+    // O corredor do video e a margem cinza entre a borda da viewport e o conteudo central.
+    // Usa a margem real do <main>; quando ela for pequena, reduz ate o modo ultra-compacto.
+    const mRect=main.getBoundingClientRect();
+    const contentLeft=Math.max(0,mRect.left);
+    let gutter=Math.floor(contentLeft-6);
+    // Em zoom/escala do Windows, a margem CSS pode ficar menor que a margem visual.
+    // Permitimos usar parte do padding lateral sem deslocar o conteudo.
+    if(gutter<60)gutter=Math.min(88,Math.max(64,Math.floor(eRect.left-10)));
+    if(gutter<54){hide();return;}
+
+    const width=Math.max(60,Math.min(112,gutter));
+    const left=Math.max(2,Math.floor(contentLeft>width+6 ? contentLeft-width-5 : 2));
+    const top=Math.round(headerBottom+7);
+    const maxH=Math.max(170,window.innerHeight-top-8);
+    const gap=width<78?4:6;
+    const titleH=width<82?0:15;
+    const cardH=Math.max(38,Math.min(58,Math.floor((maxH-titleH-gap*Math.max(0,count-1))/Math.max(1,count))));
+
+    rail.style.width=width+'px';
+    rail.style.left=left+'px';
+    rail.style.top=top+'px';
+    rail.style.maxHeight=maxH+'px';
+    rail.style.setProperty('--rail-card-h',cardH+'px');
+    rail.classList.toggle('narrow',width<82);
+    rail.classList.toggle('ultra',width<62||cardH<40);
+    rail.classList.add('on');
+  }
+  function schedule(){ if(!raf)raf=requestAnimationFrame(update); }
+
+  window.addEventListener('scroll',schedule,{passive:true});
+  window.addEventListener('resize',schedule,{passive:true});
+  new MutationObserver(()=>{lastSig='';schedule();}).observe(fichaBox,{childList:true,subtree:true,characterData:true});
+  new MutationObserver(schedule).observe(fichaView,{attributes:true,attributeFilter:['class']});
+  schedule();
+})();
+
 // INIT
 if(RAW&&RAW.alertas){ ALERTS=RAW.alertas; ALERTS_N=(RAW.counts&&RAW.counts.alertas)||0; PLACA_UO=RAW.placaUO||null; }
 if(RAW&&RAW.placaId) PLACA_MOV=RAW.placaId;
@@ -6894,13 +7125,27 @@ async function bootPulso360(){
     finally{ document.body.classList.remove('booting'); }
     return;   // NÃO segue para a base pesada no celular
   }
-  let temCache=0, pub=false;
+  let temCache=0, pub=false, manifest=null;
   try{
-    if(bt)bt.textContent='Restaurando a última base utilizada…';
-    try{temCache=await cacheRestaurar();}catch(e){}
-    if(bt)bt.textContent='Verificando se existe uma publicação mais recente…';
-    try{pub=await carregarDadosPublicados();}catch(e){console.warn('Pulso 360: não foi possível carregar os dados publicados',e);}
-    // Sem publicação/cache: só então cai para uma base local antiga ou demonstração.
+    // Primeiro lê SOMENTE o manifesto (alguns KB). Se a publicação mudou, não perde tempo
+    // restaurando, indexando e renderizando uma base antiga para logo depois descartá-la.
+    if(bt)bt.textContent='Verificando publicação…';
+    try{manifest=await _fetchPublishedManifest();}catch(e){}
+    const remotePub=manifest?+(manifest.publishedAt||0):0, cachePub=_cachePubGet();
+    if(remotePub && cachePub===remotePub){
+      if(bt)bt.textContent='Restaurando cache local…';
+      try{temCache=await cacheRestaurar();}catch(e){}
+      if(temCache){ pub=true; PUBLISHED_AT_LOADED=remotePub; DATA_UPDATED_AT=remotePub; atualizaDataMode(); }
+    }
+    if(!pub && manifest){
+      if(bt)bt.textContent='Carregando dados atualizados…';
+      try{pub=await carregarDadosPublicados(manifest);}catch(e){console.warn('Pulso 360: não foi possível carregar os dados publicados',e);}
+    }
+    // Sem publicação disponível, tenta o cache local como contingência.
+    if(!pub&&!temCache){
+      if(bt)bt.textContent='Restaurando última base local…';
+      try{temCache=await cacheRestaurar();}catch(e){}
+    }
     if(!pub&&!temCache){
       if(RAW&&RAW.records&&RAW.schema===3){ REAL=true; } else { RAW=null; REAL=false; }
       await _finalizeBootUI();
