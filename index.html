@@ -897,7 +897,8 @@
   .op-block,.tl-card,.divcard,.score-section{content-visibility:auto;contain-intrinsic-size:auto 520px}
   .capinha{contain:layout paint style}
   #semanaBox,#timelineBox,#divList{contain:layout style}
-  .perf-loading{padding:34px;text-align:center;color:var(--muted);font-weight:650}
+  .perf-loading{padding:28px 34px 34px;text-align:center;color:var(--muted);font-weight:650}
+  .perf-loading .boot-pulse{margin:0 auto 8px;transform:scale(.9);transform-origin:center}
   .perf-loading small{display:block;margin-top:7px;font-weight:400}
 </style>
 </head>
@@ -1954,13 +1955,23 @@ function _auditOverlapLen(a,b,merged){ let n=0; for(const x of (merged||[])){if(
 function _auditIsoDay(absMin){ const d=new Date(Math.floor(absMin/1440)*1440*60000); return d.toISOString().slice(0,10); }
 function _auditDayStart(absMin){ return Math.floor(absMin/1440)*1440; }
 function _auditSplitCivil(a,b,cb){ let cur=a; while(cur<b){const ds=_auditDayStart(cur),e=Math.min(b,ds+1440); if(e>cur)cb(ds,cur,e); cur=e;} }
-function auditMetrics(rows){
+function auditMetrics(rows,keepSegments=true){
   rows=rows||[];
   const tag=String(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|'+String(CFG&&CFG.tol||0)+'|'+String(CFG&&CFG.jornadaMin||440);
-  if(Array.isArray(rows)){const c=OP_AUDIT_CACHE.get(rows);if(c&&c.tag===tag)return c.v;}
+  if(Array.isArray(rows)){const c=OP_AUDIT_CACHE.get(rows);if(c&&c.tag===tag&&(c.full||!keepSegments))return c.v;}
 
   const movGroups=Object.create(null), pointByDriver=Object.create(null), pointByBaseDay=Object.create(null), envByDriver=Object.create(null);
   const pointDayKeys=new Set(), movementDayKeys=new Set(), motoristasHex=new Set();
+  // PERF: quando auditamos um conjunto grande (ex.: a frota inteira), produzimos no MESMO passe
+  // os agregados canônicos por motorista. O ranking e o resumo semanal reaproveitam estes objetos
+  // em vez de executar auditMetrics novamente milhares de vezes (uma vez por motorista).
+  const byDriver=Object.create(null);
+  const dget=(nn,nome)=>{
+    let d=byDriver[nn];
+    if(!d)d=byDriver[nn]={nn,nome:nome||nn,hPonto:0,hExtra:0,hCond:0,km:0,litros:0,kmMedia:0,litrosMedia:0,kmMediaPotencial:0,mediaCoverage:0,mediaRaw:null,mediaTrimble:null,fuelValidSegments:0,fuelInvalidSegments:0,hForaReal:0,hDedo:0,hCondWithPoint:0,diasPonto:0,diasMov:0,jornadas:0,jornadasExtra:0,motoristasHex:0,movDaysNoPoint:0,pointDaysNoMov:0,daysFora:0,driversFora:0,maxDriverDayCond:0,byDay:Object.create(null),extraByDay:Object.create(null),plateMinutes:Object.create(null)};
+    return d;
+  };
+  const dday=(d,iso)=>d.byDay[iso]||(d.byDay[iso]={hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});
   let invalidMov=0,invalidPoint=0,rawMov=0,dupJornada=0,dupMov=0;
 
   for(const r of rows){
@@ -2015,36 +2026,44 @@ function auditMetrics(rows){
     const compact=[]; for(const s of accepted){const z=compact[compact.length-1];if(z&&z.b===s.a&&z.placa===s.placa){z.b=s.b;z.absB=s.absB;z.km+=s.km;z.litros+=s.litros;}else compact.push(Object.assign({},s));}
     const dayMin=compact.reduce((s,x)=>s+(x.b-x.a),0); driverDayMinutes[k]=dayMin; maxDriverDayCond=Math.max(maxDriverDayCond,dayMin);
     movementDayKeys.add(k); hCond+=dayMin;
+    const _dk=k.lastIndexOf('|'), _dnn=_dk>=0?k.slice(0,_dk):k, _dn=(compact[0]&&compact[0].nome)||_dnn, _da=dget(_dnn,_dn);
+    _da.hCond+=dayMin; _da.diasMov++; _da.maxDriverDayCond=Math.max(_da.maxDriverDayCond,dayMin);
     for(const x of compact){
-      km+=x.km; litros+=x.litros;
+      km+=x.km; litros+=x.litros; _da.km+=x.km; _da.litros+=x.litros; const _dd=dday(_da,x.date); _dd.hCond+=x.b-x.a; _dd.km+=x.km; _dd.litros+=x.litros;
       // Média Trimble usa somente trechos com relação km/l fisicamente plausível.
       // Trechos curtos (<0,5 km) são ignorados na cobertura para não amplificar ruído do sensor.
       if(x.km>=0.5){
-        kmMediaPotencial+=x.km;
+        kmMediaPotencial+=x.km; _da.kmMediaPotencial+=x.km;
         const mr=mediaSegura(x.km,x.litros);
-        if(mr!=null){kmMedia+=x.km;litrosMedia+=x.litros;fuelValidSegments++;}
-        else fuelInvalidSegments++;
+        if(mr!=null){kmMedia+=x.km;litrosMedia+=x.litros;fuelValidSegments++;_da.kmMedia+=x.km;_da.litrosMedia+=x.litros;_da.fuelValidSegments++;}
+        else {fuelInvalidSegments++;_da.fuelInvalidSegments++;}
       }
-      segments.push(x);(canonicalByDriver[x.nn]=canonicalByDriver[x.nn]||[]).push(x); if(x.placa)plateMinutes[x.placa]=(plateMinutes[x.placa]||0)+(x.b-x.a); const d=(byDay[x.date]=byDay[x.date]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hCond+=x.b-x.a;d.km+=x.km;d.litros+=x.litros;
+      if(keepSegments)segments.push(x);(canonicalByDriver[x.nn]=canonicalByDriver[x.nn]||[]).push(x); if(x.placa){plateMinutes[x.placa]=(plateMinutes[x.placa]||0)+(x.b-x.a);_da.plateMinutes[x.placa]=(_da.plateMinutes[x.placa]||0)+(x.b-x.a);} const d=(byDay[x.date]=byDay[x.date]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hCond+=x.b-x.a;d.km+=x.km;d.litros+=x.litros;
     }
   }
 
   // Ponto canônico por motorista (tempo efetivamente registrado, sem sobreposição duplicada).
   const mergedPointByDriver=Object.create(null),pointSegments=[]; let hPonto=0;
-  for(const nn in pointByDriver){const m=_auditMergeIntervals(pointByDriver[nn]);mergedPointByDriver[nn]=m;hPonto+=m.reduce((s,x)=>s+x[1]-x[0],0);for(const x of m)_auditSplitCivil(x[0],x[1],(ds,a,b)=>{const iso=new Date(ds*60000).toISOString().slice(0,10);pointSegments.push({nn,date:iso,dayStart:ds,a:a-ds,b:b-ds,absA:a,absB:b});const d=(byDay[iso]=byDay[iso]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hPonto+=b-a;});}
+  for(const nn in pointByDriver){const m=_auditMergeIntervals(pointByDriver[nn]);mergedPointByDriver[nn]=m;const _da=dget(nn,nn),_hp=m.reduce((s,x)=>s+x[1]-x[0],0);hPonto+=_hp;_da.hPonto+=_hp;for(const x of m)_auditSplitCivil(x[0],x[1],(ds,a,b)=>{const iso=new Date(ds*60000).toISOString().slice(0,10);if(keepSegments)pointSegments.push({nn,date:iso,dayStart:ds,a:a-ds,b:b-ds,absA:a,absB:b});const d=(byDay[iso]=byDay[iso]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hPonto+=b-a;dday(_da,iso).hPonto+=b-a;});}
 
   // Hora extra por jornada/dia de origem, depois da deduplicação dos pares de ponto.
   const extraByDay=Object.create(null); let hExtra=0,jornadasExtra=0;
   const diasPonto=new Set();
-  for(const bk in pointByBaseDay){const m=_auditMergeIntervals(pointByBaseDay[bk]);let dur=m.reduce((s,x)=>s+x[1]-x[0],0);if(dur>1440){invalidPoint++;dur=1440;}const iso=bk.slice(bk.lastIndexOf('|')+1),ex=Math.max(0,dur-(CFG.jornadaMin||440));extraByDay[iso]=(extraByDay[iso]||0)+ex;diasPonto.add(bk);if(ex>0){hExtra+=ex;jornadasExtra++;motoristasHex.add(bk.slice(0,bk.lastIndexOf('|')));}}
+  for(const bk in pointByBaseDay){const m=_auditMergeIntervals(pointByBaseDay[bk]);let dur=m.reduce((s,x)=>s+x[1]-x[0],0);if(dur>1440){invalidPoint++;dur=1440;}const _bi=bk.lastIndexOf('|'),_nn=bk.slice(0,_bi),iso=bk.slice(_bi+1),ex=Math.max(0,dur-(CFG.jornadaMin||440)),_da=dget(_nn,_nn);extraByDay[iso]=(extraByDay[iso]||0)+ex;diasPonto.add(bk);_da.diasPonto++;_da.jornadas++;_da.extraByDay[iso]=(_da.extraByDay[iso]||0)+ex;dday(_da,iso).hExtra+=ex;if(ex>0){hExtra+=ex;jornadasExtra++;motoristasHex.add(_nn);_da.hExtra+=ex;_da.jornadasExtra++;_da.motoristasHex=1;}}
   for(const iso in extraByDay){const d=(byDay[iso]=byDay[iso]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hExtra+=extraByDay[iso];}
 
   // Fora da jornada: mede sobre a condução canônica. Movimento sem ponto continua separado de "fora real".
   const mergedEnv=Object.create(null); for(const nn in envByDriver)mergedEnv[nn]=_auditMergeIntervals(envByDriver[nn]);
   let hForaReal=0,hDedo=0,hCondWithPoint=0; const movNoPoint=new Set(),daysFora=new Set(),driversFora=new Set();
-  for(const nn in canonicalByDriver){const env=mergedEnv[nn]||[];for(const x of canonicalByDriver[nn]){const dayA=x.dayStart,dayB=dayA+1440,dur=x.b-x.a,hasPointDay=env.some(e=>e[1]>dayA&&e[0]<dayB),cov=_auditOverlapLen(x.absA,x.absB,env);let fora=0;if(hasPointDay){fora=Math.max(0,dur-cov);x.foraMin=fora;x.fora=fora>0;x.semPonto=false;hForaReal+=fora;hCondWithPoint+=dur;hDedo+=fora;if(fora>0){daysFora.add(nn+'|'+x.date);driversFora.add(nn);}}else{x.foraMin=0;x.fora=false;x.semPonto=true;hDedo+=dur;movNoPoint.add(nn+'|'+x.date);}const d=(byDay[x.date]=byDay[x.date]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});if(hasPointDay){d.hFora+=fora;d.hDedo+=fora;d.hCondWithPoint+=dur;}else d.hDedo+=dur;}}
+  for(const nn in canonicalByDriver){const env=mergedEnv[nn]||[],_da=dget(nn,nn);for(const x of canonicalByDriver[nn]){const dayA=x.dayStart,dayB=dayA+1440,dur=x.b-x.a,hasPointDay=env.some(e=>e[1]>dayA&&e[0]<dayB),cov=_auditOverlapLen(x.absA,x.absB,env);let fora=0;if(hasPointDay){fora=Math.max(0,dur-cov);x.foraMin=fora;x.fora=fora>0;x.semPonto=false;hForaReal+=fora;hCondWithPoint+=dur;hDedo+=fora;_da.hForaReal+=fora;_da.hCondWithPoint+=dur;_da.hDedo+=fora;if(fora>0){daysFora.add(nn+'|'+x.date);driversFora.add(nn);}}else{x.foraMin=0;x.fora=false;x.semPonto=true;hDedo+=dur;_da.hDedo+=dur;movNoPoint.add(nn+'|'+x.date);}const d=(byDay[x.date]=byDay[x.date]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0}),_dd=dday(_da,x.date);if(hasPointDay){d.hFora+=fora;d.hDedo+=fora;d.hCondWithPoint+=dur;_dd.hFora+=fora;_dd.hDedo+=fora;_dd.hCondWithPoint+=dur;}else{d.hDedo+=dur;_dd.hDedo+=dur;}}}
 
   const diasMov=new Set(movementDayKeys),pointNoMov=new Set(); for(const pk of pointDayKeys)if(!movementDayKeys.has(pk))pointNoMov.add(pk);
+  // Finaliza os contadores por motorista usando as mesmas chaves canônicas do cálculo global.
+  for(const pk of movNoPoint){const i=pk.lastIndexOf('|'),nn=i>=0?pk.slice(0,i):pk;dget(nn,nn).movDaysNoPoint++;}
+  for(const pk of pointNoMov){const i=pk.lastIndexOf('|'),nn=i>=0?pk.slice(0,i):pk;dget(nn,nn).pointDaysNoMov++;}
+  for(const pk of daysFora){const i=pk.lastIndexOf('|'),nn=i>=0?pk.slice(0,i):pk;dget(nn,nn).daysFora++;}
+  for(const nn of driversFora)dget(nn,nn).driversFora=1;
+  for(const nn in byDriver){const d=byDriver[nn];d.mediaCoverage=d.kmMediaPotencial>0?d.kmMedia/d.kmMediaPotencial:0;d.mediaRaw=d.litros>0?d.km/d.litros:null;d.mediaTrimble=(d.mediaCoverage>=MEDIA_MIN_COVERAGE)?mediaSegura(d.kmMedia,d.litrosMedia):null;}
   const mediaCoverage=kmMediaPotencial>0?kmMedia/kmMediaPotencial:0;
   const mediaRaw=litros>0?km/litros:null;
   const mediaTrimble=(mediaCoverage>=MEDIA_MIN_COVERAGE)?mediaSegura(kmMedia,litrosMedia):null;
@@ -2052,8 +2071,31 @@ function auditMetrics(rows){
     diasPonto:diasPonto.size,diasMov:diasMov.size,jornadas:diasPonto.size,jornadasExtra,motoristasHex:motoristasHex.size,
     movDaysNoPoint:movNoPoint.size,pointDaysNoMov:pointNoMov.size,daysFora:daysFora.size,driversFora:driversFora.size,
     dupJornada,dupMov,overlapMovMin,conflictPlateMin,invalidMov,invalidPoint,maxDriverDayCond,
-    segments,pointSegments,byDay,extraByDay,plateMinutes};
-  if(Array.isArray(rows))OP_AUDIT_CACHE.set(rows,{tag,v:out}); return out;
+    segments,pointSegments,byDay,extraByDay,plateMinutes,byDriver};
+  if(Array.isArray(rows))OP_AUDIT_CACHE.set(rows,{tag,v:out,full:!!keepSegments}); return out;
+}
+
+// Auditoria da frota otimizada: a regra canônica já é independente por motorista. Em bases grandes
+// é mais rápido auditar os pequenos vetores de cada condutor e somar os resultados do que montar
+// um único dicionário gigante com >100 mil registros. O resultado é matematicamente equivalente.
+let FLEET_AUDIT_CACHE=new WeakMap();
+function auditFleet(rows){
+  rows=rows||[]; const tag=String(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|'+String(CFG&&CFG.tol||0)+'|'+String(CFG&&CFG.jornadaMin||440);
+  if(Array.isArray(rows)){const c=FLEET_AUDIT_CACHE.get(rows);if(c&&c.tag===tag)return c.v;}
+  const groups=(rows===RECORDS)?RECORDS_BY_DRIVER_N:(()=>{const g=Object.create(null);for(const r of rows){const k=(r&&r._nMot)||norm(r&&r.motoristaEscala||'');if(k)(g[k]=g[k]||[]).push(r);}return g;})();
+  const byDriver=Object.create(null),byDay=Object.create(null),extraByDay=Object.create(null),plateMinutes=Object.create(null);
+  let hPonto=0,hExtra=0,hCond=0,km=0,litros=0,kmMedia=0,litrosMedia=0,kmMediaPotencial=0,fuelValidSegments=0,fuelInvalidSegments=0,hForaReal=0,hDedo=0,hCondWithPoint=0,diasPonto=0,diasMov=0,jornadas=0,jornadasExtra=0,motoristasHex=0,movDaysNoPoint=0,pointDaysNoMov=0,daysFora=0,driversFora=0,dupJornada=0,dupMov=0,overlapMovMin=0,conflictPlateMin=0,invalidMov=0,invalidPoint=0,maxDriverDayCond=0;
+  for(const k in groups){
+    const a=auditMetrics(groups[k],false);
+    const d=(a.byDriver&&a.byDriver[k])||{hPonto:a.hPonto,hExtra:a.hExtra,hCond:a.hCond,km:a.km,litros:a.litros,kmMedia:a.kmMedia,litrosMedia:a.litrosMedia,kmMediaPotencial:a.kmMediaPotencial,mediaCoverage:a.mediaCoverage,mediaRaw:a.mediaRaw,mediaTrimble:a.mediaTrimble,fuelValidSegments:a.fuelValidSegments,fuelInvalidSegments:a.fuelInvalidSegments,hForaReal:a.hForaReal,hDedo:a.hDedo,hCondWithPoint:a.hCondWithPoint,diasPonto:a.diasPonto,diasMov:a.diasMov,jornadas:a.jornadas,jornadasExtra:a.jornadasExtra,motoristasHex:a.motoristasHex,movDaysNoPoint:a.movDaysNoPoint,pointDaysNoMov:a.pointDaysNoMov,daysFora:a.daysFora,driversFora:a.driversFora,maxDriverDayCond:a.maxDriverDayCond,byDay:a.byDay,extraByDay:a.extraByDay,plateMinutes:a.plateMinutes};
+    byDriver[k]=d; hPonto+=a.hPonto||0;hExtra+=a.hExtra||0;hCond+=a.hCond||0;km+=a.km||0;litros+=a.litros||0;kmMedia+=a.kmMedia||0;litrosMedia+=a.litrosMedia||0;kmMediaPotencial+=a.kmMediaPotencial||0;fuelValidSegments+=a.fuelValidSegments||0;fuelInvalidSegments+=a.fuelInvalidSegments||0;hForaReal+=a.hForaReal||0;hDedo+=a.hDedo||0;hCondWithPoint+=a.hCondWithPoint||0;diasPonto+=a.diasPonto||0;diasMov+=a.diasMov||0;jornadas+=a.jornadas||0;jornadasExtra+=a.jornadasExtra||0;motoristasHex+=a.motoristasHex||0;movDaysNoPoint+=a.movDaysNoPoint||0;pointDaysNoMov+=a.pointDaysNoMov||0;daysFora+=a.daysFora||0;driversFora+=a.driversFora||0;dupJornada+=a.dupJornada||0;dupMov+=a.dupMov||0;overlapMovMin+=a.overlapMovMin||0;conflictPlateMin+=a.conflictPlateMin||0;invalidMov+=a.invalidMov||0;invalidPoint+=a.invalidPoint||0;maxDriverDayCond=Math.max(maxDriverDayCond,a.maxDriverDayCond||0);
+    for(const day in (d.byDay||{})){const x=d.byDay[day],z=(byDay[day]=byDay[day]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});for(const f of ['hCond','km','litros','hFora','hDedo','hCondWithPoint','hPonto','hExtra'])z[f]+=(x&&+x[f])||0;}
+    for(const day in (d.extraByDay||{}))extraByDay[day]=(extraByDay[day]||0)+(+d.extraByDay[day]||0);
+    for(const pl in (d.plateMinutes||{}))plateMinutes[pl]=(plateMinutes[pl]||0)+(+d.plateMinutes[pl]||0);
+  }
+  const mediaCoverage=kmMediaPotencial>0?kmMedia/kmMediaPotencial:0, mediaRaw=litros>0?km/litros:null, mediaTrimble=(mediaCoverage>=MEDIA_MIN_COVERAGE)?mediaSegura(kmMedia,litrosMedia):null;
+  const v={hPonto,hExtra,hCond,km,litros,kmMedia,litrosMedia,kmMediaPotencial,mediaCoverage,mediaRaw,mediaTrimble,fuelValidSegments,fuelInvalidSegments,hForaReal,hDedo,hCondWithPoint,diasPonto,diasMov,jornadas,jornadasExtra,motoristasHex,movDaysNoPoint,pointDaysNoMov,daysFora,driversFora,dupJornada,dupMov,overlapMovMin,conflictPlateMin,invalidMov,invalidPoint,maxDriverDayCond,segments:[],pointSegments:[],byDay,extraByDay,plateMinutes,byDriver};
+  if(Array.isArray(rows))FLEET_AUDIT_CACHE.set(rows,{tag,v}); return v;
 }
 let RECORD_DAY_AUDIT_CACHE=new WeakMap(), RECORD_FULL_AUDIT_CACHE=new WeakMap();
 function auditRecordFull(r){
@@ -2294,7 +2336,7 @@ function fillSel(sel,arr,fmt){ const el=$(sel), cur=el.value; el.innerHTML='<opt
    RENDER — KPIs
    ============================================================ */
 function renderKpis(rows){
-  const audit=auditMetrics(rows);
+  const audit=auditFleet(rows);
   let conf=0,div=0,dedo=0,hex=audit.hExtra,movSemPonto=0,pontoSemMov=0,interj=0,movDays=0,jCond=0,jFora=0;
   const motsDedoS=new Set(), motsHexS=new Set(), motsInterjS=new Set(), motSetS=new Set();
   let kmTot=0,litTot=0;
@@ -2394,16 +2436,21 @@ function rankLowerPercentile(values,v){
   let lo=0,eq=0; for(const x of a){if(x<v)lo++;else if(x===v)eq++;}
   const avg=lo+Math.max(0,eq-1)/2; return rankClamp(100*(1-avg/(a.length-1)));
 }
-function rankAlertSummary(nome,recs){
-  const nn=norm(nome), dias=new Set((recs||[]).filter(r=>r&&r.data&&((r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.horasMov||0)>0)).map(r=>r.data));
+function rankAlertSummary(nome,recs,audit){
+  const nn=norm(nome);
+  // PERF: os dias com direção já foram consolidados na auditoria canônica do recorte.
+  // Evita filtrar/mapear novamente todos os registros do motorista durante o ranking.
+  const dias=new Set();
+  if(audit&&audit.byDay){for(const d in audit.byDay)if((audit.byDay[d]&&audit.byDay[d].hCond||0)>0)dias.add(d);}
+  else (recs||[]).forEach(r=>{if(r&&r.data&&((r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.horasMov||0)>0))dias.add(r.data);});
   if(!dias.size)return {total:0,niveis:{},tipos:{},real:true,badges:[]};
   if(AL_TL){let total=0;const tipos={},niveis={};for(const e of (AL_TL[nn]||[])){if(!dias.has(e[0]))continue;total++;const tp=e[3]||'ALERTA';tipos[tp]=(tipos[tp]||0)+1;const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':'';if(nv)niveis[nv]=(niveis[nv]||0)+1;}return {total,niveis,tipos,real:true,badges:[]};}
   if(BOL_DAY){let total=0;const tipos={};const dm=BOL_DAY[nn]||{};for(const d of dias){const x=dm[d];if(!x)continue;total+=x.t||0;for(const k in (x.tipos||{}))tipos[k]=(tipos[k]||0)+(x.tipos[k]||0);}return {total,niveis:{},tipos,real:true,badges:[]};}
   return alertasResumo(nome,activeRange());
 }
-function rankProfile(nome,recs){
-  const audit=auditMetrics(recs), alR=rankAlertSummary(nome,recs), movDays=audit.diasMov||0, pontoDays=audit.diasPonto||0, hCond=audit.hCond||0, hPonto=audit.hPonto||0;
-  const identCam=aderRecs(recs), identMot=aderMotoristaRecs(recs), aj=aderJornada(recs);
+function rankProfile(nome,recs,auditOverride){
+  const audit=auditOverride||auditMetrics(recs), alR=rankAlertSummary(nome,recs,audit), movDays=audit.diasMov||0, pontoDays=audit.diasPonto||0, hCond=audit.hCond||0, hPonto=audit.hPonto||0;
+  const identCam=aderRecs(recs), identMot=aderMotoristaRecs(recs,audit), aj=aderJornada(recs,audit);
   const pointCoverage=movDays?rankClamp(pontoDays/movDays*100):null;
   // Unificado (08/10/2026): "Aderência de jornada e ponto" = jornada (60%) + cobertura de ponto (40%),
   // preservando a proporção antiga 15:10. Se faltar um dos dois, usa o que existir.
@@ -2413,8 +2460,9 @@ function rankProfile(nome,recs){
   else if(pointCoverage!=null) ajPonto=pointCoverage;
   // Interjornada: o descanso só é MEDÍVEL nos dias que têm jornada anterior para comparar (r.interjornada!=null).
   // O denominador tem que ser esses dias — NÃO os dias de movimento (bug antigo: inflava violação e zerava a nota).
-  const interjBase=new Set((recs||[]).filter(r=>r.interjornada!=null).map(r=>r.data)).size;
-  const interjDays=new Set((recs||[]).filter(r=>r.interjornada!=null&&r.interjornada<CFG.interjornadaMin).map(r=>r.data)).size;
+  const _ib=new Set(),_iv=new Set(); let _dmin='',_dmax='',pend=0,idDiv=0;
+  for(const r of (recs||[])){if(!r)continue;const rd=r.data||'';if(rd){if(!_dmin||rd<_dmin)_dmin=rd;if(!_dmax||rd>_dmax)_dmax=rd;}if(r.interjornada!=null){_ib.add(rd);if(r.interjornada<CFG.interjornadaMin)_iv.add(rd);}if(r.sev==='pendente')pend++;if(r.idDivergente||r.condutorDivergente)idDiv++;}
+  const interjBase=_ib.size, interjDays=_iv.size;
   const interjScore=interjBase>0?rankClamp(100*(1-interjDays/interjBase)):null;
   // BONIFICAÇÃO: só penaliza hora extra ACIMA de 2h/dia (120 min). Até 2h de extra por dia não conta.
   // IMPORTANTE: mede a MÉDIA DIÁRIA de excesso (por dia trabalhado), NÃO dividido pelo total de horas —
@@ -2425,8 +2473,8 @@ function rankProfile(nome,recs){
   const extraScore=pontoDays>0?rankClamp(100*(1-Math.min(1,extraMediaDia/EXTRA_CAP))):null;
   const nv=(alR&&alR.niveis)||{}, alto=+nv.ALTO||0, medio=+nv.MEDIO||0, baixo=+nv.BAIXO||0, total=+(alR&&alR.total)||0, conhecido=alto+medio+baixo, desconhecido=Math.max(0,total-conhecido);
   const alertRisk=alto*4+medio*2+baixo+desconhecido*1.5, hCondH=Math.max(hCond/60,0.01), alertRate=alertRisk*10/hCondH;
-  const datas=(recs||[]).map(r=>r.data).filter(Boolean).sort(), opF=$('#fOp').value; let multaRange=null;
-  if(datas.length||opF)multaRange=Object.assign(datas.length?{de:datas[0],ate:datas[datas.length-1]}:{},opF?{op:opF}:{});
+  const opF=$('#fOp').value; let multaRange=null;
+  if(_dmin||opF)multaRange=Object.assign(_dmin?{de:_dmin,ate:_dmax}:{},opF?{op:opF}:{});
   const multaTot=MULTAS_N?multasCondutaMotoristaCount(nome,multaRange):0, multaRate=multaTot*100/hCondH;
   const d=drv(nome), litros=audit.litros||0, ab=ABAST&&ABAST[norm(nome)], mediaA=mediaAbastecimento(ab), mediaT=mediaAudit(audit);
   const media=MEDIA_OFF?null:(mediaA!=null?mediaA:(mediaT!=null?mediaT:(mediaPlausivel(d.media)?d.media:null)));
@@ -2436,7 +2484,6 @@ function rankProfile(nome,recs){
   // Média via Trimble: km < 0,5 km/l é impossível p/ caminhão = DISTÂNCIA furada no Trimble → NÃO entra no quesito
   // (vira "sem dado", não penaliza com 0). Veículos com sensor ok seguem normais.
   const mediaScore=(!MEDIA_OFF&&mediaPlausivel(media)&&meta>0)?rankClamp(media/meta*100):null;
-  const pend=(recs||[]).filter(r=>r.sev==='pendente').length, idDiv=(recs||[]).filter(r=>r.idDivergente||r.condutorDivergente).length;
   return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,ajPonto,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
 }
 let RANKPROFILE_CACHE={key:'',rows:null,profiles:null};
@@ -2492,7 +2539,8 @@ function applyResumoRankScores(data,rows){
   // Sem filtros, reaproveita o índice estável por motorista criado no build.
   // Além de evitar milhares de arrays temporários, permite que auditMetrics reutilize o WeakMap entre telas.
   const by=(rows===RECORDS)?RECORDS_BY_DRIVER_N:(()=>{const x=Object.create(null);(rows||[]).forEach(r=>{const k=r._nMot||norm(r.motoristaEscala||'');if(k)(x[k]=x[k]||[]).push(r);});return x;})();
-  const profiles=Object.create(null); for(const k in by){const nm=(by[k][0]&&by[k][0].motoristaEscala)||k;profiles[k]=rankProfile(nm,by[k]);}
+  const parentAudit=auditFleet(rows), driverAudit=(parentAudit&&parentAudit.byDriver)||Object.create(null);
+  const profiles=Object.create(null); for(const k in by){const nm=(by[k][0]&&by[k][0].motoristaEscala)||k;profiles[k]=rankProfile(nm,by[k],driverAudit[k]||null);}
   _rankScoreProfiles(profiles);
   _rankCacheSet(sig,rows,profiles);   // guarda p/ as próximas chamadas com o mesmo recorte + mapa RANK_SCORES p/ a ficha
   _rankAnnotate(data,profiles);
@@ -2505,16 +2553,19 @@ async function _prewarmRankAsync(rows){
   const sig=_rankSig();
   if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles) return;
   const by=(rows===RECORDS)?RECORDS_BY_DRIVER_N:(()=>{const x=Object.create(null);(rows||[]).forEach(r=>{const k=r._nMot||norm(r.motoristaEscala||'');if(k)(x[k]=x[k]||[]).push(r);});return x;})();
+  const parentAudit=auditFleet(rows), driverAudit=(parentAudit&&parentAudit.byDriver)||Object.create(null);
   const profiles=Object.create(null), keys=Object.keys(by);
   // Time-slicing por orçamento de CPU em vez de yield a cada 8 motoristas.
   // Mantém a interface responsiva sem pagar centenas de setTimeouts desnecessários.
   let sliceStart=performance.now();
   for(let i=0;i<keys.length;i++){
-    const k=keys[i], nm=(by[k][0]&&by[k][0].motoristaEscala)||k; profiles[k]=rankProfile(nm,by[k]);
-    if(performance.now()-sliceStart>=14){ await uiYield(); sliceStart=performance.now(); }
+    const k=keys[i], nm=(by[k][0]&&by[k][0].motoristaEscala)||k; profiles[k]=rankProfile(nm,by[k],driverAudit[k]||null);
+    if(performance.now()-sliceStart>=10){ await uiYield(); sliceStart=performance.now(); }
   }
   _rankScoreProfiles(profiles);
   _rankCacheSet(sig,rows,profiles);
+  // Depois do primeiro cálculo, persiste a fotografia com os agregados leves para as próximas aberturas.
+  if(rows===RECORDS&&typeof agendarCache==='function')agendarCache();
 }
 function resumoRankCmp(a,b){
   const ea=resumoRankElegivel(a), eb=resumoRankElegivel(b); if(ea!==eb)return ea?-1:1;
@@ -2531,7 +2582,7 @@ function resumoRankUnique(list){
 function resumoMotoristaConsolidado(ms, rows){
   ms=ms||[]; rows=rows||[]; if(!ms.length||!rows.length)return ms[0]||null;
   const nome=(rows[0]&&rows[0].motoristaEscala)||(ms[0]&&ms[0].nome)||'—';
-  const audit=auditMetrics(rows), semanas=Object.create(null), placas=new Set(), ops=new Set();
+  const audit=auditMetrics(rows,false), semanas=Object.create(null), placas=new Set(), ops=new Set();
   let dd=audit.hDedo||0,ddReal=audit.hForaReal||0,litros=audit.litros||0,idDiv=0,pend=0;
   for(const r of rows){
     if(r.placa){const _p=placaBR(r.placa);if(_p)placas.add(_p);} if(r.operacao&&r.operacao!=='—')ops.add(r.operacao);
@@ -2561,8 +2612,10 @@ function semanaAgg(rows){
     const hit=SEMANA_AGG_CACHE_MAP.get(cacheKey); SEMANA_AGG_CACHE_MAP.delete(cacheKey); SEMANA_AGG_CACHE_MAP.set(cacheKey,hit); return hit;
   }
   if(SEMANA_AGG_CACHE&&SEMANA_AGG_CACHE_KEY===cacheKey) return SEMANA_AGG_CACHE;
-  const wkMap=Object.create(null), opMap=Object.create(null);
+  const wkMap=Object.create(null), opMap=Object.create(null), drvCounts=Object.create(null);
+  const parentAudit=auditFleet(rows), driverAudit=(parentAudit&&parentAudit.byDriver)||Object.create(null);
   rows.forEach(r=>{
+    const _nn=r._nMot||norm(r.motoristaEscala||''); if(_nn)drvCounts[_nn]=(drvCounts[_nn]||0)+1;
     if(r.semKey && !wkMap[r.semKey]) wkMap[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};
     const op=r.operacao||'—'; const og=(opMap[op]=opMap[op]||{op,dd:0,motsDedo:new Set(),mots:Object.create(null),opRows:[]});
     og.opRows.push(r); og.dd+=(r.ddReal||0); if((r.ddReal||0)>0)og.motsDedo.add(r.motoristaEscala);
@@ -2575,20 +2628,25 @@ function semanaAgg(rows){
   });
   const weeks=Object.values(wkMap).sort((a,b)=>a.key<b.key?-1:1);
   const ultima=weeks.length?weeks[weeks.length-1].key:null, rng=activeRange();
+  const _rankProfilesReady=(RANKPROFILE_CACHE.rows===rows&&RANKPROFILE_CACHE.key===_rankSig()&&RANKPROFILE_CACHE.profiles)?RANKPROFILE_CACHE.profiles:null;
   const data=Object.values(opMap).sort((a,b)=>a.op.localeCompare(b.op,'pt-BR')).map(og=>{
     const list=Object.values(og.mots);
     list.forEach(m=>{
-      // Consolidação auditável: duração/KM/litros/fora da jornada pela união real dos intervalos.
-      const au=auditMetrics(m.recs); m.mov=au.hCond||0; m.ponto=au.hPonto||0; m.km=au.km||0; m.litros=au.litros||0; m.dd=au.hDedo||0; m.ddReal=au.hForaReal||0; m.dias=au.daysFora||0; m._movDays=au.diasMov||0;
+      // Consolidação auditável: para motoristas que aparecem em uma única operação, reutiliza
+      // a auditoria já produzida no passe global. Só multioperação precisa de novo audit específico.
+      const _nn=norm(m.nome||''), _fullDrv=!!(driverAudit[_nn]&&drvCounts[_nn]===m.recs.length), au=_fullDrv?driverAudit[_nn]:auditMetrics(m.recs,false), _rp=(_fullDrv&&_rankProfilesReady)?_rankProfilesReady[_nn]:null; m._audit=au; m.mov=au.hCond||0; m.ponto=au.hPonto||0; m.km=au.km||0; m.litros=au.litros||0; m.dd=au.hDedo||0; m.ddReal=au.hForaReal||0; m.dias=au.daysFora||0; m._movDays=au.diasMov||0;
       // Farol semanal deriva do mesmo audit já calculado acima. Evita reprocessar motorista × semana várias vezes.
       m.semanas=auditWeeksFromDay(au);
-      const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)],ma=mediaAbastecimento(ab),mt=mediaAudit(au); m.media=MEDIA_OFF?null:(ma!=null?ma:(mt!=null?mt:(mediaPlausivel(d.media)?d.media:null))); m.op=og.op; m.meta=metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
-      m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs); m.aj=aderJornada(m.recs);
-      m._alR=alertasResumo(m.nome,rng); m._multaTot=MULTAS_N?multasCondutaMotoristaCount(m.nome,rng):0; m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls;
+      const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)],ma=mediaAbastecimento(ab),mt=mediaAudit(au); m.media=MEDIA_OFF?null:(_rp&&_rp.media!=null?_rp.media:(ma!=null?ma:(mt!=null?mt:(mediaPlausivel(d.media)?d.media:null)))); m.op=og.op; m.meta=_rp&&_rp.meta!=null?_rp.meta:metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
+      m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=_rp?_rp.identCam:aderRecs(m.recs); m.aj=_rp?_rp.aj:aderJornada(m.recs,au);
+      m._alR=_rp?_rp.alR:alertasResumo(m.nome,rng); m._multaTot=_rp?_rp.multaTot:(MULTAS_N?multasCondutaMotoristaCount(m.nome,rng):0); m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls;
     });
     og.dd=list.reduce((a,m)=>a+(m.ddReal||0),0); og.motsDedo=new Set(list.filter(m=>(m.ddReal||0)>0).map(m=>m.nome));
-    list.sort(resumoRankCmp);
-    return {op:og.op,list,dd:og.dd,aj:aderJornada(og.opRows),motsDedo:og.motsDedo.size};
+    // Aderência da operação = soma dos mesmos componentes canônicos por motorista.
+    // Evita auditar novamente todas as linhas da operação.
+    const _opCond=list.reduce((a,m)=>a+((m._audit&&m._audit.hCondWithPoint)||0),0), _opFora=list.reduce((a,m)=>a+(m.ddReal||0),0);
+    const _opAj=_opCond>0?Math.max(0,Math.round((_opCond-_opFora)/_opCond*100)):null;
+    return {op:og.op,list,dd:og.dd,aj:_opAj,motsDedo:og.motsDedo.size};
   });
   applyResumoRankScores(data,rows);
   const out={weeks,ultima,data}; SEMANA_AGG_CACHE_KEY=cacheKey; SEMANA_AGG_CACHE=out;
@@ -4505,7 +4563,7 @@ function _scheduleSemanaAsync(rows,viewKey){
   const seq=++SUMMARY_ASYNC_SEQ; SUMMARY_ASYNC_KEY=viewKey;
   const box=$('#semanaBox'), kp=$('#kpis');
   if(kp)kp.innerHTML='';
-  if(box)box.innerHTML='<div class="perf-loading">Preparando resumo semanal…<small>O painel já está disponível; os indicadores estão sendo calculados em segundo plano.</small></div>';
+  if(box)box.innerHTML='<div class="perf-loading"><div class="boot-pulse" aria-hidden="true"><svg viewBox="0 0 156 42" preserveAspectRatio="xMidYMid meet"><polyline class="boot-pulse-track" points="2,22 43,22 52,22 58,17 63,23 72,5 80,37 88,22 97,22 104,14 111,28 118,22 154,22"/><polyline class="boot-pulse-line" points="2,22 43,22 52,22 58,17 63,23 72,5 80,37 88,22 97,22 104,14 111,28 118,22 154,22"/><circle class="boot-pulse-dot" cx="154" cy="22" r="2.5"/></svg></div>Preparando resumo semanal…<small>Processando os indicadores em segundo plano.</small></div>';
   setTimeout(async()=>{
     try{
       await uiYield();
@@ -5219,11 +5277,11 @@ function aderTrilhaIdent(segs){
   return temErro ? Math.min(99,Math.floor(pct)) : Math.round(pct);
 }
 // aderência DO MOTORISTA: usa a condução canônica (sem sobreposição/duplicidade) como denominador.
-function aderMotoristaRecs(recs){ const au=auditMetrics(recs||[]); let meu=au.hCond||0,unid=0; (recs||[]).forEach(r=>{ (r.movUnid||[]).forEach(s=>{ const a=+s.ini,b=+s.fim; if(isFinite(a)&&isFinite(b)&&b>a) unid+=(b-a); }); });
+function aderMotoristaRecs(recs,auditOverride){ const au=auditOverride||auditMetrics(recs||[]); let meu=au.hCond||0,unid=0; (recs||[]).forEach(r=>{ (r.movUnid||[]).forEach(s=>{ const a=+s.ini,b=+s.fim; if(isFinite(a)&&isFinite(b)&&b>a) unid+=(b-a); }); });
   unid=Math.min(unid,meu); const tot=meu>0?meu:0; if(tot>0) return Math.max(0,Math.min(100,Math.round((tot-unid)/tot*100)));
   let s=0,n=0; (recs||[]).forEach(r=>{ if(r.semelhanca!=null){ s+=r.semelhanca; n++; } }); return n?Math.round(s/n):null; }
 // ADERÊNCIA DE JORNADA: condução canônica dentro da janela real do ponto.
-function aderJornada(recs){ const au=auditMetrics(recs||[]),cond=au.hCondWithPoint||0,fora=au.hForaReal||0; return cond>0? Math.max(0,Math.round((cond-fora)/cond*100)) : null; }
+function aderJornada(recs,auditOverride){ const au=auditOverride||auditMetrics(recs||[]),cond=au.hCondWithPoint||0,fora=au.hForaReal||0; return cond>0? Math.max(0,Math.round((cond-fora)/cond*100)) : null; }
 function ajColor(v){ return v==null?'var(--muted)':(v>=90?'var(--good)':(v>=70?'var(--warning)':'var(--critical)')); }
 // JORNADA (ponto): batidas em colunas Entrada N / Saída N, por (motoristaNorm|dia)
 // Já deduplica espelhos idênticos e versões parciais/completas sobrepostas do mesmo motorista-dia.
@@ -6611,9 +6669,32 @@ async function _fetchPublishedManifest(){
 }
 function _cachePubGet(){try{return +(localStorage.getItem(CACHE_PUB_KEY)||0);}catch(e){return 0;}}
 function _cachePubSet(v){try{if(v)localStorage.setItem(CACHE_PUB_KEY,String(+v||0));}catch(e){}}
-function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0,_dedupeDone:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_CM,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
+let PRECALC_BOOT_AUDIT=null, PRECALC_BOOT_RANK=null;
+function _auditTagNow(){return String(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|'+String(CFG&&CFG.tol||0)+'|'+String(CFG&&CFG.jornadaMin||440);}
+function _auditLiteForSnapshot(a){
+  if(!a)return null;
+  const out={};
+  for(const k in a){if(k==='segments'||k==='pointSegments')continue;out[k]=a[k];}
+  return out;
+}
+function _rankLiteForSnapshot(profiles){
+  if(!profiles)return null; const out=Object.create(null);
+  for(const k in profiles){const p=profiles[k],q={};if(!p)continue;for(const x in p){if(x==='recs'||x==='audit')continue;q[x]=p[x];}out[k]=q;}
+  return out;
+}
+function _hydrateRankLite(lite){
+  if(!lite)return null; const out=Object.create(null);
+  for(const k in lite){const p=Object.assign({},lite[k]);p.recs=RECORDS_BY_DRIVER_N[k]||[];p.audit=null;out[k]=p;}
+  return out;
+}
+function _applyBootPrecalc(){
+  if(PRECALC_BOOT_AUDIT&&RECORDS){try{FLEET_AUDIT_CACHE.set(RECORDS,{tag:_auditTagNow(),v:PRECALC_BOOT_AUDIT});}catch(e){}}
+  if(PRECALC_BOOT_RANK&&RECORDS){try{const p=_hydrateRankLite(PRECALC_BOOT_RANK);if(p)_rankCacheSet(_rankSig(),RECORDS,p);}catch(e){console.warn('[Pulso360] cache de ranking',e);}}
+  PRECALC_BOOT_AUDIT=null; PRECALC_BOOT_RANK=null;
+}
+function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0,_dedupeDone:REAL?1:0}):RAW; const _ac=(RECORDS&&FLEET_AUDIT_CACHE.get(RECORDS))||(RECORDS&&OP_AUDIT_CACHE.get(RECORDS)), _pcAudit=_ac&&_ac.tag===_auditTagNow()?_auditLiteForSnapshot(_ac.v):null, _pcRank=(RANKPROFILE_CACHE.rows===RECORDS&&RANKPROFILE_CACHE.key===_rankSig())?_rankLiteForSnapshot(RANKPROFILE_CACHE.profiles):null; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,PRECALC_AUDIT:_pcAudit,PRECALC_RANK:_pcRank,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_CM,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
-async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_CM=S.META_CM||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs(); await _finalizeBootUI(); return true; }
+async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);PRECALC_BOOT_AUDIT=S.PRECALC_AUDIT||null;PRECALC_BOOT_RANK=S.PRECALC_RANK||null;REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_CM=S.META_CM||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs(); await _finalizeBootUI(); return true; }
 // Finalização do boot NÃO-BLOQUEANTE: cede à UI (uiYield) entre as fases pesadas e PRÉ-AQUECE o
 // ranking em lotes (await uiYield a cada N motoristas) para o navegador pintar o overlay/animar o
 // spinner e nunca travar vários segundos. Números/dados/visual idênticos ao antigo
@@ -6621,6 +6702,9 @@ async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return 
 async function _finalizeBootUI(){
   const bt=$('#bootLoadTxt');
   if(bt)bt.textContent='Preparando base…'; await uiYield(); build();
+  // Cache pré-calculado vem dentro da fotografia publicada/local. Assim a abertura não recalcula
+  // ranking + auditoria da frota toda sempre que o usuário entra no painel.
+  _applyBootPrecalc();
   if(bt)bt.textContent='Montando filtros…'; await uiYield(); fillFilters();
   // Não segura mais o loader esperando ranking/resumo completo. renderAll agenda o bloco pesado
   // em segundo plano quando a base é grande e devolve o controle imediatamente ao navegador.
@@ -6670,6 +6754,10 @@ async function gerarDadosPublicacao(){
       const pmax=(SOURCE_COVERAGE.ponto&&SOURCE_COVERAGE.ponto.max)||'—', mmax=(SOURCE_COVERAGE.mov&&SOURCE_COVERAGE.mov.max)||'—';
       throw new Error('Cobertura inconsistente: Jornada até '+(pmax==='—'?'—':brDate(pmax))+' · Movimentação até '+(mmax==='—'?'—':brDate(mmax))+' · consolidado só até '+brDate(cov.max)+'. Reimporte/corrija antes de publicar.');
     }
+    // A publicação já leva os agregados pesados prontos. O custo fica na geração da base (admin),
+    // não em cada abertura dos usuários.
+    if(btn)btn.textContent='⏳ Pré-calculando indicadores…';
+    auditFleet(RECORDS); await _prewarmRankAsync(RECORDS); await uiYield();
     const S=snapshotState(); S.publishedAt=Date.now(); S.dataMin=cov.min||''; S.dataMax=cov.max||''; S.sourceCoverage=JSON.parse(JSON.stringify(SOURCE_COVERAGE));
     const raw=new TextEncoder().encode(JSON.stringify(S));
     if(btn)btn.textContent='⏳ Compactando dados…';
