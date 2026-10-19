@@ -738,6 +738,17 @@
   .tratlist .tt-h{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .trat-del{margin-left:auto;border:1px solid color-mix(in srgb,var(--critical) 35%,var(--border));background:var(--surface);color:var(--crit-ink);border-radius:8px;padding:4px 8px;font:inherit;font-size:11px;font-weight:650;cursor:pointer}
   .trat-del:hover{background:color-mix(in srgb,var(--critical) 10%,var(--surface))}
+  /* aba Tratativas (visão consolidada) */
+  .trat-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:11px 14px;font-size:12.5px;border-left:3px solid var(--warning);background:color-mix(in srgb,var(--warning) 8%,var(--surface))}
+  .trat-banner .txt{flex:1 1 280px;color:var(--ink-2)}
+  .trat-tbl{min-width:900px}
+  .trat-tbl thead th{cursor:default}
+  .trat-tbl tbody tr.tratrow{cursor:pointer}
+  .trat-tbl td.trat-obs{max-width:420px;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2)}
+  .trat-tbl td.trat-mot{font-weight:650}
+  .trat-tipo{display:inline-block;background:color-mix(in srgb,var(--gold) 22%,transparent);color:var(--gold-2);font-weight:700;font-size:11px;padding:2px 8px;border-radius:20px}
+  .trat-more{text-align:center;padding:12px;font-size:12.5px;color:var(--muted)}
+  .trat-more button{margin-left:8px}
 
   /* toast */
   #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;transition:.25s;background:var(--navy);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.3);z-index:50;pointer-events:none;border-left:3px solid var(--gold)}
@@ -921,6 +932,7 @@
   <nav class="tabs" id="tabs">
     <button data-tab="semana" class="active">Resumo semanal</button>
     <button data-tab="bonificacao">Bonificação</button>
+    <button data-tab="trat">Tratativas</button>
     <button data-tab="motoristas">Motoristas</button>
     <button data-tab="aderencia">Aderência</button>
     <button data-tab="linha">Linha do tempo</button>
@@ -1000,6 +1012,32 @@
       </div>
     </div>
     <div id="bonifBox"></div>
+  </section>
+
+  <!-- ===== TRATATIVAS (visão consolidada de todos os motoristas) ===== -->
+  <section class="view" id="view-trat">
+    <div id="tratBanner"></div>
+    <div class="grid kpis" id="tratKpis"></div>
+    <div class="sec-title"><h2>Tratativas</h2><span id="tratSub">mais recentes primeiro · o período do topo (Fechamento / Dia / De–Até) vale pela data da tratativa</span>
+      <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" data-trat-sync id="tratSyncBtn" style="color:var(--ink);background:var(--surface);border-color:var(--border)" title="Entrar no Microsoft 365 e atualizar o histórico compartilhado">☁️ Atualizar do SharePoint</button>
+        <button class="btn" id="expTrat" style="color:var(--ink);background:var(--surface);border-color:var(--border)">⬇ Exportar (CSV)</button>
+      </span></div>
+    <div class="card" style="padding:13px 16px;margin-bottom:12px">
+      <div class="filterbar motbar">
+        <div class="f" style="flex:1;min-width:240px"><label>Buscar</label><input type="text" id="tratQ" placeholder="Motorista, gestor ou observação…" autocomplete="off"></div>
+        <div class="f"><label>Tipo de ação</label><select id="tratTipoF" data-all="Todos"><option value="">Todos</option></select></div>
+        <div class="f"><label>Gestor</label><select id="tratGestorF" data-all="Todos"><option value="">Todos</option></select></div>
+        <div class="f"><label>Sincronização</label><select id="tratSyncF">
+          <option value="">Todas</option>
+          <option value="shared">Compartilhadas (SharePoint)</option>
+          <option value="local">Só neste navegador</option>
+          <option value="pending">Pendentes de envio</option>
+        </select></div>
+        <button class="btn" id="tratLimpar" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Limpar</button>
+      </div>
+    </div>
+    <div id="tratBox"></div>
   </section>
 
   <!-- ===== MOTORISTAS — TMS x PONTO ===== -->
@@ -4567,7 +4605,7 @@ function renderAll(){
   }
   // O cache é conferido antes de filtrar. Assim, voltar para uma aba com os mesmos
   // filtros não revarre os ~87 mil registros só para descobrir que o DOM já está pronto.
-  if(view!=='ficha'&&view!=='motoristas'&&VIEW_RENDER_KEYS[view]===viewKey){
+  if(view!=='ficha'&&view!=='motoristas'&&view!=='trat'&&VIEW_RENDER_KEYS[view]===viewKey){
     const bd=$('#badgeDiv'), n=VIEW_BADGE_COUNTS[view]; if(bd&&n!=null)bd.textContent=n>999?'999+':n;
     atualizaDataMode(); return;
   }
@@ -4580,6 +4618,7 @@ function renderAll(){
     if(!SUMMARY_PROGRESSIVE){ const c={kpis:$('#kpis').innerHTML,semana:$('#semanaBox').innerHTML,badge:FILTER_CACHE_DIV_COUNT}; SUMMARY_DOM_CACHE.set(viewKey,c); while(SUMMARY_DOM_CACHE.size>6)SUMMARY_DOM_CACHE.delete(SUMMARY_DOM_CACHE.keys().next().value); }
   }
   else if(view==='bonificacao') renderBonificacao(rows);
+  else if(view==='trat') renderTratativas();
   else if(view==='motoristas') renderMotoristas();
   else if(view==='aderencia') renderAderencia(rows);
   else if(view==='linha') renderTimelines(rows);
@@ -4590,7 +4629,7 @@ function renderAll(){
   else if(view==='saude') renderSaude();
   else if(view==='semid') renderPlacasSemId();
   else if(view==='ficha'&&fichaAtual) renderFicha();
-  if(view!=='ficha'&&view!=='motoristas') VIEW_RENDER_KEYS[view]=viewKey;
+  if(view!=='ficha'&&view!=='motoristas'&&view!=='trat') VIEW_RENDER_KEYS[view]=viewKey;
   const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT; VIEW_BADGE_COUNTS[view]=n; bd.textContent=n>999?'999+':n;}
   atualizaDataMode();
 }
@@ -6621,6 +6660,106 @@ function openTratModal(){ const nome=fichaAtual; if(!nome)return; $('#tratNome')
 async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,obs=$('#tratObs').value.trim();if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,obs,op:M.op||'',placa:M.placas||'',cpf:(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[norm(nome)])||'',sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); if(typeof SCORECARD_NOME!=='undefined'&&SCORECARD_NOME&&$('#scoreModal')&&$('#scoreModal').style.display==='flex'){ try{renderScorecard(SCORECARD_NOME);}catch(e){} } }
 
 /* ============================================================
+   ABA TRATATIVAS — visão consolidada de todas as tratativas de todos os motoristas
+   Fonte única: TRAT_CACHE (compartilhado/SharePoint) + localStorage (tratLocalLoad), sem estrutura paralela.
+   ============================================================ */
+let TRAT_ROWS=[], TRAT_LIMIT=200;
+function tratEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// todas as tratativas (compartilhadas + locais), achatadas e sem duplicar, mais recentes primeiro.
+// Cada item é uma cópia rasa da tratativa com: nome (garantido), _key (chave do mapa), _src ('shared'|'local').
+function tratAllList(){
+  const shared=TRAT_CACHE||{}, local=tratLocalLoad(), keyOf=new Map(), srcOf=new Map(), all=[];
+  const take=(map,src)=>{ for(const k of Object.keys(map||{})) for(const t of (map[k]||[])){ if(!t||typeof t!=='object')continue; keyOf.set(t,k); srcOf.set(t,src); all.push(t); } };
+  take(shared,'shared'); take(local,'local');          // compartilhadas primeiro: na deduplicação a cópia do SharePoint prevalece
+  return tratMergeArr([],all).map(t=>{
+    const k=keyOf.get(t)||'';
+    const nome=t.nome||(k.indexOf('nome:')===0?k.slice(5):'')||'';
+    return Object.assign({},t,{nome,_key:k,_src:srcOf.get(t)||'local'});
+  }).sort((a,b)=>(+b.ts||0)-(+a.ts||0)||String(b.data||'').localeCompare(String(a.data||'')));
+}
+function tratSyncState(t){ return t._pending?'pending':((t._src==='shared'||t._spItemId)?'shared':'local'); }
+function tratCpfFmt(t){ let c=String(t.cpf||'').replace(/\D/g,''); if(!c&&String(t._key||'').indexOf('cpf:')===0)c=String(t._key).slice(4).replace(/\D/g,''); return c.length===11?c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'):c; }
+function tratLocalYM(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function tratFilteredRows(all){
+  const q=norm($('#tratQ').value), tipo=$('#tratTipoF').value, gest=$('#tratGestorF').value, sy=$('#tratSyncF').value;
+  // filtros do topo que fazem sentido aqui: período (pela data da tratativa), operação, motorista e busca (nome/placa)
+  const rng=activeRange(), fop=norm($('#fOp').value), fmot=norm($('#fMot').value), fq=norm($('#fBusca').value);
+  return all.filter(t=>{
+    if(tipo&&(t.tipo||'')!==tipo)return false;
+    if(gest&&(t.gestor||'')!==gest)return false;
+    if(sy&&(sy==='local'?tratSyncState(t)==='shared':tratSyncState(t)!==sy))return false;
+    if(rng){ const d=String(t.data||'').slice(0,10); if(!d||d<rng.de||d>rng.ate)return false; }
+    if(fop&&norm(t.op||'').indexOf(fop)<0)return false;
+    const nn=norm(t.nome);
+    if(fmot&&nn.indexOf(fmot)<0)return false;
+    if(fq&&nn.indexOf(fq)<0&&norm(t.placa||'').indexOf(fq)<0)return false;
+    if(q&&(nn+' '+norm(t.gestor||'')+' '+norm(t.obs||'')+' '+norm(t.tipo||'')).indexOf(q)<0)return false;
+    return true;
+  });
+}
+function _tratFillSel(sel,arr){ const el=$(sel); if(!el)return; const cur=el.value; el.innerHTML='<option value="">'+tratEsc(el.dataset.all||'Todos')+'</option>'+arr.map(v=>`<option value="${tratEsc(v)}">${tratEsc(v)}</option>`).join(''); el.value=arr.includes(cur)?cur:''; }
+function renderTratativas(){
+  const box=$('#tratBox'), kb=$('#tratKpis'), bn=$('#tratBanner'); if(!box||!kb)return;
+  // logado no M365 e ainda sem o banco compartilhado? sincroniza em silêncio (1x) e redesenha — mesmo comportamento da ficha
+  if(TRAT_CACHE===null && !_tratSyncTried){ _tratSyncTried=true; tratSyncFromSP(false).then(ok=>{ if(ok && activeViewName()==='trat') renderTratativas(); }); }
+  const all=tratAllList();
+  _tratFillSel('#tratTipoF',[...new Set(all.map(t=>t.tipo).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')));
+  _tratFillSel('#tratGestorF',[...new Set(all.map(t=>t.gestor).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')));
+  const rows=tratFilteredRows(all); TRAT_ROWS=rows;
+  // banner: histórico compartilhado ainda não carregado
+  bn.innerHTML = TRAT_CACHE===null
+    ? `<div class="card trat-banner"><div class="txt">☁️ <b>Histórico compartilhado ainda não carregado.</b> Esta lista mostra só as tratativas salvas neste navegador. Sincronize para trazer as tratativas registradas nas outras máquinas (SharePoint).</div><button class="btn solid" type="button" data-trat-sync>☁️ Sincronizar tratativas</button></div>`
+    : '';
+  const sb=$('#tratSyncBtn'); if(sb)sb.style.display=TRAT_CACHE===null?'none':'';   // com o banner visível, o botão dele já cumpre o papel
+  // KPIs (sobre o recorte filtrado; o "sub" mostra o total do histórico quando há filtro)
+  const ym=tratLocalYM(), mots=new Set(); let mes=0, pend=0;
+  rows.forEach(t=>{ mots.add(norm(t.nome)||t._key); if(String(t.data||'').slice(0,7)===ym)mes++; if(t._pending)pend++; });
+  const nf=all.length!==rows.length, allMots=new Set(all.map(t=>norm(t.nome)||t._key)).size;
+  const K=[
+    {lab:'Total de tratativas',val:rows.length,sub:nf?('de '+all.length.toLocaleString('pt-BR')+' no histórico'):'no histórico',ac:'var(--s2)'},
+    {lab:'Motoristas com tratativa',val:mots.size,sub:nf?('de '+allMots.toLocaleString('pt-BR')+' no histórico'):'motoristas distintos',ac:'var(--s4)'},
+    {lab:'Este mês',val:mes,sub:ym.slice(5)+'/'+ym.slice(0,4)+' · pela data da tratativa',ac:'var(--good)'},
+    {lab:'Pendentes de sincronização',val:pend,sub:pend?'salvas só neste navegador · sincronize':(TRAT_CACHE?'tudo sincronizado':'sincronize para conferir'),ac:pend?'var(--warning)':'var(--muted)'}
+  ];
+  kb.innerHTML=K.map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val.toLocaleString('pt-BR')}</div><div class="sub">${k.sub}</div></div>`).join('');
+  const sub=$('#tratSub'); if(sub)sub.textContent=rows.length.toLocaleString('pt-BR')+' registro(s) · '+(TRAT_CACHE?'histórico compartilhado sincronizado':'histórico local · sincronize para ver nas outras máquinas')+' · mais recentes primeiro · o período do topo vale pela data da tratativa';
+  // lista
+  if(!rows.length){
+    box.innerHTML = all.length
+      ? '<div class="empty">Nenhuma tratativa para os filtros atuais.</div>'
+      : '<div class="empty">Nenhuma tratativa registrada ainda.<br>Abra a ficha de um motorista e use <b>🗣️ Registrar tratativa</b> para iniciar o acompanhamento.'+(TRAT_CACHE===null?'<br>Se já existem tratativas em outras máquinas, use <b>☁️ Sincronizar tratativas</b>.':'')+'</div>';
+    return;
+  }
+  const chip={shared:'<span class="chip conforme" title="Gravada no histórico compartilhado (SharePoint)">☁️ Compartilhada</span>',pending:'<span class="chip atencao" title="Salva só neste navegador, aguardando envio ao SharePoint">⏳ Pendente</span>',local:'<span class="chip pendente" title="Existe só neste navegador">💾 Local</span>'};
+  const vis=rows.slice(0,TRAT_LIMIT);
+  box.innerHTML='<div class="tblwrap"><table class="trat-tbl"><thead><tr><th>Data</th><th>Motorista</th><th>Tipo</th><th>Gestor</th><th>Observação</th><th>Sincronização</th></tr></thead><tbody>'+
+    vis.map(t=>{ const obs=String(t.obs||'').replace(/\s+/g,' ').trim();
+      return `<tr class="tratrow" data-mot="${encodeURIComponent(t.nome)}" title="abrir a ficha de ${tratEsc(t.nome)}">`+
+        `<td class="tnum">${t.data?tratEsc(brDate(t.data)):'—'}</td>`+
+        `<td class="trat-mot">${tratEsc(t.nome||'—')}</td>`+
+        `<td>${t.tipo?`<span class="trat-tipo">${tratEsc(t.tipo)}</span>`:'—'}</td>`+
+        `<td>${tratEsc(t.gestor||'—')}</td>`+
+        `<td class="trat-obs" title="${tratEsc(t.obs||'')}">${obs?tratEsc(obs):'—'}</td>`+
+        `<td>${chip[tratSyncState(t)]}</td></tr>`; }).join('')+
+    '</tbody></table>'+
+    (rows.length>vis.length?`<div class="trat-more">Exibindo ${vis.length.toLocaleString('pt-BR')} de ${rows.length.toLocaleString('pt-BR')} <button class="btn" type="button" data-trat-more style="color:var(--ink);background:var(--surface);border-color:var(--border)">Mostrar mais</button></div>`:'')+
+    '</div>';
+}
+function exportTratativas(){
+  if(!TRAT_ROWS.length){ toast('Nada para exportar'); return; }
+  const q=v=>{ let s=String(v==null?'':v).replace(/\s*[\r\n]+\s*/g,' ').trim(); if(/^[=+@]|^-\S/.test(s))s="'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
+  const lab={shared:'Compartilhada',pending:'Pendente',local:'Local'};
+  const lines=[['Motorista','CPF','Data','Tipo','Gestor','Observacao','Sincronizacao'].join(';')];
+  TRAT_ROWS.forEach(t=>lines.push([t.nome,tratCpfFmt(t),t.data?brDate(t.data):'',t.tipo,t.gestor,t.obs,lab[tratSyncState(t)]].map(q).join(';')));
+  baixarCsv(lines,'tratativas_motoristas.csv');
+}
+async function tratSyncFromTab(){
+  const btns=$$('#view-trat [data-trat-sync]'); btns.forEach(b=>b.disabled=true);
+  try{ await tratSyncFromSP(true); } finally { btns.forEach(b=>b.disabled=false); }
+  if(activeViewName()==='trat') renderTratativas();
+}
+
+/* ============================================================
    PUBLICAÇÃO DE DADOS — GitHub Pages
    Publicação multipart: dados/manifesto.json + partes binárias comprimidas.
    O endereço principal reconstrói a fotografia automaticamente.
@@ -6662,7 +6801,7 @@ async function cacheSalvar(){
     const ok=await idbSet('estadoFast',{v:1,s:S,ts});
     if(ok){ _cachePubSet(PUBLISHED_AT_LOADED||S.publishedAt||S.dataUpdatedAt||0); return; }
     // Fallback para navegadores/quota que recusarem o objeto estruturado.
-    const raw=new TextEncoder().encode(JSON.stringify(S)),g=await _gz(raw); const ok2=await idbSet('estado',{gz:g.gz,b:g.b,ts}); if(ok2)_cachePubSet(PUBLISHED_AT_LOADED||S.publishedAt||S.dataUpdatedAt||0);
+    const raw=_snapBytes(S),g=await _gz(raw); const ok2=await idbSet('estado',{gz:g.gz,b:g.b,ts}); if(ok2)_cachePubSet(PUBLISHED_AT_LOADED||S.publishedAt||S.dataUpdatedAt||0);
   }catch(e){}
 }
 async function cacheRestaurar(){
@@ -6675,6 +6814,43 @@ async function cacheRestaurar(){
   }catch(e){return 0;}
 }
 function _baixarBlob(blob,nome){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
+/* Serializa um objeto grande em BYTES (UTF-8) SEM montar uma única string — evita o
+   "Invalid string length" do JS (limite ~512M chars) em bases grandes. Em cada nível tenta
+   JSON.stringify inteiro (rápido); só fatia (array/objeto) onde o pedaço seria grande demais.
+   Produz o MESMO JSON de JSON.stringify(obj) (mesma ordem de chaves, mesma semântica). */
+function _snapBytes(root){
+  const enc=new TextEncoder(), chunks=[]; let total=0;
+  const FIT=0x6000000, FLUSH=0x2000000; // cabe inteiro até ~96M chars; descarrega lote a cada ~32M
+  const put=s=>{ if(!s)return; const b=enc.encode(s); chunks.push(b); total+=b.length; };
+  function emit(v){
+    let s; try{ s=JSON.stringify(v); }catch(e){ s=undefined; }
+    if(s!==undefined && s.length<=FIT){ put(s); return; }
+    if(Array.isArray(v)){
+      put('['); let buf='';
+      for(let i=0;i<v.length;i++){ const e=v[i];
+        let es; try{ es=(e===undefined||typeof e==='function')?'null':JSON.stringify(e); }catch(_){ es=undefined; }
+        if(es===undefined){ if(buf){put(buf);buf='';} if(i)put(','); emit(e); }
+        else { buf+=(i?',':'')+es; if(buf.length>FLUSH){put(buf);buf='';} }
+      }
+      if(buf)put(buf); put(']'); return;
+    }
+    if(v&&typeof v==='object'){
+      put('{'); let first=true, buf='';
+      for(const k of Object.keys(v)){ const val=v[k];
+        if(val===undefined||typeof val==='function') continue;
+        const pre=(first?'':',')+JSON.stringify(k)+':'; first=false;
+        let vs; try{ vs=JSON.stringify(val); }catch(_){ vs=undefined; }
+        if(vs!==undefined && vs.length<=FIT){ buf+=pre+vs; if(buf.length>FLUSH){put(buf);buf='';} }
+        else { if(buf){put(buf);buf='';} put(pre); emit(val); }
+      }
+      if(buf)put(buf); put('}'); return;
+    }
+    put(s===undefined?'null':s);
+  }
+  emit(root);
+  const raw=new Uint8Array(total); let off=0; for(const b of chunks){ raw.set(b,off); off+=b.length; }
+  return raw;
+}
 async function gerarDadosPublicacao(){
   if(!REAL||!RAW){toast('Importe os relatórios antes de gerar os dados');return;}
   const btn=$('#btnSnapshot'), old=btn?btn.textContent:''; if(btn){btn.disabled=true;btn.textContent='⏳ Finalizando importações…';}
@@ -6693,7 +6869,7 @@ async function gerarDadosPublicacao(){
       throw new Error('Cobertura inconsistente: Jornada até '+(pmax==='—'?'—':brDate(pmax))+' · Movimentação até '+(mmax==='—'?'—':brDate(mmax))+' · consolidado só até '+brDate(cov.max)+'. Reimporte/corrija antes de publicar.');
     }
     const S=snapshotState(); S.publishedAt=Date.now(); S.dataMin=cov.min||''; S.dataMax=cov.max||''; S.sourceCoverage=JSON.parse(JSON.stringify(SOURCE_COVERAGE));
-    const raw=new TextEncoder().encode(JSON.stringify(S));
+    const raw=_snapBytes(S); // serializa em pedaços — evita "Invalid string length" em bases grandes
     if(btn)btn.textContent='⏳ Compactando dados…';
     const packed=await _gz(raw), bytes=packed.b;
     const PART_SIZE=32*1024*1024; // cada arquivo publicado fica bem abaixo do limite de 100 MB do GitHub
@@ -6908,6 +7084,17 @@ $('#motCadClass').addEventListener('change',renderMotoristas);
 $('#motCadBusca').addEventListener('input',debounce(renderMotoristas,180));
 $('#motCadLimpar').onclick=()=>{ $('#motCadClass').value=''; $('#motCadBusca').value=''; renderMotoristas(); };
 $('#expMotoristas').onclick=exportMotoristas;
+
+// aba Tratativas — filtros locais / sincronização / exportação / abrir ficha
+$('#tratQ').addEventListener('input',debounce(()=>{ TRAT_LIMIT=200; renderTratativas(); },180));
+['#tratTipoF','#tratGestorF','#tratSyncF'].forEach(s=>$(s).addEventListener('change',()=>{ TRAT_LIMIT=200; renderTratativas(); }));
+$('#tratLimpar').onclick=()=>{ $('#tratQ').value=''; $('#tratTipoF').value=''; $('#tratGestorF').value=''; $('#tratSyncF').value=''; TRAT_LIMIT=200; renderTratativas(); };
+$('#expTrat').onclick=exportTratativas;
+$('#view-trat').addEventListener('click',e=>{
+  if(e.target.closest('[data-trat-sync]')){ tratSyncFromTab(); return; }
+  if(e.target.closest('[data-trat-more]')){ TRAT_LIMIT+=200; renderTratativas(); return; }
+  const tr=e.target.closest('.tratrow'); if(tr&&tr.dataset.mot) openFicha(decodeURIComponent(tr.dataset.mot));
+});
 
 // tema
 function applyTheme(t){ document.documentElement.setAttribute('data-theme',t); try{localStorage.setItem(LS.theme,t);}catch(e){} }
