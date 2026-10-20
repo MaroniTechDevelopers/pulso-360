@@ -622,6 +622,7 @@
   /* ===== Scorecard do condutor — identidade Maroni (navy + ouro), gamificado ===== */
   #scoreModal{z-index:58}
   #scoreModal .sc-modal{width:100%;max-width:460px;max-height:94vh;overflow:auto;border-radius:24px;color:#f3f6fc;
+    overscroll-behavior:contain;contain:layout paint style;
     background:radial-gradient(125% 60% at 50% -8%, #1b2b4d 0%, #0e1626 58%), #0e1626;
     box-shadow:0 26px 70px rgba(0,0,0,.55);
     --sg-gold:#f5c800;--sg-gold2:#e68a00;--sg-goldsoft:rgba(245,200,0,.14);
@@ -2568,12 +2569,13 @@ async function _prewarmRankAsync(rows){
   if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles) return;
   const by=(rows===RECORDS)?RECORDS_BY_DRIVER_N:(()=>{const x=Object.create(null);(rows||[]).forEach(r=>{const k=r._nMot||norm(r.motoristaEscala||'');if(k)(x[k]=x[k]||[]).push(r);});return x;})();
   const profiles=Object.create(null), keys=Object.keys(by);
-  // Time-slicing por orçamento de CPU em vez de yield a cada 8 motoristas.
-  // Mantém a interface responsiva sem pagar centenas de setTimeouts desnecessários.
+  // Time-slicing curto: com bases grandes, fatias de ~14 ms ainda roubavam quadros do scroll
+  // (principalmente na ficha/timeline). 7 ms mantém o Pulso e a rolagem fluidos enquanto o ranking
+  // termina em segundo plano, sem alterar nenhum cálculo.
   let sliceStart=performance.now();
   for(let i=0;i<keys.length;i++){
     const k=keys[i], nm=(by[k][0]&&by[k][0].motoristaEscala)||k; profiles[k]=_safeRankProfile(nm,by[k],k);
-    if(performance.now()-sliceStart>=14){ await uiYield(); sliceStart=performance.now(); }
+    if(performance.now()-sliceStart>=7){ await uiYield(); sliceStart=performance.now(); }
   }
   try{ _rankScoreProfiles(profiles); }catch(e){ console.error('[Pulso360] pontuação de ranking assíncrona',e); }
   _rankCacheSet(sig,rows,profiles);
@@ -4240,21 +4242,43 @@ function scTrendArrow(delta){
   if(delta<=-3) return '<span class="tr" style="color:var(--critical)">↓'+Math.round(Math.abs(delta))+'</span>';
   return '<span class="tr" style="color:var(--muted)">→</span>';
 }
-// Evolução mensal da nota (percentil relativo à frota POR MÊS) sem corromper o estado global de cores.
+// Evolução mensal da nota do motorista.
+// PERFORMANCE: a pontuação atual usa réguas ABSOLUTAS (não percentis da frota), então não faz
+// sentido recalcular TODOS os motoristas para cada mês só para montar um único scorecard.
+// Aqui filtramos somente os registros do condutor e calculamos o perfil mensal diretamente.
+// O resultado numérico é o mesmo da rotina global, com custo proporcional aos registros do motorista.
 function scoreMensalMotorista(nome, rows){
-  const nn=norm(nome), byMes=Object.create(null);
-  (rows||[]).forEach(r=>{ const mk=r.mesKey; if(!mk)return; (byMes[mk]=byMes[mk]||{key:mk,label:r.mesLabel||mk,rows:[]}).rows.push(r); });
-  const meses=Object.values(byMes).sort((a,b)=>a.key<b.key?-1:1);
-  const saved=RANK_SCORES; const out=[];
+  const nn=norm(nome);
+  let drvRows;
+  if(rows===RECORDS && RECORDS_BY_DRIVER_N && RECORDS_BY_DRIVER_N[nn]) drvRows=RECORDS_BY_DRIVER_N[nn];
+  else drvRows=(rows||[]).filter(r=>(r._nMot||norm(r.motoristaEscala||''))===nn);
+  const byMes=Object.create(null);
+  for(const r of drvRows){ const mk=r.mesKey; if(!mk)continue; (byMes[mk]=byMes[mk]||{key:mk,label:r.mesLabel||mk,rows:[]}).rows.push(r); }
+  const meses=Object.values(byMes).sort((a,b)=>a.key<b.key?-1:1), out=[];
   for(const mz of meses){
-    const profiles=applyResumoRankScores([], mz.rows); const p=profiles[nn];
-    if(!p){ out.push({key:mz.key,label:mz.label,score:null,comps:{}}); continue; }
+    const p=_safeRankProfile(nome,mz.rows,nn+'|'+mz.key), one=Object.create(null); one[nn]=p;
+    try{ _rankScoreProfiles(one); }catch(e){ console.error('[Pulso360] score mensal',nome,mz.key,e); }
+    if(!p||p._rankError){ out.push({key:mz.key,label:mz.label,score:null,comps:{}}); continue; }
     const cm=Object.create(null); (p.components||[]).forEach(c=>cm[c.k]=c.v);
     const elig=(p.movDays>0&&p.hCond>0);
     out.push({key:mz.key,label:mz.label,score:elig?p.score:null,comps:cm,movDays:p.movDays});
   }
-  RANK_SCORES=saved;
   return out;
+}
+
+// Perfil corrente do scorecard sem obrigar um recálculo da frota inteira.
+// Se o ranking global já estiver pronto, reaproveita. Caso contrário calcula só o motorista aberto.
+function scoreProfileMotorista(nome, rows){
+  const nn=norm(nome), sig=_rankSig();
+  if(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles && RANKPROFILE_CACHE.profiles[nn])
+    return RANKPROFILE_CACHE.profiles[nn];
+  let drvRows;
+  if(rows===RECORDS && RECORDS_BY_DRIVER_N && RECORDS_BY_DRIVER_N[nn]) drvRows=RECORDS_BY_DRIVER_N[nn];
+  else drvRows=(rows||[]).filter(r=>(r._nMot||norm(r.motoristaEscala||''))===nn);
+  if(!drvRows.length)return null;
+  const p=_safeRankProfile(nome,drvRows,nn), one=Object.create(null); one[nn]=p;
+  try{ _rankScoreProfiles(one); }catch(e){ console.error('[Pulso360] scorecard perfil',nome,e); }
+  return p&&p._rankError?null:p;
 }
 function scSig(){ const r=activeRange(); return DATA_REV+'|M'+MULTAS_REV+'|'+($('#fOp').value||'')+'|'+(r?(r.de+'~'+r.ate):'*'); }
 function scMensalCached(nome, rows){ const sig=scSig(); if(SC_CACHE.sig!==sig){ SC_CACHE.sig=sig; SC_CACHE.mensal=new Map(); } const nn=norm(nome); if(SC_CACHE.mensal.has(nn))return SC_CACHE.mensal.get(nn); const v=scoreMensalMotorista(nome,rows); SC_CACHE.mensal.set(nn,v); return v; }
@@ -4335,15 +4359,16 @@ function _scAbrirTrizy(){
 function renderScorecard(nome){
   if(MOBILE_LIGHT) return renderScorecardLight(nome);
   const shell=$('#scoreShell'), nn=norm(nome), rows=filtered();
-  const profiles=applyResumoRankScores([], rows), p=profiles[nn];
+  // Não recalcula milhares de perfis ao abrir um único scorecard.
+  const p=scoreProfileMotorista(nome,rows);
   if(!p || !(p.movDays>0 && p.hCond>0)){
     shell.innerHTML='<div class="sc-body"><div class="empty" style="padding:44px;text-align:center">Este condutor não tem movimentação no período/filtros atuais.</div><div class="sc-actions"><button class="btn" data-sc-act="close">Fechar</button></div></div>';
     return;
   }
   const CAT={ouro:{lab:'Ouro',cor:'#d4af37',ic:'🥇',premio:'100% do prêmio'},prata:{lab:'Prata',cor:'#9ca3af',ic:'🥈',premio:'prêmio parcial'},bronze:{lab:'Bronze',cor:'#b87333',ic:'🥉',premio:'menor/sem prêmio'}};
   const n10=scN10(p.score), premio=Math.round(n10/10*100), catK=bonifTier(n10).k, cat=CAT[catK];  // MESMA régua da Bonificação (Ouro≥9 · Prata >5 · Bronze ≤5)
-  const elig=Object.keys(profiles).filter(k=>profiles[k].movDays>0&&profiles[k].hCond>0).map(k=>({k,s:profiles[k].score})).sort((a,b)=>b.s-a.s);
-  const pos=elig.findIndex(e=>e.k===nn)+1, tot=elig.length, topPct=tot?Math.max(1,Math.round(pos/tot*100)):null;
+  // O antigo cálculo ordenava toda a frota aqui para obter posição/top%, mas essas variáveis nem eram
+  // exibidas no scorecard. Removido: elimina mais um sort de milhares de motoristas por abertura.
   const mensal=scMensalCached(nome, rows), com=mensal.filter(m=>m.score!=null);
   const ult=com[com.length-1]||null, pen=com[com.length-2]||null;
   const trend=(ult&&pen)?(ult.score-pen.score):null;
@@ -7065,30 +7090,84 @@ async function _lerSnapshotMultipart(prefetchedManifest){
   // Só pula o download se ESTE manifesto já estiver carregado. Timestamp de importação local
   // não pode ser tratado como versão publicada.
   if(REAL&&pub&&PUBLISHED_AT_LOADED===pub) return {__cached:true,publishedAt:pub,dataMax:M.dataMax||'',records:M.records||0};
+
   const ver=encodeURIComponent(String(M.publishedAt||M.packedBytes||M.rawBytes||1));
-  const arr=await Promise.all(M.parts.map(async p=>{
+  const bt=$('#bootLoadTxt');
+  const packedTotal=(M.parts||[]).reduce((n,p)=>n+(+p.bytes||0),0);
+  let recebido=0;
+
+  // COLD START / INPRIVATE: nunca junta todas as partes em memória e nunca cria o Uint8Array
+  // descompactado gigante. Alimenta o gzip sequencialmente e entrega o stream descompactado
+  // direto ao parser JSON. Isso remove o maior pico de memória da abertura sem cache.
+  if(M.compression==='gzip' && typeof DecompressionStream!=='undefined'){
+    const ds=new DecompressionStream('gzip');
+    const writer=ds.writable.getWriter();
+    const parsePromise=new Response(ds.readable).json();
+    try{
+      for(let i=0;i<M.parts.length;i++){
+        const p=M.parts[i];
+        if(bt)bt.textContent='Carregando dados publicados · parte '+(i+1)+'/'+M.parts.length+'…';
+        const r=await fetch('dados/'+encodeURIComponent(p.file)+'?v='+ver,{cache:'force-cache'});
+        if(!r.ok)throw new Error('Parte não encontrada: '+p.file);
+        let got=0;
+        if(r.body&&r.body.getReader){
+          const rd=r.body.getReader();
+          for(;;){
+            const x=await rd.read(); if(x.done)break;
+            const chunk=x.value; got+=chunk.byteLength; recebido+=chunk.byteLength;
+            await writer.write(chunk);
+            if(bt&&packedTotal){ const pct=Math.min(99,Math.max(1,Math.round(recebido/packedTotal*100))); bt.textContent='Carregando dados publicados · '+pct+'%'; }
+          }
+        }else{
+          const b=new Uint8Array(await r.arrayBuffer()); got=b.byteLength; recebido+=got; await writer.write(b);
+        }
+        if(p.bytes&&got!==+p.bytes)throw new Error('Parte incompleta: '+p.file+' ('+got+' de '+p.bytes+' bytes)');
+      }
+      if(bt)bt.textContent='Descompactando e montando a base…';
+      await writer.close();
+      const S=await parsePromise;
+      if(!S.publishedAt&&M.publishedAt)S.publishedAt=M.publishedAt;
+      return S;
+    }catch(e){
+      try{await writer.abort(e);}catch(_){ }
+      try{await parsePromise;}catch(_){ }
+      throw e;
+    }
+  }
+
+  // Fallback para navegadores antigos: ainda baixa sequencialmente (evita Promise.all),
+  // mas precisa montar o buffer final porque não existe DecompressionStream.
+  const arr=[];
+  for(let i=0;i<M.parts.length;i++){
+    const p=M.parts[i];
+    if(bt)bt.textContent='Carregando dados publicados · parte '+(i+1)+'/'+M.parts.length+'…';
     const r=await fetch('dados/'+encodeURIComponent(p.file)+'?v='+ver,{cache:'force-cache'});
     if(!r.ok)throw new Error('Parte não encontrada: '+p.file);
-    const b=new Uint8Array(await r.arrayBuffer());if(p.bytes&&b.byteLength!==p.bytes)throw new Error('Parte incompleta: '+p.file);return b;
-  }));
-  const total=arr.reduce((n,b)=>n+b.byteLength,0), joined=new Uint8Array(total); let off=0;arr.forEach(b=>{joined.set(b,off);off+=b.byteLength;});
+    const b=new Uint8Array(await r.arrayBuffer());
+    if(p.bytes&&b.byteLength!==+p.bytes)throw new Error('Parte incompleta: '+p.file);
+    arr.push(b);
+  }
+  const total=arr.reduce((n,b)=>n+b.byteLength,0), joined=new Uint8Array(total); let off=0;
+  for(const b of arr){joined.set(b,off);off+=b.byteLength;}
   const raw=M.compression==='gzip'?await _gunz(joined):joined, S=await new Response(raw).json();
   if(!S.publishedAt&&M.publishedAt)S.publishedAt=M.publishedAt; return S;
 }
 async function _lerSnapshotLegado(){ try{const r=await fetch('dados-pulso360.json?_='+Date.now(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
 async function carregarDadosPublicados(prefetchedManifest){
   try{
-    let S=null; try{S=await _lerSnapshotMultipart(prefetchedManifest);}catch(e){console.warn('Pulso 360: falha na publicação multipart',e);}
+    window.PULSO_PUB_ERROR='';
+    let S=null, multipartErr=null;
+    try{S=await _lerSnapshotMultipart(prefetchedManifest);}catch(e){multipartErr=e;console.warn('Pulso 360: falha na publicação multipart',e);}
     if(S&&S.__cached){ PUBLISHED_AT_LOADED=+(S.publishedAt||PUBLISHED_AT_LOADED||0); DATA_UPDATED_AT=+(S.publishedAt||DATA_UPDATED_AT||0); atualizaDataMode(); return true; }
     if(!S)S=await _lerSnapshotLegado();
-    if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3)return false;
+    if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3){ if(multipartErr)throw multipartErr; return false; }
     const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);
     if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}
     await restoreState(S);DATA_UPDATED_AT=pub||DATA_UPDATED_AT;_cachePubSet(pub||PUBLISHED_AT_LOADED||0);atualizaDataMode();
     // Guarda a fotografia publicada no IndexedDB em segundo plano para a próxima abertura.
     if(typeof agendarCache==='function')agendarCache();
     return true;
-  }catch(e){console.warn('Pulso 360: erro ao carregar dados publicados',e);return false;}
+  }catch(e){window.PULSO_PUB_ERROR=(e&&e.message)?e.message:String(e||'erro desconhecido');console.warn('Pulso 360: erro ao carregar dados publicados',e);return false;}
 }
 function mostrarPublicacao(rawMb,packedMb,nParts,ts){
   let bg=document.getElementById('snapModal');if(bg)bg.remove();const link=SP_CFG.redirectUri;
@@ -7457,6 +7536,11 @@ async function bootPulso360(){
     if(!pub&&!temCache){
       if(RAW&&RAW.records&&RAW.schema===3){ REAL=true; } else { RAW=null; REAL=false; }
       await _finalizeBootUI();
+      if(manifest&&window.PULSO_PUB_ERROR){
+        const p=$('#dataModePill'),t=$('#dataModeTxt'); if(p)p.classList.remove('real');
+        if(t)t.textContent='⚠ falha ao carregar dados publicados · demonstração';
+        console.error('[Pulso360] publicação indisponível no cold start:',window.PULSO_PUB_ERROR);
+      }
     }else if(!pub&&temCache){
       if(!DATA_UPDATED_AT)DATA_UPDATED_AT=+(RAW&&RAW._savedAt||temCache||0); atualizaDataMode(); updateDropStatus();
     }
