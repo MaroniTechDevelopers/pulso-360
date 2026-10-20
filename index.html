@@ -558,6 +558,8 @@
   .ficha-hero .avatar{width:60px;height:60px;border-radius:14px;font-size:20px}
   .ficha-hero h2{font-size:20px}
   .ficha-hero .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .ficha-hero .sub .ficha-placa{white-space:nowrap}
+  .ficha-hero .sub .ficha-modelo{color:color-mix(in srgb,var(--muted) 78%,var(--text));font-weight:650}
   .ficha-hero .reco{margin-left:auto;max-width:360px;font-size:12.5px;padding:10px 12px;border-radius:10px;border:1px solid var(--border)}
   .ficha-hero .reco b{display:block;margin-bottom:2px}
   .reco.manter{background:color-mix(in srgb,var(--good) 12%,transparent);border-color:color-mix(in srgb,var(--good) 40%,var(--border))}
@@ -2369,8 +2371,8 @@ function renderKpis(rows){
   let alertKpi=null;
   if(ALERTS||BOL){ const rng=activeRange(); let tot=0,alto=0,nmot=0; motSet.forEach(m=>{ const a=alertasResumo(m,rng); if(a&&a.total){tot+=a.total;nmot++;if(a.niveis&&a.niveis.ALTO)alto++;} }); alertKpi={tot,alto,nmot}; }
   const identSel=aderRecs(rows);
-  let placOk=null,placAcao=null,placZero=null;
-  if(typeof PLACA_MOV!=='undefined'&&PLACA_MOV){ const opF=$('#fOp').value; placOk=0;placAcao=0;placZero=0; for(const pk in PLACA_MOV){const g=PLACA_MOV[pk];if(!g.tot)continue;if(opF&&operacaoDaPlaca(pk)!==opF)continue;const ader=g.idn/g.tot*100;if(g.idn===0){placAcao++;placZero++;}else if(ader<CFG.sem)placAcao++;else placOk++;} }
+  let placOk=null,placAcao=null,placZero=null,placTele=0;
+  if(typeof PLACA_MOV!=='undefined'&&PLACA_MOV){ const opF=$('#fOp').value; placOk=0;placAcao=0;placZero=0; for(const pk in PLACA_MOV){const g=PLACA_MOV[pk];if(!g.tot)continue;if(opF&&operacaoDaPlaca(pk)!==opF)continue;const ader=g.idn/g.tot*100,tele=(typeof telemetriaDaPlaca==='function')&&telemetriaDaPlaca(pk).semTelemetria;if(tele){placAcao++;placTele++;if(g.idn===0)placZero++;}else if(g.idn===0){placAcao++;placZero++;}else if(ader<CFG.sem)placAcao++;else placOk++;} }
   const opSel=$('#fOp').value;
   const motSelRaw=$('#fMot').value.trim(), motSelN=norm(motSelRaw);
   // KPIs específicos devem aparecer quando o filtro atual representa um único motorista.
@@ -2399,7 +2401,7 @@ function renderKpis(rows){
   if(placOk!=null){const placTot=placOk+placAcao;K.splice(1,0,
     {lab:'Placas (total)'+(opSel?' — '+opSel:''),val:placTot,sub:'veículos c/ movimento'+(opSel?' na operação':' na frota'),ac:'var(--s2)',tab:'semid'},
     {lab:'Placas OK (câmera)',val:placOk,sub:'identificando dentro do mínimo',ac:'var(--good)',tab:'semid'},
-    {lab:'Placas p/ ação',val:placAcao,sub:(placZero?placZero+' sem NENHUMA ID · ':'')+'equipamento/sistêmico',ac:placAcao?'var(--critical)':'var(--good)',tab:'semid'}
+    {lab:'Placas p/ ação',val:placAcao,sub:(placTele?placTele+' sem telemetria · ':'')+(placZero?placZero+' sem NENHUMA ID · ':'')+'equipamento/sistêmico',ac:placAcao?'var(--critical)':'var(--good)',tab:'semid'}
   );}
   $('#kpis').innerHTML=K.map(k=>`<div class="card kpi" ${k.tab?`data-tab="${k.tab}" title="ver na aba"`:''}><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
 }
@@ -3439,6 +3441,19 @@ function periodoLabel(){
   const fe=$('#fFecha').value; if(fe){ const s=$('#fFecha'); const t=s.options[s.selectedIndex]&&s.options[s.selectedIndex].text; return 'Fechamento '+(t||fe); }
   return 'Todo o período carregado';
 }
+// Placas exibidas na ficha: acrescenta o modelo do TMS sem perder a identidade visual.
+// Se o TMS estiver carregado e a placa não tiver modelo cadastrado, sinaliza a ausência.
+function fichaPlacasComModelo(recs, comoHtml){
+  const pls=[...new Set((recs||[]).map(r=>placaKey(r&&r.placa)).filter(Boolean))];
+  if(!pls.length)return '';
+  return pls.map(pl=>{
+    const t=(typeof TMS!=='undefined'&&TMS)?TMS[pl]:null;
+    const modelo=t?String(t.modelo||'').trim():'';
+    const desc=modelo?modelo:((typeof TMS!=='undefined'&&TMS)?'modelo não informado':'');
+    if(!comoHtml)return pl+(desc?' ('+desc+')':'');
+    return '<span class="ficha-placa"><b>'+pdfEsc(pl)+'</b>'+(desc?' <span class="ficha-modelo">('+pdfEsc(desc)+')</span>':'')+'</span>';
+  }).join(comoHtml?' · ':', ');
+}
 // métricas da ficha (fonte única — usada pela ficha na tela e pelo PDF)
 function fichaMetrics(nome){
   const cacheKey=DATA_REV+'|'+filterStateKey()+'|'+norm(nome); if(FICHA_METRICS_CACHE.has(cacheKey)) return FICHA_METRICS_CACHE.get(cacheKey);
@@ -3464,6 +3479,8 @@ function fichaMetrics(nome){
   const aderJornadaVal=aderJornada(recs);   // aderência de jornada (score positivo)
   const op=[...new Set(recs.map(r=>r.operacao))].join(', ');
   const placas=[...new Set(recs.map(r=>r.placa).filter(Boolean))].join(', ');
+  const placasDetalhadas=fichaPlacasComModelo(recs,false);
+  const placasDetalhadasHtml=fichaPlacasComModelo(recs,true);
   const alR=alertasResumo(nome, activeRange()); const totAl=alR.total;
   const adm=admissaoDe(nome); const tempo=tempoDeCasa(adm);
   const kmR=audit.km, litrosR=audit.litros||0;
@@ -3480,7 +3497,7 @@ function fichaMetrics(nome){
   const hCondAudit=audit.hCond;
   const interjViol=recs.filter(r=>r.interjornada!=null && r.interjornada<CFG.interjornadaMin).length;
   const restMinF=recs.reduce((m,r)=>(r.interjornada!=null?(m==null?r.interjornada:Math.min(m,r.interjornada)):m),null);
-  const out={nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaTrimble,mediaRawTrimble,mediaInconsistente,mediaCoverage:audit.mediaCoverage||0,metaFicha,medaOk,reco,risco,condDiv,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF,audit}; FICHA_METRICS_CACHE.set(cacheKey,out); return out;
+  const out={nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,placasDetalhadas,placasDetalhadasHtml,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaTrimble,mediaRawTrimble,mediaInconsistente,mediaCoverage:audit.mediaCoverage||0,metaFicha,medaOk,reco,risco,condDiv,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF,audit}; FICHA_METRICS_CACHE.set(cacheKey,out); return out;
 }
 // pontos críticos e positivos p/ o relatório executivo
 function fichaPontos(M){
@@ -3565,7 +3582,7 @@ function fichaEvolTratativas(nome){
 function renderFicha(){
   const nome=fichaAtual; if(!nome){ $('#fichaBox').innerHTML=''; return; }
   const M=fichaMetrics(nome);
-  const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaInconsistente,mediaRawTrimble,mediaCoverage,metaFicha,medaOk,reco,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF}=M;
+  const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,placasDetalhadas,placasDetalhadasHtml,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaInconsistente,mediaRawTrimble,mediaCoverage,metaFicha,medaOk,reco,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF}=M;
   const fichaRisco=M.risco;
   const weeks=GLOBAL_WEEKS.length?GLOBAL_WEEKS:Object.values(recs.reduce((a,r)=>{if(r.semKey&&!a[r.semKey])a[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};return a;},{})).sort((a,b)=>a.key<b.key?-1:1);
   const _dayF=dayFilter(); let _recsEvid=(_dayF?recs.filter(r=>r.data===_dayF):recs).slice();
@@ -3613,7 +3630,7 @@ function renderFicha(){
         <span class="avatar" title="Nota ${_notaScore!=null?Math.round(_notaScore)+'/100':'—'}${fichaRisco.reasons.length?' · sinais: '+fichaRisco.reasons.join(' · '):''}" style="background:${_notaCor}">${iniciais(nome)}</span>
         <div style="flex:1;min-width:180px">
           <h2>${nome}</h2>
-          <div class="sub">${op||'—'}${placas?' · '+placas:''} · <b>${tempo}</b> de casa · admissão ${adm?brDate(adm):'—'}</div>
+          <div class="sub">${op||'—'}${placasDetalhadasHtml?' · '+placasDetalhadasHtml:''} · <b>${tempo}</b> de casa · admissão ${adm?brDate(adm):'—'}</div>
         </div>
         <div class="reco ${reco.cls}"><b>${reco.tit}</b>${reco.txt}</div>
       </div>
@@ -3797,7 +3814,7 @@ function exportFichaPDF(){
   const tratBloco = trats.length
     ? `<h2 class="sec">Tratativas com o motorista (${trats.length})</h2><ul class="trat">${trats.map(t=>`<li><div><span class="tt-tag">${pdfEsc(t.tipo||'—')}</span><b>${brDate(t.data)}</b>${t.gestor?' · '+pdfEsc(t.gestor):''}</div>${t.obs?'<div class="tt-o">'+pdfEsc(t.obs)+'</div>':''}</li>`).join('')}</ul>`
     : '<h2 class="sec">Tratativas com o motorista</h2><div style="font-size:12px;color:#64748b">Nenhuma tratativa registrada ainda.</div>';
-  const sub=`${M.op||'—'}${M.placas?' · '+M.placas:''} · ${M.tempo} de casa · ${periodoLabel()}`;
+  const sub=`${M.op||'—'}${M.placasDetalhadas?' · '+M.placasDetalhadas:(M.placas?' · '+M.placas:'')} · ${M.tempo} de casa · ${periodoLabel()}`;
   const corpo=kpis+'<h2 class="sec">Pontos de atenção × pontos fortes</h2>'+pontos+alertasBloco+'<h2 class="sec">Plano de ação — o que fazer</h2>'+plano+reco+tratBloco;
   pdfOpen(pdfShell('Pulso 360 — '+nome, sub, {txt:PDF_LAB[M.risco.cls], cor:PDF_COR[M.risco.cls], extra:(M.risco.reasons.length?M.risco.reasons.length+' sinal(is)':'sem sinais')}, corpo));
 }
@@ -3813,10 +3830,10 @@ function exportPainelPDF(){
   const ajP=aderJornada(rows);     // aderência de jornada (score positivo)
   let alertTot=0,alertAlto=0; if(ALERTS||BOL){ const rng=activeRange(); motSet.forEach(m=>{ const a=alertasResumo(m,rng); if(a&&a.total){ alertTot+=a.total; if(a.niveis&&a.niveis.ALTO)alertAlto++; } }); }
   // placas OK × ação
-  let placOk=null,placAcao=null,placZero=null;
+  let placOk=null,placAcao=null,placZero=null,placTele=0;
   if(typeof PLACA_MOV!=='undefined' && PLACA_MOV){ const opF=$('#fOp').value; placOk=0;placAcao=0;placZero=0;
     for(const pk in PLACA_MOV){ const g=PLACA_MOV[pk]; if(!g.tot) continue; if(opF && operacaoDaPlaca(pk)!==opF) continue;
-      const ader=g.idn/g.tot*100; if(g.idn===0){placAcao++;placZero++;} else if(ader<CFG.sem){placAcao++;} else placOk++; } }
+      const ader=g.idn/g.tot*100,tele=(typeof telemetriaDaPlaca==='function')&&telemetriaDaPlaca(pk).semTelemetria; if(tele){placAcao++;placTele++;if(g.idn===0)placZero++;} else if(g.idn===0){placAcao++;placZero++;} else if(ader<CFG.sem){placAcao++;} else placOk++; } }
   // farol dos motoristas + top críticos
   const {data}=semanaAgg(rows);
   const allMots=[]; data.forEach(g=>g.list.forEach(m=>allMots.push(m)));
@@ -4724,23 +4741,25 @@ function renderSaude(){
   // resumo por placa já é pré-calculado no build; evita varrer todos os registros ao trocar de aba.
   const idBy=PLATE_RECORD_SUMMARY||{};
   const temRecs=RECORDS.length>0;
-  const rk={critico:0,atencao:1,pendente:2,conforme:3};
+  const rk={telemetria:0,critico:1,atencao:2,pendente:3,conforme:4};
   const pf=placasNoFiltro();   // respeita os filtros do topo (operação/período/motorista/busca)
   const rows=Object.keys(SAUDE).filter(pk=>!pf||pf.has(pk)).map(pk=>{ const s=SAUDE[pk]; const f=camFarol(s.func,s.status); const id=idBy[pk];
     const dias=id?id.dias.size:0;
     const pm=(typeof PLACA_MOV!=='undefined'&&PLACA_MOV&&PLACA_MOV[pk]); const ader= pm&&pm.tot? Math.round(pm.idn/pm.tot*100) : (id&&id.aderN?Math.round(id.aderSum/id.aderN):null);   // ponderado (PLACA_MOV/BDV) > média
     const idStatus = !temRecs ? '— (sem movimentação carregada)' : (dias>0? ('identificando · '+dias+' dia'+(dias>1?'s':'')) : 'sem identificação no período');
     const idCls = !temRecs ? 'pend' : (dias>0?'ok':'bad');
+    const tele=telemetriaDaPlaca(pk);
     let acao, acaoCls;
-    if(f.cls==='bad'){ acao='Manutenção (câmera)'; acaoCls='critico'; }
+    if(tele.semTelemetria){ acao='NÃO GERANDO TELEMETRIA'; acaoCls='telemetria'; }
+    else if(f.cls==='bad'){ acao='Manutenção (câmera)'; acaoCls='critico'; }
     else if(f.cls==='warn'){ acao='Em manutenção/agendada'; acaoCls='atencao'; }
     else if(f.cls==='pend'){ acao='Sem câmera'; acaoCls='pendente'; }
     else if(f.cls==='ok' && temRecs && dias===0){ acao='Verificar — OK mas sem identificar'; acaoCls='critico'; }
     else { acao='OK'; acaoCls='conforme'; }
-    return {placa:pk, op:s.op, func:s.func, farol:f, dias, ader, idStatus, idCls, acao, acaoCls};
+    return {placa:pk, op:s.op, func:s.func, farol:f, dias, ader, idStatus, idCls, acao, acaoCls, movMin:tele.movMin, kmBdv:tele.kmBdv, temBdv:tele.temBdv};
   }).sort((a,b)=> (rk[a.acaoCls]-rk[b.acaoCls]) || a.placa.localeCompare(b.placa));
   SAUDE_ROWS=rows;
-  let ok=0,prob=0,semId=0,acionar=0; for(let i=0;i<rows.length;i++){const r=rows[i];if(r.farol.cls==='ok')ok++;if(r.farol.cls==='bad')prob++;if(r.farol.cls==='ok'&&temRecs&&r.dias===0)semId++;if(r.acaoCls==='critico')acionar++;}
+  let ok=0,prob=0,semId=0,acionar=0; for(let i=0;i<rows.length;i++){const r=rows[i];if(r.farol.cls==='ok')ok++;if(r.farol.cls==='bad')prob++;if(r.farol.cls==='ok'&&temRecs&&r.dias===0)semId++;if(r.acaoCls==='critico'||r.acaoCls==='telemetria')acionar++;}
   const total=rows.length;
   const K=[
     {lab:'Cavalos c/ câmera',val:total,sub:'na base de saúde',ac:'var(--s2)'},
@@ -4750,21 +4769,22 @@ function renderSaude(){
     {lab:'Acionar manutenção',val:acionar,sub:'prioridade',ac:'var(--serious)'},
   ];
   kbox.innerHTML=K.map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
-  const chip={critico:'<span class="chip critico">Acionar</span>',atencao:'<span class="chip atencao">Em manut.</span>',pendente:'<span class="chip pendente">Sem câmera</span>',conforme:'<span class="chip conforme">OK</span>'};
+  const chip={telemetria:'<span class="chip critico">Não gerando telemetria</span>',critico:'<span class="chip critico">Acionar</span>',atencao:'<span class="chip atencao">Em manut.</span>',pendente:'<span class="chip pendente">Sem câmera</span>',conforme:'<span class="chip conforme">OK</span>'};
   const cor=c=>c==='ok'?'var(--good-ink)':c==='bad'?'var(--crit-ink)':c==='warn'?'var(--serious)':'var(--muted)';
-  box.innerHTML='<div class="tblwrap"><table style="min-width:840px"><thead><tr><th>Cavalo</th><th>OP</th><th>Funcionalidade</th><th>Identificação (dados)</th><th>Aderência</th><th>Ação</th><th></th></tr></thead><tbody>'+
+  box.innerHTML='<div class="tblwrap"><table style="min-width:1040px"><thead><tr><th>Cavalo</th><th>OP</th><th>Funcionalidade</th><th>Identificação (dados)</th><th>Movimento (rel.)</th><th>Distância Placa ID</th><th>Aderência</th><th>Ação</th><th></th></tr></thead><tbody>'+
     rows.map(r=>`<tr class="sauderow" data-placa="${r.placa}" title="ver a linha do tempo desta placa" style="cursor:pointer"><td class="tnum">${r.placa}</td><td>${r.op||'—'}</td>
       <td><span style="color:${cor(r.farol.cls)}">${r.func||'—'}</span></td>
       <td style="color:${r.idCls==='ok'?'var(--good-ink)':r.idCls==='bad'?'var(--crit-ink)':'var(--muted)'}">${r.idStatus}</td>
+      <td class="tnum">${r.movMin>0?hDec(r.movMin):'—'}</td><td class="tnum" style="color:${r.acaoCls==='telemetria'?'var(--crit-ink)':'inherit'}">${r.temBdv?Math.round(r.kmBdv).toLocaleString('pt-BR')+' km':'—'}</td>
       <td class="tnum">${r.ader==null?'—':r.ader+'%'}</td>
       <td>${chip[r.acaoCls]||''}</td><td style="color:var(--gold-2)">↗</td></tr>`).join('')+
     '</tbody></table></div>';
 }
 function exportSaude(){
   if(!SAUDE_ROWS.length){ toast('Nada para exportar'); return; }
-  const head=['Cavalo','OP','Funcionalidade','Identificacao','Dias_identificado','Aderencia_pct','Acao'];
+  const head=['Cavalo','OP','Funcionalidade','Identificacao','Dias_identificado','Movimento_relatorio_min','Distancia_Placa_ID_km','Aderencia_pct','Acao'];
   const lines=[head.join(';')];
-  SAUDE_ROWS.forEach(r=>lines.push([r.placa,r.op,'"'+r.func+'"','"'+r.idStatus+'"',r.dias,(r.ader==null?'':r.ader),'"'+r.acao+'"'].join(';')));
+  SAUDE_ROWS.forEach(r=>lines.push([r.placa,r.op,'"'+r.func+'"','"'+r.idStatus+'"',r.dias,Math.round(r.movMin||0),Math.round(r.kmBdv||0),(r.ader==null?'':r.ader),'"'+r.acao+'"'].join(';')));
   baixarCsv(lines,'saude_cameras.csv');
 }
 // diagnóstico: o relatório de movimentação traz o movimento SEM identificação? (senão a aderência fica ~100%)
@@ -4789,8 +4809,8 @@ function renderAderencia(rows){
   let opStats=null;
   if(typeof PLACA_MOV!=='undefined' && PLACA_MOV && Object.keys(PLACA_MOV).length){ opStats={};
     for(const pk in PLACA_MOV){ const g=PLACA_MOV[pk]; if(!g.tot) continue; const o=operacaoDaPlaca(pk)||'—';
-      const s=(opStats[o]=opStats[o]||{total:0,ok:0,acao:0,zero:0,tot:0,idn:0}); s.total++; s.tot+=g.tot; s.idn+=g.idn;
-      const ader=g.idn/g.tot*100; if(g.idn===0){ s.acao++; s.zero++; } else if(ader<CFG.sem){ s.acao++; } else s.ok++; } }
+      const s=(opStats[o]=opStats[o]||{total:0,ok:0,acao:0,zero:0,tele:0,tot:0,idn:0}); s.total++; s.tot+=g.tot; s.idn+=g.idn;
+      const ader=g.idn/g.tot*100, tele=(typeof telemetriaDaPlaca==='function')&&telemetriaDaPlaca(pk).semTelemetria; if(tele){ s.acao++; s.tele++; if(g.idn===0)s.zero++; } else if(g.idn===0){ s.acao++; s.zero++; } else if(ader<CFG.sem){ s.acao++; } else s.ok++; } }
   // ident da operação: se há stats por placa (PLACA_MOV/Boletim do Veículo) usa a MESMA base do detalhe; senão, média ponderada dos registros
   const list=Object.values(ops).map(g=>{ const st=opStats?opStats[g.op]:null;
     const ident = (st && st.tot>0) ? Math.round(st.idn/st.tot*100) : aderRecs(g.recs);
@@ -4815,11 +4835,11 @@ function renderAderencia(rows){
   if(kbox) kbox.innerHTML=K.map(k=>`<div class="card kpi" ${k.goplacas?'data-goplacas-all="1" title="ver as placas na aba Placas sem ID"':''}><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
   if(!list.length){ box.innerHTML='<div class="empty">Sem dados de identificação no filtro atual. Carregue o relatório de <b>Alertas</b> (UO da Trimble) e a <b>Movimentação</b>.</div>'; return; }
   box.innerHTML=identCoverageWarning()+list.map(g=>{ const cor=g.ident==null?'var(--muted)':(g.ident>=CFG.sem?'var(--good)':(g.ident>=CFG.sem*0.75?'var(--warning)':'var(--critical)'));
-    const st=g.st, nAf=st?st.acao:0, zero=st?st.zero:0;
+    const st=g.st, nAf=st?st.acao:0, zero=st?st.zero:0, tele=st?st.tele||0:0;
     const vc=st?st.total:g.placN;
     const subVeic = st ? `${g.motN} motorista(s) · ${vc} veículo(s) c/ movimento · ${st.ok} OK · ${st.acao} p/ ação` : `${g.motN} motorista(s) · ${vc} veículo(s)`;
     const chip = nAf>0
-      ? `<span class="plchip hot" data-goplacas="${encodeURIComponent(g.op)}" title="ver essas placas na aba Placas sem ID"><span class="n">${nAf}</span> placa(s) puxando a aderência${zero?' · '+zero+' sem NENHUMA ID':''}<span class="go">analisar →</span></span>`
+      ? `<span class="plchip hot" data-goplacas="${encodeURIComponent(g.op)}" title="ver essas placas na aba Placas sem ID"><span class="n">${nAf}</span> placa(s) p/ ação${tele?' · '+tele+' sem telemetria':''}${zero?' · '+zero+' sem NENHUMA ID':''}<span class="go">analisar →</span></span>`
       : (opStats==null ? '' : `<span class="plchip okz">✓ nenhuma placa abaixo do mínimo</span>`);
     return `<button class="capinha adercard" data-op="${encodeURIComponent(g.op)}">
       <div class="cap-id" style="margin-bottom:4px"><b>${g.op}</b><small>${subVeic}</small></div>
@@ -4834,13 +4854,40 @@ function renderAderencia(rows){
     </button>`; }).join('');
 }
 let SEMID_ROWS=[];
-// PLANO DE AÇÃO por placa: cruza saúde da câmera × identificação → o que fazer (equipamento × sistêmico)
+// Diagnóstico de telemetria por placa. A Movimentação é a evidência de que o veículo realmente
+// esteve em condução; o Boletim do Veículo/Placa ID é a fonte de DISTÂNCIA PERCORRIDA.
+// Se há movimento no relatório de Movimentação e não há KM no Boletim, sinaliza explicitamente
+// "NÃO GERANDO TELEMETRIA" em vez de tratar o caso apenas como problema de identificação.
+let MOV_PLACA_DIAG_REV=-1, MOV_PLACA_DIAG=null;
+function movimentoPorPlacaDiag(){
+  if(MOV_PLACA_DIAG_REV===DATA_REV && MOV_PLACA_DIAG) return MOV_PLACA_DIAG;
+  const out=Object.create(null);
+  for(const k in (MOV_TOT||{})){
+    const i=k.indexOf('|'); if(i<=0) continue;
+    const pk=k.slice(0,i), d=k.slice(i+1), min=Math.max(0,+MOV_TOT[k]||0);
+    if(min<=0) continue;
+    const g=(out[pk]=out[pk]||{min:0,dias:0,ult:''}); g.min+=min; g.dias++; if(d>g.ult)g.ult=d;
+  }
+  MOV_PLACA_DIAG_REV=DATA_REV; MOV_PLACA_DIAG=out; return out;
+}
+function telemetriaDaPlaca(pk){
+  const mov=movimentoPorPlacaDiag()[pk]||null, bdv=BDV&&BDV[pk]?BDV[pk]:null;
+  const movMin=mov?mov.min:0, kmBdv=bdv?Math.max(0,+bdv.km||0):0;
+  const temFonteBdv=!!(BDV&&Object.keys(BDV).length);
+  return {
+    semTelemetria:!!(temFonteBdv && movMin>0 && (!bdv || kmBdv<=0)),
+    movMin, kmBdv, temBdv:!!bdv, ultMov:mov&&mov.ult||''
+  };
+}
+// PLANO DE AÇÃO por placa: cruza telemetria × saúde da câmera × identificação.
 const PLANO_DEF={
+  tele :{ic:'📡',lab:'Não gerando telemetria',cor:'var(--critical)',ink:'var(--crit-ink)'},
   equip:{ic:'🔧',lab:'Manutenção de equipamento',cor:'var(--critical)',ink:'var(--crit-ink)'},
   sist :{ic:'🧩',lab:'Ação sistêmica',cor:'var(--warning)',ink:'var(--serious)'},
   verif:{ic:'❓',lab:'Verificar câmera',cor:'var(--pend)',ink:'var(--pend-ink)'}
 };
 function planoDaPlaca(cam, cls){
+  if(cls==='telemetria') return {cat:'tele', txt:'Há movimento no relatório da Trimble, porém o Boletim do Veículo/Placa ID não está gerando distância percorrida. Acionar Telemetria/Trimble e validar equipamento, GPS/odômetro e integração antes de avaliar média ou aderência por KM.'};
   const c=norm(cam);
   const problema = c && /(SEM SINAL|OBSTRU|MANIPULAD|SEM VIDEO|DESCONEX|DEFEIT|MANUTEN|AVARIA|DANIFICAD|QUEBRAD|DESLIGAD|INOPERANT|SEM CAMERA|SEM IMAGEM)/.test(c);
   if(problema) return {cat:'equip', txt:'Acionar manutenção/Trimble — câmera "'+cam+'". Sem o equipamento, não há identificação.'};
@@ -4851,49 +4898,53 @@ function planoDaPlaca(cam, cls){
 function renderPlacasSemId(){
   const kbox=$('#semidKpis'), box=$('#semidBox');
   if(!PLACA_MOV || !Object.keys(PLACA_MOV).length){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Carregue a <b>Movimentação</b> na aba <b>Dados</b> para listar as placas que se moveram sem identificação do condutor. (precisa que o relatório traga o movimento mesmo sem motorista)</div>'; SEMID_ROWS=[]; return; }
-  const rk={critico:0,atencao:1};
+  const rk={telemetria:0,critico:1,atencao:2};
   const opF=$('#fOp').value;
   const pf=placasNoFiltro();   // respeita TODOS os filtros do topo (operação/período/motorista/busca)
   const rows=Object.keys(PLACA_MOV).filter(pk=> !pf||pf.has(pk)).map(pk=>{ const g=PLACA_MOV[pk];
     const ader = g.tot>0? Math.round(g.idn/g.tot*100) : null;
     const op = operacaoDaPlaca(pk) || (PLACA_UO&&PLACA_UO[pk]&&PLACA_UO[pk].uoCurta) || '—';
-    const cam = camDaPlaca(pk);
+    const cam = camDaPlaca(pk), tele=telemetriaDaPlaca(pk);
     let status, cls;
-    if(g.idn===0){ status='NENHUM condutor identificado'; cls='critico'; }
+    if(tele.semTelemetria){ status='NÃO GERANDO TELEMETRIA'; cls='telemetria'; }
+    else if(g.idn===0){ status='NENHUM condutor identificado'; cls='critico'; }
     else if(ader!=null && ader<CFG.sem){ status='Identificação abaixo do mínimo'; cls='atencao'; }
     else { status='OK'; cls='ok'; }
-    return {placa:pk, op, dias:g.dias, diasId:g.diasId, ader, cam, status, cls, plano:planoDaPlaca(cam,cls), ult:g.ult};
+    return {placa:pk, op, dias:g.dias, diasId:g.diasId, ader, cam, status, cls, movMin:tele.movMin, kmBdv:tele.kmBdv, temBdv:tele.temBdv, plano:planoDaPlaca(cam,cls), ult:g.ult};
   }).filter(r=>r.cls!=='ok').sort((a,b)=> (rk[a.cls]-rk[b.cls]) || (a.ader||0)-(b.ader||0) || b.dias-a.dias);
   SEMID_ROWS=rows;
   const totPlacas=Object.keys(PLACA_MOV).filter(pk=> !pf||pf.has(pk)).length, semNenhum=rows.filter(r=>r.cls==='critico').length, baixa=rows.filter(r=>r.cls==='atencao').length;
-  const nEquip=rows.filter(r=>r.plano.cat==='equip').length, nSist=rows.filter(r=>r.plano.cat==='sist').length, nVerif=rows.filter(r=>r.plano.cat==='verif').length;
+  const nTele=rows.filter(r=>r.cls==='telemetria').length, nEquip=rows.filter(r=>r.plano.cat==='equip').length, nSist=rows.filter(r=>r.plano.cat==='sist').length, nVerif=rows.filter(r=>r.plano.cat==='verif').length;
   const K=[
     {lab:'Placas que se moveram',val:totPlacas.toLocaleString('pt-BR'),sub:(opF?opF:'no período'),ac:'var(--s2)'},
+    {lab:'📡 Não gerando telemetria',val:nTele,sub:'movimento existe · distância não',ac:'var(--critical)'},
     {lab:'🔧 Manutenção equip.',val:nEquip,sub:'câmera c/ falha reportada',ac:'var(--critical)'},
     {lab:'🧩 Ação sistêmica',val:nSist,sub:'cadastro / foto / posição',ac:'var(--warning)'},
     {lab:'❓ Verificar câmera',val:nVerif,sub:'sem status no controle',ac:'var(--pend)'},
   ];
   kbox.innerHTML=K.map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
   if(!rows.length){ box.innerHTML='<div class="empty">🎉 '+(opF?'Nenhuma placa da operação <b>'+opF+'</b> ':'Todas as placas que se moveram tiveram condutor identificado dentro do mínimo.')+(opF?'para ação — tudo identificado dentro do mínimo.':'')+'</div>'; return; }
-  const chip={critico:'<span class="chip critico">Sem ID</span>',atencao:'<span class="chip atencao">ID baixa</span>'};
+  const chip={telemetria:'<span class="chip critico">Não gerando telemetria</span>',critico:'<span class="chip critico">Sem ID</span>',atencao:'<span class="chip atencao">ID baixa</span>'};
   // banner de PLANO DE AÇÃO — o que fazer, priorizado
   const planoBanner = `<div class="card planobox" style="margin-bottom:12px">
     <div class="pb-h">📋 Plano de ação${opF?' — '+opF:''} · ${rows.length} placa(s)</div>
     <div class="pb-grid">
+      <div class="pb-cell equip"><b>📡 ${nTele}</b> Não gerando telemetria<small>há movimento no relatório, porém a Placa ID/Boletim do Veículo não gera distância → acionar Telemetria/Trimble</small></div>
       <div class="pb-cell equip"><b>🔧 ${nEquip}</b> Manutenção de equipamento<small>câmera sem sinal/obstruída/manipulada/em manutenção → abrir chamado p/ manutenção ou Trimble</small></div>
       <div class="pb-cell sist"><b>🧩 ${nSist}</b> Ação sistêmica<small>câmera OK mas não identifica → cadastro/foto do motorista, vigência e posição da lente</small></div>
       <div class="pb-cell verif"><b>❓ ${nVerif}</b> Verificar câmera<small>placa sem status no controle de saúde → confirmar se há equipamento instalado</small></div>
     </div></div>`;
   box.innerHTML=identCoverageWarning()+planoBanner+(opF?'<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">Filtrado por operação <b>'+opF+'</b> · clique numa placa para ver a linha do tempo dela</div>':'')+
-    '<div class="tblwrap"><table style="min-width:1000px"><thead><tr><th>Placa</th><th>Operação</th><th>Dias moveu</th><th>Dias c/ ID</th><th>Aderência</th><th>Câmera (saúde)</th><th>Situação</th><th>Plano de ação — o que fazer</th><th></th></tr></thead><tbody>'+
+    '<div class="tblwrap"><table style="min-width:1180px"><thead><tr><th>Placa</th><th>Operação</th><th>Dias moveu</th><th>Dias c/ ID</th><th>Movimento (rel.)</th><th>Distância Placa ID</th><th>Aderência</th><th>Câmera (saúde)</th><th>Situação</th><th>Plano de ação — o que fazer</th><th></th></tr></thead><tbody>'+
     rows.map(r=>{ const pl=PLANO_DEF[r.plano.cat]; return `<tr class="semidrow" data-placa="${r.placa}" title="ver a linha do tempo desta placa" style="cursor:pointer"><td class="tnum">${r.placa}</td><td>${r.op}</td><td class="tnum">${r.dias}</td><td class="tnum">${r.diasId}</td>
+      <td class="tnum">${r.movMin>0?hDec(r.movMin):'—'}</td><td class="tnum" style="color:${r.cls==='telemetria'?'var(--crit-ink)':'inherit'}">${r.temBdv?Math.round(r.kmBdv).toLocaleString('pt-BR')+' km':'—'}</td>
       <td class="tnum" style="color:${r.ader===0?'var(--crit-ink)':(r.ader<CFG.sem?'var(--serious)':'inherit')}">${r.ader==null?'—':r.ader+'%'}</td>
       <td>${r.cam||'—'}</td><td>${chip[r.cls]||''}</td>
       <td style="max-width:360px"><span class="planotag" style="background:color-mix(in srgb,${pl.cor} 15%,transparent);color:${pl.ink};border:1px solid color-mix(in srgb,${pl.cor} 35%,transparent)">${pl.ic} ${pl.lab}</span><div style="font-size:11.5px;color:var(--ink-2);margin-top:3px;white-space:normal">${r.plano.txt}</div></td>
       <td style="color:var(--gold-2)">↗</td></tr>`; }).join('')+
     '</tbody></table></div>';
 }
-function exportSemId(){ if(!SEMID_ROWS.length){toast('Nada para exportar');return;} const head=['Placa','Operacao','Dias_moveu','Dias_com_ID','Aderencia_pct','Camera_saude','Situacao','Categoria_plano','Plano_de_acao','Ultima_mov']; const lines=[head.join(';')]; SEMID_ROWS.forEach(r=>lines.push([r.placa,'"'+r.op+'"',r.dias,r.diasId,(r.ader==null?'':r.ader),'"'+(r.cam||'')+'"','"'+r.status+'"','"'+PLANO_DEF[r.plano.cat].lab+'"','"'+r.plano.txt.replace(/"/g,'""')+'"',r.ult].join(';'))); baixarCsv(lines,'plano_acao_placas.csv'); }
+function exportSemId(){ if(!SEMID_ROWS.length){toast('Nada para exportar');return;} const head=['Placa','Operacao','Dias_moveu','Dias_com_ID','Movimento_relatorio_min','Distancia_Placa_ID_km','Aderencia_pct','Camera_saude','Situacao','Categoria_plano','Plano_de_acao','Ultima_mov']; const lines=[head.join(';')]; SEMID_ROWS.forEach(r=>lines.push([r.placa,'"'+r.op+'"',r.dias,r.diasId,Math.round(r.movMin||0),Math.round(r.kmBdv||0),(r.ader==null?'':r.ader),'"'+(r.cam||'')+'"','"'+r.status+'"','"'+PLANO_DEF[r.plano.cat].lab+'"','"'+r.plano.txt.replace(/"/g,'""')+'"',r.ult].join(';'))); baixarCsv(lines,'plano_acao_placas.csv'); }
 function renderBatimento(){
   const kbox=$('#opKpis'), box=$('#opBox'); let rows=batimentoRows();
   if(!rows){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Carregue os relatórios de <b>Alertas</b> (dá a UO da Trimble por placa) e do <b>TMS</b> (centro de resultado) na aba <b>Dados</b> para ver o batimento de operação.</div>'; return; }
