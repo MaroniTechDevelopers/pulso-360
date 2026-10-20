@@ -6824,6 +6824,43 @@ async function tratSyncFromTab(){
    O endereço principal reconstrói a fotografia automaticamente.
    ============================================================ */
 async function _gz(bytes){ if(typeof CompressionStream==='undefined') return {gz:false,b:bytes}; const cs=new CompressionStream('gzip'); const w=cs.writable.getWriter(); w.write(bytes); w.close(); return {gz:true,b:new Uint8Array(await new Response(cs.readable).arrayBuffer())}; }
+/* Serializa o snapshot E comprime TRANSMITINDO (stream) direto pro gzip — nunca segura a base
+   descomprimida inteira na memória (evita "Out of Memory" em bases grandes; e "Invalid string
+   length", pois nenhuma string passa de ~16M chars). Decomprimido = JSON.stringify(root) idêntico.
+   Retorna {gz, b (gzipado), rawLen (bytes descomprimidos)}. Fallback p/ _snapBytes sem CompressionStream. */
+async function _snapGz(root){
+  if(typeof CompressionStream==='undefined'){ const b=_snapBytes(root); return {gz:false,b,rawLen:b.length}; }
+  const enc=new TextEncoder(), cs=new CompressionStream('gzip'), writer=cs.writable.getWriter();
+  const out=[]; let outLen=0; const reader=cs.readable.getReader();
+  const pump=(async()=>{ for(;;){ const r=await reader.read(); if(r.done)break; out.push(r.value); outLen+=r.value.length; } })();
+  let buf='', rawLen=0; const FIT=0x1000000, FLUSH=0x1000000; // 16M chars
+  const flush=async()=>{ if(buf){ const b=enc.encode(buf); rawLen+=b.length; buf=''; await writer.write(b); } };
+  async function emit(v){
+    let s; try{ s=JSON.stringify(v); }catch(e){ s=undefined; }
+    if(s!==undefined && s.length<=FIT){ buf+=s; if(buf.length>=FLUSH)await flush(); return; }
+    if(Array.isArray(v)){
+      buf+='[';
+      for(let i=0;i<v.length;i++){ if(i)buf+=',';
+        const e=v[i]; let es; try{ es=(e===undefined||typeof e==='function')?'null':JSON.stringify(e); }catch(_){ es=undefined; }
+        if(es===undefined){ if(buf.length>=FLUSH)await flush(); await emit(e); } else { buf+=es; if(buf.length>=FLUSH)await flush(); }
+      }
+      buf+=']'; return;
+    }
+    if(v&&typeof v==='object'){
+      buf+='{'; let first=true;
+      for(const k of Object.keys(v)){ const val=v[k]; if(val===undefined||typeof val==='function')continue;
+        buf+=(first?'':',')+JSON.stringify(k)+':'; first=false;
+        let vs; try{ vs=JSON.stringify(val); }catch(_){ vs=undefined; }
+        if(vs!==undefined && vs.length<=FIT){ buf+=vs; if(buf.length>=FLUSH)await flush(); } else { if(buf.length>=FLUSH)await flush(); await emit(val); }
+      }
+      buf+='}'; return;
+    }
+    buf+=(s===undefined?'null':s); if(buf.length>=FLUSH)await flush();
+  }
+  await emit(root); await flush(); await writer.close(); await pump;
+  const b=new Uint8Array(outLen); let off=0; for(const c of out){ b.set(c,off); off+=c.length; }
+  return {gz:true,b,rawLen};
+}
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
 const CACHE_PUB_KEY='pulso360_cache_pub_v1';
 async function _fetchPublishedManifest(){
@@ -6860,7 +6897,7 @@ async function cacheSalvar(){
     const ok=await idbSet('estadoFast',{v:1,s:S,ts});
     if(ok){ _cachePubSet(PUBLISHED_AT_LOADED||S.publishedAt||S.dataUpdatedAt||0); return; }
     // Fallback para navegadores/quota que recusarem o objeto estruturado.
-    const raw=_snapBytes(S),g=await _gz(raw); const ok2=await idbSet('estado',{gz:g.gz,b:g.b,ts}); if(ok2)_cachePubSet(PUBLISHED_AT_LOADED||S.publishedAt||S.dataUpdatedAt||0);
+    const g=await _snapGz(S); const ok2=await idbSet('estado',{gz:g.gz,b:g.b,ts}); if(ok2)_cachePubSet(PUBLISHED_AT_LOADED||S.publishedAt||S.dataUpdatedAt||0);
   }catch(e){}
 }
 async function cacheRestaurar(){
@@ -6928,16 +6965,15 @@ async function gerarDadosPublicacao(){
       throw new Error('Cobertura inconsistente: Jornada até '+(pmax==='—'?'—':brDate(pmax))+' · Movimentação até '+(mmax==='—'?'—':brDate(mmax))+' · consolidado só até '+brDate(cov.max)+'. Reimporte/corrija antes de publicar.');
     }
     const S=snapshotState(); S.publishedAt=Date.now(); S.dataMin=cov.min||''; S.dataMax=cov.max||''; S.sourceCoverage=JSON.parse(JSON.stringify(SOURCE_COVERAGE));
-    const raw=_snapBytes(S); // serializa em pedaços — evita "Invalid string length" em bases grandes
     if(btn)btn.textContent='⏳ Compactando dados…';
-    const packed=await _gz(raw), bytes=packed.b;
+    const packed=await _snapGz(S), bytes=packed.b; // stream direto p/ gzip — evita OOM e "Invalid string length" em bases grandes
     const PART_SIZE=32*1024*1024; // cada arquivo publicado fica bem abaixo do limite de 100 MB do GitHub
     const zip=new JSZip(), folder=zip.folder('dados'), parts=[];
     for(let off=0,i=1;off<bytes.length;off+=PART_SIZE,i++){
       const end=Math.min(off+PART_SIZE,bytes.length), part=bytes.slice(off,end), name='parte-'+String(i).padStart(3,'0')+'.bin';
       folder.file(name,part,{binary:true,compression:'STORE'}); parts.push({file:name,bytes:part.byteLength});
     }
-    const manifest={v:1,snapshotVersion:3,publishedAt:S.publishedAt,dataMin:S.dataMin||'',dataMax:S.dataMax||'',records:RECORDS.length,compression:packed.gz?'gzip':'none',rawBytes:raw.byteLength,packedBytes:bytes.byteLength,parts};
+    const manifest={v:1,snapshotVersion:3,publishedAt:S.publishedAt,dataMin:S.dataMin||'',dataMax:S.dataMax||'',records:RECORDS.length,compression:packed.gz?'gzip':'none',rawBytes:packed.rawLen,packedBytes:bytes.byteLength,parts};
     folder.file('manifesto.json',JSON.stringify(manifest,null,2));
     if(btn)btn.textContent='⏳ Montando ZIP…';
     const blob=await zip.generateAsync({type:'blob',compression:'STORE'});
