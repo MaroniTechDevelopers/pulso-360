@@ -6833,29 +6833,26 @@ async function _snapGz(root){
   const enc=new TextEncoder(), cs=new CompressionStream('gzip'), writer=cs.writable.getWriter();
   const out=[]; let outLen=0; const reader=cs.readable.getReader();
   const pump=(async()=>{ for(;;){ const r=await reader.read(); if(r.done)break; out.push(r.value); outLen+=r.value.length; } })();
-  let buf='', rawLen=0; const FIT=0x1000000, FLUSH=0x1000000; // 16M chars
+  let buf='', rawLen=0; const FLUSH=0x800000; // descarrega a cada ~8M chars
   const flush=async()=>{ if(buf){ const b=enc.encode(buf); rawLen+=b.length; buf=''; await writer.write(b); } };
+  // _big: valor é um container GRANDE que precisa ser fatiado. NUNCA fazemos JSON.stringify de um
+  // container grande inteiro (era isso que criava um pico de ~1 GB por nível e estourava a memória).
+  const _big=(v)=>{ if(Array.isArray(v))return v.length>4000; if(v&&typeof v==='object'){ for(const k of Object.keys(v)){ if(_big(v[k]))return true; } return false; } return false; };
   async function emit(v){
-    let s; try{ s=JSON.stringify(v); }catch(e){ s=undefined; }
-    if(s!==undefined && s.length<=FIT){ buf+=s; if(buf.length>=FLUSH)await flush(); return; }
+    if(!_big(v)){ const s=JSON.stringify(v); buf+=(s===undefined?'null':s); if(buf.length>=FLUSH)await flush(); return; }
     if(Array.isArray(v)){
       buf+='[';
-      for(let i=0;i<v.length;i++){ if(i)buf+=',';
-        const e=v[i]; let es; try{ es=(e===undefined||typeof e==='function')?'null':JSON.stringify(e); }catch(_){ es=undefined; }
-        if(es===undefined){ if(buf.length>=FLUSH)await flush(); await emit(e); } else { buf+=es; if(buf.length>=FLUSH)await flush(); }
+      for(let i=0;i<v.length;i++){ if(i)buf+=','; const e=v[i];
+        if(_big(e)){ if(buf.length>=FLUSH)await flush(); await emit(e); } else { buf+=((e===undefined||typeof e==='function')?'null':JSON.stringify(e)); if(buf.length>=FLUSH)await flush(); }
       }
       buf+=']'; return;
     }
-    if(v&&typeof v==='object'){
-      buf+='{'; let first=true;
-      for(const k of Object.keys(v)){ const val=v[k]; if(val===undefined||typeof val==='function')continue;
-        buf+=(first?'':',')+JSON.stringify(k)+':'; first=false;
-        let vs; try{ vs=JSON.stringify(val); }catch(_){ vs=undefined; }
-        if(vs!==undefined && vs.length<=FIT){ buf+=vs; if(buf.length>=FLUSH)await flush(); } else { if(buf.length>=FLUSH)await flush(); await emit(val); }
-      }
-      buf+='}'; return;
+    buf+='{'; let first=true;
+    for(const k of Object.keys(v)){ const val=v[k]; if(val===undefined||typeof val==='function')continue;
+      buf+=(first?'':',')+JSON.stringify(k)+':'; first=false;
+      if(_big(val)){ if(buf.length>=FLUSH)await flush(); await emit(val); } else { const vs=JSON.stringify(val); buf+=(vs===undefined?'null':vs); if(buf.length>=FLUSH)await flush(); }
     }
-    buf+=(s===undefined?'null':s); if(buf.length>=FLUSH)await flush();
+    buf+='}'; return;
   }
   await emit(root); await flush(); await writer.close(); await pump;
   const b=new Uint8Array(outLen); let off=0; for(const c of out){ b.set(c,off); off+=c.length; }
@@ -6918,13 +6915,18 @@ function _snapBytes(root){
   const enc=new TextEncoder(), chunks=[]; let total=0;
   const FIT=0x6000000, FLUSH=0x2000000; // cabe inteiro até ~96M chars; descarrega lote a cada ~32M
   const put=s=>{ if(!s)return; const b=enc.encode(s); chunks.push(b); total+=b.length; };
+  // Mesmo critério usado no caminho gzip: container grande nunca passa por JSON.stringify inteiro.
+  // Isso mantém o fallback seguro também em navegadores sem CompressionStream.
+  const _big=(v)=>{ if(Array.isArray(v))return v.length>4000; if(v&&typeof v==='object'){ for(const k of Object.keys(v)){ if(_big(v[k]))return true; } return false; } return false; };
   function emit(v){
-    let s; try{ s=JSON.stringify(v); }catch(e){ s=undefined; }
+    let s;
+    if(!_big(v)){ try{ s=JSON.stringify(v); }catch(e){ s=undefined; } }
     if(s!==undefined && s.length<=FIT){ put(s); return; }
     if(Array.isArray(v)){
       put('['); let buf='';
       for(let i=0;i<v.length;i++){ const e=v[i];
-        let es; try{ es=(e===undefined||typeof e==='function')?'null':JSON.stringify(e); }catch(_){ es=undefined; }
+        let es;
+        if(!_big(e)){ try{ es=(e===undefined||typeof e==='function')?'null':JSON.stringify(e); }catch(_){ es=undefined; } }
         if(es===undefined){ if(buf){put(buf);buf='';} if(i)put(','); emit(e); }
         else { buf+=(i?',':'')+es; if(buf.length>FLUSH){put(buf);buf='';} }
       }
@@ -6935,7 +6937,8 @@ function _snapBytes(root){
       for(const k of Object.keys(v)){ const val=v[k];
         if(val===undefined||typeof val==='function') continue;
         const pre=(first?'':',')+JSON.stringify(k)+':'; first=false;
-        let vs; try{ vs=JSON.stringify(val); }catch(_){ vs=undefined; }
+        let vs;
+        if(!_big(val)){ try{ vs=JSON.stringify(val); }catch(_){ vs=undefined; } }
         if(vs!==undefined && vs.length<=FIT){ buf+=pre+vs; if(buf.length>FLUSH){put(buf);buf='';} }
         else { if(buf){put(buf);buf='';} put(pre); emit(val); }
       }
@@ -6978,7 +6981,7 @@ async function gerarDadosPublicacao(){
     if(btn)btn.textContent='⏳ Montando ZIP…';
     const blob=await zip.generateAsync({type:'blob',compression:'STORE'});
     _baixarBlob(blob,'pulso360-dados-publicacao.zip');
-    mostrarPublicacao((raw.byteLength/1048576).toFixed(1),(bytes.byteLength/1048576).toFixed(1),parts.length,S.publishedAt); toast('Pacote pronto · '+RECORDS.length.toLocaleString('pt-BR')+' registros'+(S.dataMax?' · dados até '+brDate(S.dataMax):''));
+    mostrarPublicacao(((packed.rawLen||0)/1048576).toFixed(1),(bytes.byteLength/1048576).toFixed(1),parts.length,S.publishedAt); toast('Pacote pronto · '+RECORDS.length.toLocaleString('pt-BR')+' registros'+(S.dataMax?' · dados até '+brDate(S.dataMax):''));
   }catch(e){toast('Erro ao gerar dados: '+(e.message||e));}
   finally{if(btn){btn.disabled=false;btn.textContent=old||'📦 Gerar dados para publicação';}}
 }
