@@ -4565,11 +4565,46 @@ function renderAll(){
   }
   let rows=null; if(rowViews.has(view)) rows=filtered();
   if(view==='semana'){
-    // Em bases grandes, não bloqueia a primeira pintura calculando milhares de perfis.
-    // O resumo é preparado em segundo plano e o restante do painel fica utilizável imediatamente.
-    if(rows.length>1500 && !_rankReadyForRows(rows)){ _scheduleSemanaAsync(rows,viewKey); atualizaDataMode(); return; }
-    renderKpis(rows); renderSemana(rows);
-    if(!SUMMARY_PROGRESSIVE){ const c={kpis:$('#kpis').innerHTML,semana:$('#semanaBox').innerHTML,badge:FILTER_CACHE_DIV_COUNT}; SUMMARY_DOM_CACHE.set(viewKey,c); while(SUMMARY_DOM_CACHE.size>6)SUMMARY_DOM_CACHE.delete(SUMMARY_DOM_CACHE.keys().next().value); }
+    // Primeiro paint sempre útil: KPIs aparecem mesmo se o ranking ainda estiver sendo preparado.
+    try{ renderKpis(rows); }catch(e){ console.error('[Pulso360] KPIs resumo',e); }
+    if(rows.length>1500){
+      const box=$('#semanaBox');
+      const ready=(()=>{
+        try{ return _rankReadyForRows(rows); }catch(e){ console.warn('[Pulso360] cache ranking',e); return false; }
+      })();
+      if(!ready){
+        if(box)box.innerHTML='<div class="perf-loading">Preparando resumo semanal…<small>Os indicadores já estão disponíveis; o ranking está sendo calculado em segundo plano.</small></div>';
+        try{ _scheduleSemanaAsync(rows,viewKey); }
+        catch(e){
+          console.error('[Pulso360] agendamento resumo',e);
+          // fallback direto: prepara ranking sem bloquear o restante do painel
+          setTimeout(async()=>{
+            try{
+              await _prewarmRankAsync(rows);
+              if(activeViewName()==='semana'){ VIEW_RENDER_KEYS.semana=''; renderAll(); }
+            }catch(e2){
+              console.error('[Pulso360] fallback ranking',e2);
+              if(box)box.innerHTML='<div class="empty">Não foi possível calcular o ranking semanal. Os demais indicadores e abas continuam disponíveis.</div>';
+            }
+          },0);
+        }
+        atualizaDataMode();
+        return;
+      }
+    }
+    try{
+      renderSemana(rows);
+    }catch(e){
+      console.error('[Pulso360] renderSemana',e);
+      const box=$('#semanaBox');
+      if(box)box.innerHTML='<div class="empty">Não foi possível montar os cartões do ranking. Os KPIs e demais abas continuam disponíveis.</div>';
+      return;
+    }
+    if(!SUMMARY_PROGRESSIVE){
+      const cache={kpis:$('#kpis').innerHTML,semana:$('#semanaBox').innerHTML,badge:FILTER_CACHE_DIV_COUNT};
+      SUMMARY_DOM_CACHE.set(viewKey,cache);
+      while(SUMMARY_DOM_CACHE.size>6)SUMMARY_DOM_CACHE.delete(SUMMARY_DOM_CACHE.keys().next().value);
+    }
   }
   else if(view==='bonificacao') renderBonificacao(rows);
   else if(view==='trat') renderTratativas();
@@ -6921,12 +6956,14 @@ async function _finalizeBootUI(){
     await uiYield();
     renderAll();
   }catch(e){
-    // Fail-soft: a base continua válida. Libera o painel e deixa outras abas utilizáveis.
-    BOOT_LAST_ERROR='Abrindo resumo: '+(e&&e.message?e.message:String(e));
+    BOOT_LAST_ERROR='Abrindo painel: '+(e&&e.message?e.message:String(e));
     console.error('[Pulso360] render inicial',e);
     try{
+      // Tenta ao menos os KPIs do resumo; não substitui conteúdo que já tenha sido montado.
+      const rows=filtered();
+      renderKpis(rows);
       const box=$('#semanaBox');
-      if(box)box.innerHTML='<div class="empty">Resumo temporariamente indisponível. As demais abas continuam disponíveis.</div>';
+      if(box && !box.innerHTML.trim()) box.innerHTML='<div class="empty">O ranking está sendo preparado. As demais abas continuam disponíveis.</div>';
     }catch(_){}
   }
   try{ updateDropStatus(); }catch(e){ console.warn('[Pulso360] status importação',e); }
