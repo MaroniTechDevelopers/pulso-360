@@ -1249,8 +1249,7 @@
     <div id="dadosContent">
     <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:12px 16px">
       <b>Publicação e tratativas</b>
-      <button class="btn solid" id="btnSnapshot" title="Baixar os dados atuais para publicar junto do GitHub Pages">📦 Gerar dados para publicação</button>
-      <button class="btn solid" id="btnSnapshotMobile" title="Baixar um arquivo LEVE por motorista (dados-mobile.json) para o celular abrir rápido — publique ao lado do index.html">📱 Gerar dados do celular</button>
+      <button class="btn solid" id="btnSnapshot" title="Gerar a publicação única usada no computador, celular e WebView Trizy">📦 Gerar dados para publicação</button>
       <button class="btn" id="btnTratSync" title="Sincronizar o histórico compartilhado de tratativas no SharePoint" style="color:var(--ink);background:var(--surface);border-color:var(--border)">☁️ Sincronizar tratativas</button>
       <span style="font-size:12px;color:var(--muted)">Relatórios: importação manual · SharePoint: somente tratativas</span>
       <span id="dadosWho" style="font-size:12px;color:var(--muted)"></span>
@@ -1788,12 +1787,10 @@ function feriasPeriodo(nome,start,totalMin){
   return out;
 }
 let REAL = !!RAW;
-// ===== MODO CELULAR LEVE (Fase 1) =====
-// Celular não aguenta a base cheia (446 MB / ~121 mil registros → iOS mata a aba por memória).
-// Em telas pequenas de toque, o painel baixa um arquivo LEVE por motorista (dados-mobile.json)
-// e renderiza um modo reduzido (Bonificação/Resumo/Média/Scorecard) SEM os registros crus.
+// ===== BASE ÚNICA EM TODOS OS DISPOSITIVOS =====
+// Celular, WebView Trizy e desktop consomem a mesma publicação principal.
+// As variáveis abaixo permanecem apenas por compatibilidade com funções antigas não acionadas.
 let MOBILE_LIGHT=false, MOBILE_DATA=null, MOBILE_Q='';
-const _isMobile = matchMedia('(max-width:820px)').matches && (navigator.maxTouchPoints>0 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent));
 let RECORDS = [];           // registros motorista-dia já com análise
 let BASES = {ponto:true, mov:true, trim:true};   // quais das 3 fontes estão carregadas
 let ALERTS = null;          // agregado de alertas por motorista (norm) — do relatório de alertas
@@ -4369,9 +4366,7 @@ function closeScorecard(){ const m=$('#scoreModal'); if(m)m.style.display='none'
 /* ===== MODO EMBED SCORECARD (webview por CPF — abre só o scorecard em tela cheia p/ a Trizy) ===== */
 function _scResolveNomePorCpf(cpfParam){
   const ck=cpfKey(cpfParam); if(!ck) return null;
-  // Modo leve (celular / Trizy): cartões em MOBILE_DATA.drivers carregam o cpf (via gerarDadosMobile)
-  if(MOBILE_LIGHT){ const d=((MOBILE_DATA&&MOBILE_DATA.drivers)||[]).find(x=>x.cpf===ck); return d?d.nome:null; }
-  // Modo completo (desktop): de-para CPF→nome
+  // WebView, celular e desktop usam a mesma base publicada principal.
   if(typeof CPF2NOME!=='undefined' && CPF2NOME && CPF2NOME[ck]) return CPF2NOME[ck];
   const cad=(MOTORISTAS_IDX&&MOTORISTAS_IDX.byCpf)?MOTORISTAS_IDX.byCpf[ck]:null;
   if(cad&&cad.nome) return cad.nome;
@@ -4402,7 +4397,6 @@ function _scTryOpenEmbed(){
 /* ===== BOTÃO "Abrir webview (Trizy)" na visão do PAINEL (dentro de .sc-actions, por isso some no próprio webview via body.sc-embed): resolve o CPF do motorista aberto, copia o link e abre pré-visualização ===== */
 function _scCpfDoScorecard(){
   const nome=SCORECARD_NOME; if(!nome) return '';
-  if(MOBILE_LIGHT){ const nn=norm(nome); const d=((MOBILE_DATA&&MOBILE_DATA.drivers)||[]).find(x=>x.nn===nn||norm(x.nome)===nn); return (d&&d.cpf)?cpfKey(d.cpf):''; }
   let cpf=cpfDeNome(nome)||((typeof NOME2CPF!=='undefined'&&NOME2CPF)?NOME2CPF[norm(nome)]:'')||'';
   return cpf?cpfKey(cpf):'';
 }
@@ -4415,7 +4409,6 @@ function _scAbrirTrizy(){
   try{ window.open(url,'_blank'); }catch(e){}
 }
 function renderScorecard(nome){
-  if(MOBILE_LIGHT) return renderScorecardLight(nome);
   const shell=$('#scoreShell'), nn=norm(nome), rows=filtered();
   // Não recalcula milhares de perfis ao abrir um único scorecard.
   const p=scoreProfileMotorista(nome,rows);
@@ -4726,7 +4719,6 @@ function _scheduleSemanaAsync(rows,viewKey){
 }
 
 function renderAll(){
-  if(MOBILE_LIGHT){ try{ renderMobileLight(); }catch(e){ console.error('[Pulso360] modo leve',e); } return; }
   // Qualquer mudança nos controles pertence somente à aba/filtro corrente.
   saveTopFilterState(CURRENT_FILTER_TAB);
   const view=activeViewName(), fkey=filterStateKey();
@@ -7591,7 +7583,6 @@ $('#printBtn').onclick=exportPainelPDF;
 $('#fichaPdf').onclick=exportFichaPDF;
 $('#dadosLogin').onclick=()=>spLoginId().then(()=>{ applyDadosGate(); tratSyncFromSP(false); });
 $('#btnSnapshot').onclick=gerarDadosPublicacao;
-{ const _bm=$('#btnSnapshotMobile'); if(_bm)_bm.onclick=gerarDadosMobile; }
 $('#btnTratSync').onclick=()=>tratSyncFromSP(true).then(ok=>{ if(ok&&fichaAtual)renderFicha(); });
 $('#btnTratSyncFicha').onclick=()=>tratSyncFromSP(true).then(ok=>{ if(ok&&fichaAtual)renderFicha(); });
 $('#dadosLogout').onclick=async()=>{ try{ if(_msal) await _msal.logoutPopup({}); }catch(e){} TRAT_CACHE=null; _tratSyncTried=false; applyDadosGate(); goTab('semana'); };
@@ -7803,23 +7794,8 @@ TAB_FILTER_STATES.semana=readTopFilterState(); CURRENT_FILTER_TAB='semana';
 async function bootPulso360(){
   const bt=$('#bootLoadTxt'), pill=$('#dataModePill'), txt=$('#dataModeTxt');
   if(pill)pill.classList.remove('real'); if(txt)txt.textContent='carregando dados…';
-  // ===== ETAPA B — MODO CELULAR LEVE: antes de qualquer carga pesada (446 MB) =====
-  // Em celular (tela pequena + toque), nunca baixamos/parseamos a base cheia (iOS mata a aba).
-  // Buscamos só o arquivo leve. Existindo → modo leve. Não existindo → aviso (sem travar).
-  if(_isMobile){
-    try{
-      if(bt)bt.textContent='Carregando a versão do celular…';
-      let j=null;
-      try{ const r=await fetch('dados-mobile.json?_='+Date.now(),{cache:'no-store'}); if(r.ok) j=await r.json(); }catch(e){ console.warn('Pulso360 mobile fetch',e); }
-      if(j && j.v===1 && Array.isArray(j.drivers) && j.drivers.length){
-        MOBILE_LIGHT=true; MOBILE_DATA=j; _initMobileLight();
-      }else{
-        _mobileNotPublished();
-      }
-    }catch(e){ console.error('Pulso360 mobile boot',e); try{_mobileNotPublished();}catch(_){} }
-    finally{ document.body.classList.remove('booting'); try{ if(window.SC_EMBED) _scTryOpenEmbed(); }catch(e){ console.warn('[Pulso360] embed scorecard',e); } }
-    return;   // NÃO segue para a base pesada no celular
-  }
+  // Celular, WebView Trizy e desktop usam exatamente a mesma publicação principal:
+  // dados/manifesto.json + partes binárias. Não existe mais base paralela de celular.
   let temCache=0, pub=false, manifest=null;
   try{
     // Primeiro lê SOMENTE o manifesto (alguns KB). Se a publicação mudou, não perde tempo
