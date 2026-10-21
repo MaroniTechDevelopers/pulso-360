@@ -4501,6 +4501,43 @@ function renderScorecard(nome){
   </div>`;
   shell.innerHTML=scBrand+body;
 }
+let SUMMARY_ASYNC_SEQ=0, SUMMARY_ASYNC_KEY='';
+let SUMMARY_PROGRESSIVE=false, SUMMARY_CARD_RENDER_TOKEN=0;
+function _rankReadyForRows(rows){
+  const sig=_rankSig();
+  return !!(RANKPROFILE_CACHE.rows===rows && RANKPROFILE_CACHE.key===sig && RANKPROFILE_CACHE.profiles);
+}
+function _scheduleSemanaAsync(rows,viewKey){
+  if(SUMMARY_ASYNC_KEY===viewKey) return;
+  const seq=++SUMMARY_ASYNC_SEQ; SUMMARY_ASYNC_KEY=viewKey;
+  const box=$('#semanaBox'), kp=$('#kpis');
+  if(kp)kp.innerHTML='';
+  if(box)box.innerHTML='<div class="perf-loading">Preparando resumo semanal…<small>O painel já está disponível; os indicadores estão sendo calculados em segundo plano.</small></div>';
+  setTimeout(async()=>{
+    try{
+      await uiYield();
+      if(seq!==SUMMARY_ASYNC_SEQ)return;
+      try{renderKpis(rows);}catch(e){console.error('[Pulso360] KPI assíncrono',e);}
+      await uiYield();
+      if(seq!==SUMMARY_ASYNC_SEQ)return;
+      await _prewarmRankAsync(rows);
+      if(seq!==SUMMARY_ASYNC_SEQ)return;
+      SUMMARY_ASYNC_KEY='';
+      if(activeViewName()==='semana') renderAll();
+    }catch(e){
+      SUMMARY_ASYNC_KEY=''; console.error('[Pulso360] resumo assíncrono',e);
+      try{
+        const sig=_rankSig();
+        if(!(RANKPROFILE_CACHE.rows===rows&&RANKPROFILE_CACHE.key===sig&&RANKPROFILE_CACHE.profiles)) _rankCacheSet(sig,rows,Object.create(null));
+        if(seq===SUMMARY_ASYNC_SEQ && activeViewName()==='semana') renderAll();
+      }catch(e2){
+        console.error('[Pulso360] fallback do resumo',e2);
+        if(box)box.innerHTML='<div class="empty">Resumo carregado parcialmente. Atualize a página se necessário.</div>';
+      }
+    }
+  },0);
+}
+
 function renderAll(){
   // Qualquer mudança nos controles pertence somente à aba/filtro corrente.
   saveTopFilterState(CURRENT_FILTER_TAB);
