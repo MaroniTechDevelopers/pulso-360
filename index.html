@@ -3622,6 +3622,8 @@ function renderFicha(){
   const nome=fichaAtual; if(!nome){ $('#fichaBox').innerHTML=''; return; }
   const M=fichaMetrics(nome);
   const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,placasDetalhadas,placasDetalhadasHtml,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaInconsistente,mediaRawTrimble,mediaCoverage,metaFicha,medaOk,reco,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF}=M;
+  const horasTrabalhadas=(M.audit&&M.audit.hPonto)||0;
+  const periodoFicha=periodoLabel();
   const fichaRisco=M.risco;
   const weeks=GLOBAL_WEEKS.length?GLOBAL_WEEKS:Object.values(recs.reduce((a,r)=>{if(r.semKey&&!a[r.semKey])a[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};return a;},{})).sort((a,b)=>a.key<b.key?-1:1);
   const _dayF=dayFilter(); let _recsEvid=(_dayF?recs.filter(r=>r.data===_dayF):recs).slice();
@@ -3671,7 +3673,13 @@ function renderFicha(){
           <h2>${nome}</h2>
           <div class="sub">${op||'—'}${placasDetalhadasHtml?' · '+placasDetalhadasHtml:''} · <b>${tempo}</b> de casa · admissão ${adm?brDate(adm):'—'}</div>
         </div>
-        <div class="reco ${reco.cls}"><b>${reco.tit}</b>${reco.txt}</div>
+        <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;justify-content:flex-end">
+          <div class="ficha-periodo-destaque" style="min-width:250px;padding:12px 16px;border:2px solid var(--gold-2);border-radius:14px;background:color-mix(in srgb,var(--gold-2) 7%,var(--surface));display:flex;flex-direction:column;justify-content:center">
+            <span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Período selecionado</span>
+            <b style="font-size:17px;line-height:1.2;color:var(--ink);margin-top:3px">${periodoFicha}</b>
+          </div>
+          <div class="reco ${reco.cls}"><b>${reco.tit}</b>${reco.txt}</div>
+        </div>
       </div>
     </div>
     ${noteOps}
@@ -3703,6 +3711,8 @@ function renderFicha(){
         <div class="lab">③ Aderência de jornada</div><div class="val tnum">${aderJornadaVal==null?'—':aderJornadaVal+'<small>%</small>'}</div><div class="sub">${hDec(ddRealTotal)} fora da jornada${ddTotal-ddRealTotal>60?' · +'+hDec(ddTotal-ddRealTotal)+' sem ponto':''}</div></div>
       <div class="card kpi"><div class="accent" style="background:${hexTotal>0?'var(--warning)':'var(--muted)'}"></div>
         <div class="lab">Hora extra (&gt;7h20)</div><div class="val tnum">${hDec(hexTotal)}</div><div class="sub">${diasHex} dia(s) acima da jornada</div></div>
+      <div class="card kpi"><div class="accent" style="background:var(--s3)"></div>
+        <div class="lab">Horas totais trabalhadas</div><div class="val tnum">${hDec(horasTrabalhadas)}</div><div class="sub">jornada registrada no ponto · ${periodoFicha}</div></div>
       <div class="card kpi"><div class="accent" style="background:var(--s2)"></div>
         <div class="lab">KM rodado</div><div class="val tnum">${Math.round(kmR||0).toLocaleString('pt-BR')}</div><div class="sub">quilômetros no período selecionado</div></div>
       <div class="card kpi"><div class="accent" style="background:var(--good)"></div>
