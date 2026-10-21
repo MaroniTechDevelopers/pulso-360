@@ -1,13 +1,13 @@
 {
   "v": 1,
   "snapshotVersion": 3,
-  "publishedAt": 1792501108046,
+  "publishedAt": 1792595657686,
   "dataMin": "2026-08-16",
-  "dataMax": "2026-10-19",
-  "records": 147748,
+  "dataMax": "2026-10-21",
+  "records": 151621,
   "compression": "gzip",
-  "rawBytes": 548279911,
-  "packedBytes": 73288539,
+  "rawBytes": 560505643,
+  "packedBytes": 74712284,
   "parts": [
     {
       "file": "parte-001.bin",
@@ -19,7 +19,7 @@
     },
     {
       "file": "parte-003.bin",
-      "bytes": 6179675
+      "bytes": 7603420
     }
   ]
 }
