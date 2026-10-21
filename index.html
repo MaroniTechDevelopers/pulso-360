@@ -6857,6 +6857,7 @@ async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return 
 // ranking em lotes (await uiYield a cada N motoristas) para o navegador pintar o overlay/animar o
 // spinner e nunca travar vários segundos. Números/dados/visual idênticos ao antigo
 // build();fillFilters();renderAll();updateDropStatus() — só time-slicing (mesmo cálculo, fatiado).
+let BOOT_UI_READY=false;
 async function _finalizeBootUI(){
   const bt=$('#bootLoadTxt');
   if(bt)bt.textContent='Preparando base…'; await uiYield(); build();
@@ -6865,6 +6866,7 @@ async function _finalizeBootUI(){
   // em segundo plano quando a base é grande e devolve o controle imediatamente ao navegador.
   if(bt)bt.textContent='Abrindo painel…'; await uiYield(); renderAll();
   updateDropStatus();
+  BOOT_UI_READY=true;
 }
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
 async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();return true;}catch(e){return false;}}
@@ -7564,8 +7566,31 @@ async function bootPulso360(){
     }else if(!pub&&temCache){
       if(!DATA_UPDATED_AT)DATA_UPDATED_AT=+(RAW&&RAW._savedAt||temCache||0); atualizaDataMode(); updateDropStatus();
     }
+
+    // Fail-safe do boot: publicação/cache podem estar válidos, mas a UI não pode terminar
+    // sem build/filtros/render. Isso evita o painel ficar preso em "carregando dados...".
+    if((pub||temCache||REAL) && !BOOT_UI_READY){
+      await _finalizeBootUI();
+      atualizaDataMode();
+    }
+  }catch(e){
+    console.error('[Pulso360] falha geral no boot',e);
+    const p=$('#dataModePill'),t=$('#dataModeTxt');
+    if(p)p.classList.remove('real');
+    if(t)t.textContent='⚠ erro ao abrir painel';
+    try{
+      if(!BOOT_UI_READY){
+        if(RAW&&RAW.records&&RAW.schema===3) REAL=true;
+        await _finalizeBootUI();
+      }
+    }catch(e2){ console.error('[Pulso360] fallback do boot',e2); }
   }finally{
     document.body.classList.remove('booting');
+    const t=$('#dataModeTxt');
+    if(t && /carregando dados/i.test(t.textContent||'')){
+      if(REAL && RECORDS && RECORDS.length) atualizaDataMode();
+      else t.textContent=window.PULSO_PUB_ERROR?('⚠ '+window.PULSO_PUB_ERROR):'⚠ base não carregada';
+    }
     try{ if(window.SC_EMBED) _scTryOpenEmbed(); }catch(e){ console.warn('[Pulso360] embed scorecard',e); }
   }
 }
