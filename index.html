@@ -6852,20 +6852,47 @@ function _cachePubGet(){try{return +(localStorage.getItem(CACHE_PUB_KEY)||0);}ca
 function _cachePubSet(v){try{if(v)localStorage.setItem(CACHE_PUB_KEY,String(+v||0));}catch(e){}}
 function snapshotState(){ const rawSnap=RAW?Object.assign({},RAW,{records:REAL?RECORDS:RAW.records,_readyRecords:REAL?1:0,_dedupeDone:REAL?1:0}):RAW; return {v:3,ts:Date.now(),dataUpdatedAt:DATA_UPDATED_AT||((RAW&&RAW._savedAt)?+RAW._savedAt:0),CFG:Object.assign({},CFG),REAL:!!REAL,RAW:rawSnap,MOV_TOT,MOV_IDN,MOV_UNSEG_STORE,PLACA_UO,PLACA_MOV,ALERTS,ALERTS_N,AL_TL,BOL,BOL_N,BOL_DAY,BDV,BDV_N,ADMISSAO,ADMISSAO_CPF,ADMISSAO_N,ADMISSAO_CANON,ADMISSAO_NOMECPF,ADMISSAO_CANONCPF,ADMISSAO_PRESENTES,ADMISSAO_PRESENTES_CANON,ADMISSAO_DIAG,MOTORISTAS_TMS,MOTORISTAS_TMS_N,TMS,TMS_N,ABAST,ABAST_N,META_FAM,META_PLACA,META_CM,META_N,PED_OP,PED_DRV,PED_N,CPF2NOME,NOME2CPF,SAUDE,SAUDE_N,MULTAS,MULTAS_N,MULTAS_DIAG}; }
 function applyCfgInputs(){ const M={cfgTol:'tol',cfgSem:'sem',cfgFora:'fora',cfgMovMin:'movMin',cfgFarol:'farolAmareloMax',cfgMeta:'meta',cfgPreco:'precoLitro',cfgJornadaMin:'jornadaMin',cfgInterjornada:'interjornadaMin'}; for(const id in M){const e=document.getElementById(id);if(e)e.value=CFG[M[id]];} }
-async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_CM=S.META_CM||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs(); await _finalizeBootUI(); return true; }
+async function restoreState(S){ if(!S||S.v!==3||!S.RAW||S.RAW.schema!==3)return false; if(S.CFG)CFG=Object.assign(CFG,S.CFG);REAL=!!S.REAL;RAW=S.RAW||null;SOURCE_COVERAGE=(RAW&&RAW.sourceCoverage)?RAW.sourceCoverage:{ponto:{min:'',max:'',rows:0},mov:{min:'',max:'',rows:0}};PUBLISHED_AT_LOADED=+(S.publishedAt||0);DATA_UPDATED_AT=+(S.publishedAt||S.dataUpdatedAt||(S.RAW&&S.RAW._savedAt)||S.ts||0);MOV_TOT=S.MOV_TOT||{};MOV_IDN=S.MOV_IDN||{};MOV_UNSEG_STORE=S.MOV_UNSEG_STORE||null;PLACA_UO=S.PLACA_UO||null;PLACA_MOV=S.PLACA_MOV||null;ALERTS=S.ALERTS||null;ALERTS_N=S.ALERTS_N||0;AL_TL=S.AL_TL||null;BOL=S.BOL||null;BOL_N=S.BOL_N||0;BOL_DAY=S.BOL_DAY||null;BDV=S.BDV||null;BDV_N=S.BDV_N||0;ADMISSAO=S.ADMISSAO||null;ADMISSAO_CPF=S.ADMISSAO_CPF||null;ADMISSAO_N=S.ADMISSAO_N||0;ADMISSAO_CANON=S.ADMISSAO_CANON||null;ADMISSAO_NOMECPF=S.ADMISSAO_NOMECPF||null;ADMISSAO_CANONCPF=S.ADMISSAO_CANONCPF||null;ADMISSAO_PRESENTES=S.ADMISSAO_PRESENTES||null;ADMISSAO_PRESENTES_CANON=S.ADMISSAO_PRESENTES_CANON||null;ADMISSAO_DIAG=S.ADMISSAO_DIAG||null;MOTORISTAS_TMS=S.MOTORISTAS_TMS||(S.RAW&&S.RAW.admissao&&S.RAW.admissao.cad)||null;MOTORISTAS_TMS_N=S.MOTORISTAS_TMS_N||(MOTORISTAS_TMS?Object.keys(MOTORISTAS_TMS).length:0);rebuildMotoristasIdx();CPF2NOME=S.CPF2NOME||null;NOME2CPF=S.NOME2CPF||null;SAUDE=S.SAUDE||null;SAUDE_N=S.SAUDE_N||0;TMS=S.TMS||null;TMS_N=S.TMS_N||0;ABAST=S.ABAST||null;ABAST_N=S.ABAST_N||0;META_FAM=S.META_FAM||null;META_PLACA=S.META_PLACA||null;META_CM=S.META_CM||null;META_N=S.META_N||0;PED_OP=S.PED_OP||null;PED_DRV=S.PED_DRV||null;PED_N=S.PED_N||0;MULTAS=S.MULTAS||null;MULTAS_N=S.MULTAS_N||(MULTAS?MULTAS.length:0);MULTAS_DIAG=S.MULTAS_DIAG||null;MULTAS_REV++;rebuildMultasIndex();MULTA_CTX_CACHE.clear();applyCfgInputs(); return true; }
 // Finalização do boot NÃO-BLOQUEANTE: cede à UI (uiYield) entre as fases pesadas e PRÉ-AQUECE o
 // ranking em lotes (await uiYield a cada N motoristas) para o navegador pintar o overlay/animar o
 // spinner e nunca travar vários segundos. Números/dados/visual idênticos ao antigo
 // build();fillFilters();renderAll();updateDropStatus() — só time-slicing (mesmo cálculo, fatiado).
-let BOOT_UI_READY=false;
+let BOOT_UI_READY=false, BOOT_LAST_ERROR='';
 async function _finalizeBootUI(){
   const bt=$('#bootLoadTxt');
-  if(bt)bt.textContent='Preparando base…'; await uiYield(); build();
-  if(bt)bt.textContent='Montando filtros…'; await uiYield(); fillFilters();
-  // Não segura mais o loader esperando ranking/resumo completo. renderAll agenda o bloco pesado
-  // em segundo plano quando a base é grande e devolve o controle imediatamente ao navegador.
-  if(bt)bt.textContent='Abrindo painel…'; await uiYield(); renderAll();
-  updateDropStatus();
+  BOOT_LAST_ERROR='';
+  try{
+    if(bt)bt.textContent='Preparando base…';
+    await uiYield();
+    build();
+  }catch(e){
+    BOOT_LAST_ERROR='Preparando base: '+(e&&e.message?e.message:String(e));
+    console.error('[Pulso360] build',e);
+    throw e;
+  }
+  try{
+    if(bt)bt.textContent='Montando filtros…';
+    await uiYield();
+    fillFilters();
+  }catch(e){
+    BOOT_LAST_ERROR='Montando filtros: '+(e&&e.message?e.message:String(e));
+    console.error('[Pulso360] fillFilters',e);
+    throw e;
+  }
+  try{
+    if(bt)bt.textContent='Abrindo painel…';
+    await uiYield();
+    renderAll();
+  }catch(e){
+    // Fail-soft: a base continua válida. Libera o painel e deixa outras abas utilizáveis.
+    BOOT_LAST_ERROR='Abrindo resumo: '+(e&&e.message?e.message:String(e));
+    console.error('[Pulso360] render inicial',e);
+    try{
+      const box=$('#semanaBox');
+      if(box)box.innerHTML='<div class="empty">Resumo temporariamente indisponível. As demais abas continuam disponíveis.</div>';
+    }catch(_){}
+  }
+  try{ updateDropStatus(); }catch(e){ console.warn('[Pulso360] status importação',e); }
   BOOT_UI_READY=true;
 }
 function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('integ360db',1);}catch(e){return rej(e);}r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}); }
@@ -7190,7 +7217,8 @@ async function carregarDadosPublicados(prefetchedManifest){
     if(!S||S.v!==3||!S.REAL||!S.RAW||S.RAW.schema!==3){ if(multipartErr)throw multipartErr; return false; }
     const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);
     if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}
-    await restoreState(S);DATA_UPDATED_AT=pub||DATA_UPDATED_AT;_cachePubSet(pub||PUBLISHED_AT_LOADED||0);atualizaDataMode();
+    const restored=await restoreState(S); if(!restored) throw new Error('Snapshot publicado não pôde ser restaurado');
+    DATA_UPDATED_AT=pub||DATA_UPDATED_AT;_cachePubSet(pub||PUBLISHED_AT_LOADED||0);atualizaDataMode();
     // Guarda a fotografia publicada no IndexedDB em segundo plano para a próxima abertura.
     if(typeof agendarCache==='function')agendarCache();
     return true;
@@ -7571,13 +7599,13 @@ async function bootPulso360(){
     // sem build/filtros/render. Isso evita o painel ficar preso em "carregando dados...".
     if((pub||temCache||REAL) && !BOOT_UI_READY){
       await _finalizeBootUI();
-      atualizaDataMode();
+      if(REAL && RECORDS && RECORDS.length) atualizaDataMode();
     }
   }catch(e){
     console.error('[Pulso360] falha geral no boot',e);
     const p=$('#dataModePill'),t=$('#dataModeTxt');
     if(p)p.classList.remove('real');
-    if(t)t.textContent='⚠ erro ao abrir painel';
+    if(t)t.textContent='⚠ '+(BOOT_LAST_ERROR||((e&&e.message)?e.message:'erro ao abrir painel'));
     try{
       if(!BOOT_UI_READY){
         if(RAW&&RAW.records&&RAW.schema===3) REAL=true;
