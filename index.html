@@ -2677,7 +2677,7 @@ function semanaAgg(rows){
     og.opRows.push(r); og.dd+=(r.ddReal||0); if((r.ddReal||0)>0)og.motsDedo.add(r.motoristaEscala);
     const mn=r.motoristaEscala||'—'; const m=(og.mots[mn]=og.mots[mn]||{nome:mn,placa:'',dd:0,ddReal:0,dias:0,mov:0,ponto:0,km:0,litros:0,semanas:{},semelSum:0,semelN:0,recs:[],idDiv:0,pend:0,_movDaySet:new Set(),_movDays:0});
     m.dd+=r.horasDedoDuro; m.ddReal+=(r.ddReal||0); if(r.horasDedoDuro>0)m.dias++; m.mov+=r.horasMov; m.ponto+=r.horasPonto; m.km+=r.km||0; m.litros+=r.litros||0; if(r.placa)m.placa=r.placa;
-    if((r.horasMov||0)>0 || (r.mov&&r.mov.length)){ m._movDaySet.add(r.data); m._movDays=m._movDaySet.size; }
+    if((r.horasMov||0)>0 || (r.mov&&r.mov.length) || (r.movimento&&r.movimento.length)){ m._movDaySet.add(r.data); m._movDays=m._movDaySet.size; }
     m.semanas[r.semKey]=(m.semanas[r.semKey]||0)+(r.ddReal||0);
     if(r.semelhanca!=null){m.semelSum+=r.semelhanca;m.semelN++;}
     m.recs.push(r); if(r.idDivergente)m.idDiv++; if(r.sev==='pendente')m.pend++;
@@ -2692,7 +2692,7 @@ function semanaAgg(rows){
       // Farol semanal deriva do mesmo audit já calculado acima. Evita reprocessar motorista × semana várias vezes.
       m.semanas=auditWeeksFromDay(au);
       const d=drv(m.nome),ab=ABAST&&ABAST[norm(m.nome)],ma=mediaAbastecimento(ab),mt=mediaAudit(au); m.media=MEDIA_OFF?null:(ma!=null?ma:(mt!=null?mt:(mediaPlausivel(d.media)?d.media:null))); m.op=og.op; m.meta=metaVeic(m.placa,og.op); m.alertas=d.alertas||{}; m.admissao=admissaoDe(m.nome);
-      m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs); m.aj=aderJornada(m.recs);
+      m.semel=m.semelN?Math.round(m.semelSum/m.semelN):null; m.ident=aderRecs(m.recs); m.aj=aderJornada(m.recs); m.movSemPonto=au.movDaysNoPoint||0; m.pontoSemMov=au.pointDaysNoMov||0;
       m._alR=alertasResumo(m.nome,rng); m._multaTot=MULTAS_N?multasCondutaMotoristaCount(m.nome,rng):0; m.risco=riscoComposto(m,m._alR); m.farolUlt=m.risco.cls;
     });
     og.dd=list.reduce((a,m)=>a+(m.ddReal||0),0); og.motsDedo=new Set(list.filter(m=>(m.ddReal||0)>0).map(m=>m.nome));
@@ -5449,9 +5449,30 @@ let MOV_UNSEG_STORE=null;
 function aderDe(placas, data){ let tot=0,idn=0; (placas||[]).forEach(p=>{ const pk=placaKey(p)+'|'+data; tot+=MOV_TOT[pk]||0; idn+=MOV_IDN[pk]||0; }); return tot>0? Math.round(idn/tot*100) : null; }
 // aderência PONDERADA PELO TEMPO de um conjunto de registros (min identificados ÷ min de movimento total)
 // — reflete de verdade o vermelho da trilha (não é média simples dos %s diários)
-function aderRecs(recs){ let idn=0,tot=0; (recs||[]).forEach(r=>{ const arr=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]); arr.forEach(p=>{ const pk=placaKey(p)+'|'+r.data; if(MOV_TOT[pk]){ tot+=MOV_TOT[pk]; idn+=(MOV_IDN[pk]||0); } }); });
-  if(tot>0) return Math.round(idn/tot*100);
-  let s=0,n=0; (recs||[]).forEach(r=>{ if(r.semelhanca!=null){ s+=r.semelhanca; n++; } }); return n?Math.round(s/n):null; }   // fallback demo (sem movimentação)
+function aderRecs(recs){
+  let idn=0,tot=0;
+  (recs||[]).forEach(r=>{
+    const arr=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]);
+    arr.forEach(p=>{
+      const pk=placaKey(p)+'|'+r.data;
+      if(MOV_TOT&&MOV_TOT[pk]){ tot+=MOV_TOT[pk]; idn+=(MOV_IDN&&MOV_IDN[pk])||0; }
+    });
+  });
+  if(tot>0) return Math.max(0,Math.min(100,Math.round(idn/tot*100)));
+  let aw=0,at=0;
+  (recs||[]).forEach(r=>{
+    if(r.aderencia==null||!Number.isFinite(+r.aderencia))return;
+    const mins=(r.movimento||r.mov||[]).reduce((s,x)=>{
+      const a=toMin(x.ini),b=toMin(x.fim); return s+((a!=null&&b!=null&&b>a)?(b-a):0);
+    },0);
+    const w=mins>0?mins:1;
+    aw+=(+r.aderencia)*w; at+=w;
+  });
+  if(at>0) return Math.max(0,Math.min(100,Math.round(aw/at)));
+  let s=0,n=0;
+  (recs||[]).forEach(r=>{ if(r.semelhanca!=null){ s+=r.semelhanca; n++; } });
+  return n?Math.round(s/n):null;
+}
 // % da trilha de identificação que está VERDE. Se existir vermelho no mesmo intervalo, o trecho não conta como correto.
 // Usado na linha do tempo para o percentual bater visualmente com os segmentos exibidos.
 function aderTrilhaIdent(segs){
