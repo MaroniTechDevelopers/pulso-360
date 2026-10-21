@@ -927,23 +927,45 @@
   .saude-fit-wrap{overflow-x:hidden!important}
   .saude-fit-table{width:100%!important;min-width:0!important;table-layout:fixed;border-collapse:collapse}
   .saude-fit-table th,.saude-fit-table td{
-    padding:5px 4px!important;
-    font-size:10px!important;
+    padding:5px 3px!important;
+    font-size:9.5px!important;
     line-height:1.15!important;
     white-space:normal!important;
-    overflow-wrap:anywhere;
-    word-break:normal;
+    overflow-wrap:anywhere!important;
+    word-break:break-word!important;
     vertical-align:middle;
+    min-width:0!important;
+    max-width:0;
+  }
+  .saude-fit-table td>*,
+  .saude-fit-table th>*{
+    min-width:0!important;
+    max-width:100%!important;
   }
   .saude-fit-table th{
     font-size:9px!important;
     letter-spacing:.01em;
     text-transform:uppercase;
   }
-  .saude-fit-table .chip{font-size:8.5px!important;padding:2px 5px!important;white-space:normal!important;line-height:1.05}
-  .saude-fit-table .planotag{font-size:8.5px!important;padding:2px 5px!important;line-height:1.05}
+  .saude-fit-table .chip{
+    display:inline-block!important;
+    max-width:100%!important;
+    font-size:8px!important;
+    padding:2px 4px!important;
+    white-space:normal!important;
+    line-height:1.05!important;
+    overflow-wrap:anywhere!important;
+  }
+  .saude-fit-table .planotag{
+    display:inline-block!important;
+    max-width:100%!important;
+    font-size:8px!important;
+    padding:2px 4px!important;
+    white-space:normal!important;
+    line-height:1.05!important;
+    overflow-wrap:anywhere!important;
+  }
   .saude-fit-table td:nth-child(14) div{font-size:9px!important;line-height:1.1!important;margin-top:2px!important}
-  .saude-fit-table td:last-child{padding-left:1px!important;padding-right:1px!important;text-align:center}
   @media(max-width:1250px){
     .saude-fit-table th,.saude-fit-table td{font-size:9px!important;padding:4px 3px!important}
     .saude-fit-table th{font-size:8px!important}
@@ -4903,7 +4925,10 @@ function planoDaPlaca(cam, cls, tele){
 }
 
 function _srcChip(ok,yes='Presente',no='Ausente'){
-  return ok?'<span class="chip conforme">'+yes+'</span>':'<span class="chip pendente">'+no+'</span>';
+  const lab=ok?yes:no;
+  return ok
+    ? '<span class="chip conforme" title="'+lab+'">✓</span>'
+    : '<span class="chip pendente" title="'+lab+'">—</span>';
 }
 
 function renderPlacasSemId(rowsFiltro){
@@ -4977,9 +5002,9 @@ function renderPlacasSemId(rowsFiltro){
     if(r.cls==='fuel')return '<span class="chip atencao">Consumo/CAN</span>';
     if(r.cls==='atencao')return '<span class="chip atencao">ID baixa</span>';
     if(r.cls==='camera')return '<span class="chip critico">Câmera</span>';
-    if(r.cls==='telemetria_parcial')return '<span class="chip critico">Telemetria parcial</span>';
-    if(r.litrosSemKm>0)return '<span class="chip critico">Consumo sem distância</span>';
-    if(r.cls==='telemetria')return '<span class="chip critico">Sem telemetria</span>';
+    if(r.cls==='telemetria_parcial')return '<span class="chip critico">Telem. parcial</span>';
+    if(r.litrosSemKm>0)return '<span class="chip critico">Consumo s/ dist.</span>';
+    if(r.cls==='telemetria')return '<span class="chip critico">Sem telem.</span>';
     return '<span class="chip critico">Ação</span>';
   };
 
@@ -5008,12 +5033,12 @@ function renderPlacasSemId(rowsFiltro){
     : '';
   box.innerHTML=banner+filtroInfo+
     '<div class="tblwrap saude-fit-wrap"><table class="saude-fit-table"><colgroup>'+
-    '<col style="width:5.5%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:6%">'+
-    '<col style="width:6.5%"><col style="width:5.5%"><col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:5.5%">'+
-    '<col style="width:7%"><col style="width:14%"><col style="width:1%"></colgroup><thead><tr>'+
-    '<th>Placa</th><th>Modelo</th><th>Operação</th><th>Movimento</th><th>Distância<br>(Movimentação)</th><th>Consumo</th>'+
-    '<th>Eventos sem<br>distância</th><th>Aderência<br>ID</th><th>Alertas</th><th>Boletim<br>Veículo</th><th>Boletim<br>Motorista</th><th>Saúde<br>câmera</th>'+
-    '<th>Situação</th><th>Plano de ação</th><th></th></tr></thead><tbody>'+
+    '<col style="width:5.5%"><col style="width:7%"><col style="width:6%"><col style="width:7%"><col style="width:7.5%"><col style="width:6%">'+
+    '<col style="width:6%"><col style="width:5%"><col style="width:4.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5%">'+
+    '<col style="width:8.5%"><col style="width:15%"></colgroup><thead><tr>'+
+    '<th>Placa</th><th>Modelo</th><th>Operação</th><th>Movimento</th><th>Distância</th><th>Consumo</th>'+
+    '<th>Evt. sem distância</th><th>Aderência ID</th><th>Alertas</th><th>Bol. Veículo</th><th>Bol. Motorista</th><th>Saúde câmera</th>'+
+    '<th>Situação</th><th>Plano de ação</th></tr></thead><tbody>'+
     visibleList.map(r=>{const pl=PLANO_DEF[r.plano.cat]||PLANO_DEF.ok;return `<tr class="semidrow" data-placa="${r.placa}" title="ver a linha do tempo desta placa" style="cursor:pointer">
       <td class="tnum"><b>${r.placa}</b></td><td>${r.modelo||'—'}</td><td>${r.op||'—'}</td>
       <td class="tnum">${r.movMin>0?hDec(r.movMin):'—'} · ${r.eventos} evt</td>
@@ -5024,8 +5049,7 @@ function renderPlacasSemId(rowsFiltro){
       <td>${_srcChip(r.temAlertas)}</td><td>${_srcChip(r.temBdv)}</td><td>${_srcChip(r.temBolMot)}</td>
       <td>${r.temSaude?_srcChip(true,'Base saúde',''):_srcChip(false,'','Sem base')}</td>
       <td>${chip(r)}<div style="font-size:10.5px;color:var(--muted);margin-top:3px">${r.status}</div></td>
-      <td style="max-width:330px"><span class="planotag" style="background:color-mix(in srgb,${pl.cor} 15%,transparent);color:${pl.ink};border:1px solid color-mix(in srgb,${pl.cor} 35%,transparent)">${pl.ic} ${pl.lab}</span><div style="font-size:11.5px;color:var(--ink-2);margin-top:3px;white-space:normal">${r.plano.txt}</div></td>
-      <td style="color:var(--gold-2)">↗</td></tr>`;}).join('')+
+      <td><span class="planotag" style="background:color-mix(in srgb,${pl.cor} 15%,transparent);color:${pl.ink};border:1px solid color-mix(in srgb,${pl.cor} 35%,transparent)">${pl.ic} ${pl.lab}</span><div class="saude-plan-text" style="color:var(--ink-2);white-space:normal">${r.plano.txt}</div></td></tr>`;}).join('')+
     '</tbody></table></div>';
 }
 
