@@ -922,6 +922,34 @@
   #semanaBox,#timelineBox,#divList{contain:layout style}
   .perf-loading{padding:34px;text-align:center;color:var(--muted);font-weight:650}
   .perf-loading small{display:block;margin-top:7px;font-weight:400}
+
+  /* ===== SAÚDE DA CÂMERA: tabela completa sem rolagem horizontal ===== */
+  .saude-fit-wrap{overflow-x:hidden!important}
+  .saude-fit-table{width:100%!important;min-width:0!important;table-layout:fixed;border-collapse:collapse}
+  .saude-fit-table th,.saude-fit-table td{
+    padding:5px 4px!important;
+    font-size:10px!important;
+    line-height:1.15!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere;
+    word-break:normal;
+    vertical-align:middle;
+  }
+  .saude-fit-table th{
+    font-size:9px!important;
+    letter-spacing:.01em;
+    text-transform:uppercase;
+  }
+  .saude-fit-table .chip{font-size:8.5px!important;padding:2px 5px!important;white-space:normal!important;line-height:1.05}
+  .saude-fit-table .planotag{font-size:8.5px!important;padding:2px 5px!important;line-height:1.05}
+  .saude-fit-table td:nth-child(14) div{font-size:9px!important;line-height:1.1!important;margin-top:2px!important}
+  .saude-fit-table td:last-child{padding-left:1px!important;padding-right:1px!important;text-align:center}
+  @media(max-width:1250px){
+    .saude-fit-table th,.saude-fit-table td{font-size:9px!important;padding:4px 3px!important}
+    .saude-fit-table th{font-size:8px!important}
+    .saude-fit-table .chip,.saude-fit-table .planotag{font-size:7.8px!important;padding:2px 4px!important}
+    .saude-fit-table td:nth-child(14) div{font-size:8px!important}
+  }
 </style>
 </head>
 <body class="booting">
@@ -4979,9 +5007,12 @@ function renderPlacasSemId(rowsFiltro){
     ? '<div class="card" style="margin-bottom:10px;padding:9px 13px;font-size:12px;color:var(--ink-2)">Filtro por KPI ativo · <b>'+visibleList.length.toLocaleString('pt-BR')+'</b> placa(s) exibida(s) · clique novamente no KPI selecionado ou em <b>Placas com movimento</b> para limpar.</div>'
     : '';
   box.innerHTML=banner+filtroInfo+
-    '<div class="tblwrap"><table style="min-width:1660px"><thead><tr>'+
-    '<th>Placa</th><th>Modelo</th><th>Operação</th><th>Movimento</th><th>Distância (Movimentação)</th><th>Consumo</th>'+
-    '<th>Eventos sem distância</th><th>Aderência ID</th><th>Alertas</th><th>Boletim Veículo</th><th>Boletim Motorista</th><th>Saúde câmera</th>'+
+    '<div class="tblwrap saude-fit-wrap"><table class="saude-fit-table"><colgroup>'+
+    '<col style="width:5.5%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:6%">'+
+    '<col style="width:6.5%"><col style="width:5.5%"><col style="width:5%"><col style="width:6%"><col style="width:6%"><col style="width:5.5%">'+
+    '<col style="width:7%"><col style="width:14%"><col style="width:1%"></colgroup><thead><tr>'+
+    '<th>Placa</th><th>Modelo</th><th>Operação</th><th>Movimento</th><th>Distância<br>(Movimentação)</th><th>Consumo</th>'+
+    '<th>Eventos sem<br>distância</th><th>Aderência<br>ID</th><th>Alertas</th><th>Boletim<br>Veículo</th><th>Boletim<br>Motorista</th><th>Saúde<br>câmera</th>'+
     '<th>Situação</th><th>Plano de ação</th><th></th></tr></thead><tbody>'+
     visibleList.map(r=>{const pl=PLANO_DEF[r.plano.cat]||PLANO_DEF.ok;return `<tr class="semidrow" data-placa="${r.placa}" title="ver a linha do tempo desta placa" style="cursor:pointer">
       <td class="tnum"><b>${r.placa}</b></td><td>${r.modelo||'—'}</td><td>${r.op||'—'}</td>
