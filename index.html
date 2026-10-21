@@ -954,8 +954,7 @@
     <button data-tab="media">Média</button>
     <button data-tab="tabela">Consolidado</button>
     <button data-tab="operacao">Operação por placa</button>
-    <button data-tab="saude">Saúde das câmeras</button>
-    <button data-tab="semid">Placas sem ID</button>
+    <button data-tab="semid">Saúde da câmera</button>
     <button data-tab="dados">Dados &amp; como usar</button>
   </nav>
 </header>
@@ -1181,20 +1180,12 @@
     <div id="opBox"></div>
   </section>
 
-  <!-- ===== PLACAS SEM IDENTIFICAÇÃO ===== -->
+  <!-- ===== SAÚDE DA CÂMERA / TELEMETRIA POR PLACA ===== -->
   <section class="view" id="view-semid">
     <div class="grid kpis" id="semidKpis"></div>
-    <div class="sec-title"><h2>Placas sem identificação do motorista</h2><span>veículos que se moveram mas a câmera não identificou o condutor — plano de ação</span>
+    <div class="sec-title"><h2>Saúde da câmera — diagnóstico por placa</h2><span>Movimentação é a fonte oficial de movimento, distância e combustível · cruzamento com os demais relatórios Trimble</span>
       <button class="btn" id="expSemId" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">⬇️ Exportar CSV</button></div>
     <div id="semidBox"></div>
-  </section>
-
-  <!-- ===== SAÚDE DAS CÂMERAS ===== -->
-  <section class="view" id="view-saude">
-    <div class="grid kpis" id="saudeKpis" style="grid-template-columns:repeat(5,1fr)"></div>
-    <div class="sec-title"><h2>Saúde das câmeras — plano de manutenção</h2><span>status do equipamento × identificação real (aderência) por cavalo</span>
-      <button class="btn" id="expSaude" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">⬇️ Exportar CSV</button></div>
-    <div id="saudeBox"></div>
   </section>
 
   <!-- ===== DADOS ===== -->
@@ -4695,7 +4686,7 @@ function renderAll(){
   if(rowViews.has(view)) viewKey=DATA_REV+'|M'+MULTAS_REV+'|'+fkey+(view==='semana'?'|R'+SEMANA_RANK_MODE:'')+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'')+(view==='linha'?'|C'+($('#fCondTimeline')?$('#fCondTimeline').value:''):'');
   else if(view==='motoristas') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+(rng?(rng.de+'|'+rng.ate):'*');
   else if(view==='semid') viewKey=DATA_REV+'|semid|'+fkey+'|'+CFG.sem;
-  else if(view==='saude'||view==='operacao') viewKey=DATA_REV+'|'+view+'|'+fkey;
+  else if(view==='operacao') viewKey=DATA_REV+'|'+view+'|'+fkey;
   else viewKey=DATA_REV+'|'+view;
   // Cache LRU do Resumo: limpar um filtro ou voltar a uma combinação já usada restaura o HTML pronto.
   if(view==='semana'&&SUMMARY_DOM_CACHE.has(viewKey)){
@@ -4727,65 +4718,11 @@ function renderAll(){
   else if(view==='media') renderMedia(rows);
   else if(view==='tabela') renderTable(rows);
   else if(view==='operacao') renderBatimento();
-  else if(view==='saude') renderSaude();
-  else if(view==='semid') renderPlacasSemId();
+  else if(view==='semid') renderPlacasSemId(filtered());
   else if(view==='ficha'&&fichaAtual) renderFicha();
   if(view!=='ficha'&&view!=='motoristas'&&view!=='trat') VIEW_RENDER_KEYS[view]=viewKey;
   const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT; VIEW_BADGE_COUNTS[view]=n; bd.textContent=n>999?'999+':n;}
   atualizaDataMode();
-}
-let SAUDE_ROWS=[];
-function renderSaude(){
-  const kbox=$('#saudeKpis'), box=$('#saudeBox');
-  if(!SAUDE){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Carregue o Excel de <b>Saúde das câmeras</b> na aba <b>Dados</b> (aba BASE: CAVALO, OP, STATUS, FUNCIONALDADE) para ver o plano de manutenção.</div>'; SAUDE_ROWS=[]; return; }
-  // resumo por placa já é pré-calculado no build; evita varrer todos os registros ao trocar de aba.
-  const idBy=PLATE_RECORD_SUMMARY||{};
-  const temRecs=RECORDS.length>0;
-  const rk={telemetria:0,critico:1,atencao:2,pendente:3,conforme:4};
-  const pf=placasNoFiltro();   // respeita os filtros do topo (operação/período/motorista/busca)
-  const rows=Object.keys(SAUDE).filter(pk=>!pf||pf.has(pk)).map(pk=>{ const s=SAUDE[pk]; const f=camFarol(s.func,s.status); const id=idBy[pk];
-    const dias=id?id.dias.size:0;
-    const pm=(typeof PLACA_MOV!=='undefined'&&PLACA_MOV&&PLACA_MOV[pk]); const ader= pm&&pm.tot? Math.round(pm.idn/pm.tot*100) : (id&&id.aderN?Math.round(id.aderSum/id.aderN):null);   // ponderado (PLACA_MOV/BDV) > média
-    const idStatus = !temRecs ? '— (sem movimentação carregada)' : (dias>0? ('identificando · '+dias+' dia'+(dias>1?'s':'')) : 'sem identificação no período');
-    const idCls = !temRecs ? 'pend' : (dias>0?'ok':'bad');
-    const tele=telemetriaDaPlaca(pk);
-    let acao, acaoCls;
-    if(tele.semTelemetria){ acao='NÃO GERANDO TELEMETRIA'; acaoCls='telemetria'; }
-    else if(f.cls==='bad'){ acao='Manutenção (câmera)'; acaoCls='critico'; }
-    else if(f.cls==='warn'){ acao='Em manutenção/agendada'; acaoCls='atencao'; }
-    else if(f.cls==='pend'){ acao='Sem câmera'; acaoCls='pendente'; }
-    else if(f.cls==='ok' && temRecs && dias===0){ acao='Verificar — OK mas sem identificar'; acaoCls='critico'; }
-    else { acao='OK'; acaoCls='conforme'; }
-    return {placa:pk, op:s.op, func:s.func, farol:f, dias, ader, idStatus, idCls, acao, acaoCls, movMin:tele.movMin, kmBdv:tele.kmBdv, temBdv:tele.temBdv};
-  }).sort((a,b)=> (rk[a.acaoCls]-rk[b.acaoCls]) || a.placa.localeCompare(b.placa));
-  SAUDE_ROWS=rows;
-  let ok=0,prob=0,semId=0,acionar=0; for(let i=0;i<rows.length;i++){const r=rows[i];if(r.farol.cls==='ok')ok++;if(r.farol.cls==='bad')prob++;if(r.farol.cls==='ok'&&temRecs&&r.dias===0)semId++;if(r.acaoCls==='critico'||r.acaoCls==='telemetria')acionar++;}
-  const total=rows.length;
-  const K=[
-    {lab:'Cavalos c/ câmera',val:total,sub:'na base de saúde',ac:'var(--s2)'},
-    {lab:'Câmera OK',val:ok,sub:'funcionalidade OK',ac:'var(--good)'},
-    {lab:'Câmera com problema',val:prob,sub:'manipulada/obstruída/sem sinal',ac:'var(--critical)'},
-    {lab:'OK mas sem identificar',val:semId,sub:temRecs?'investigar no período':'plugar movimentação',ac:'var(--warning)'},
-    {lab:'Acionar manutenção',val:acionar,sub:'prioridade',ac:'var(--serious)'},
-  ];
-  kbox.innerHTML=K.map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
-  const chip={telemetria:'<span class="chip critico">Não gerando telemetria</span>',critico:'<span class="chip critico">Acionar</span>',atencao:'<span class="chip atencao">Em manut.</span>',pendente:'<span class="chip pendente">Sem câmera</span>',conforme:'<span class="chip conforme">OK</span>'};
-  const cor=c=>c==='ok'?'var(--good-ink)':c==='bad'?'var(--crit-ink)':c==='warn'?'var(--serious)':'var(--muted)';
-  box.innerHTML='<div class="tblwrap"><table style="min-width:1040px"><thead><tr><th>Cavalo</th><th>OP</th><th>Funcionalidade</th><th>Identificação (dados)</th><th>Movimento (rel.)</th><th>Distância Placa ID</th><th>Aderência</th><th>Ação</th><th></th></tr></thead><tbody>'+
-    rows.map(r=>`<tr class="sauderow" data-placa="${r.placa}" title="ver a linha do tempo desta placa" style="cursor:pointer"><td class="tnum">${r.placa}</td><td>${r.op||'—'}</td>
-      <td><span style="color:${cor(r.farol.cls)}">${r.func||'—'}</span></td>
-      <td style="color:${r.idCls==='ok'?'var(--good-ink)':r.idCls==='bad'?'var(--crit-ink)':'var(--muted)'}">${r.idStatus}</td>
-      <td class="tnum">${r.movMin>0?hDec(r.movMin):'—'}</td><td class="tnum" style="color:${r.acaoCls==='telemetria'?'var(--crit-ink)':'inherit'}">${r.temBdv?Math.round(r.kmBdv).toLocaleString('pt-BR')+' km':'—'}</td>
-      <td class="tnum">${r.ader==null?'—':r.ader+'%'}</td>
-      <td>${chip[r.acaoCls]||''}</td><td style="color:var(--gold-2)">↗</td></tr>`).join('')+
-    '</tbody></table></div>';
-}
-function exportSaude(){
-  if(!SAUDE_ROWS.length){ toast('Nada para exportar'); return; }
-  const head=['Cavalo','OP','Funcionalidade','Identificacao','Dias_identificado','Movimento_relatorio_min','Distancia_Placa_ID_km','Aderencia_pct','Acao'];
-  const lines=[head.join(';')];
-  SAUDE_ROWS.forEach(r=>lines.push([r.placa,r.op,'"'+r.func+'"','"'+r.idStatus+'"',r.dias,Math.round(r.movMin||0),Math.round(r.kmBdv||0),(r.ader==null?'':r.ader),'"'+r.acao+'"'].join(';')));
-  baixarCsv(lines,'saude_cameras.csv');
 }
 // diagnóstico: o relatório de movimentação traz o movimento SEM identificação? (senão a aderência fica ~100%)
 function identCoverageWarning(){
@@ -4854,97 +4791,208 @@ function renderAderencia(rows){
     </button>`; }).join('');
 }
 let SEMID_ROWS=[];
-// Diagnóstico de telemetria por placa. A Movimentação é a evidência de que o veículo realmente
-// esteve em condução; o Boletim do Veículo/Placa ID é a fonte de DISTÂNCIA PERCORRIDA.
-// Se há movimento no relatório de Movimentação e não há KM no Boletim, sinaliza explicitamente
-// "NÃO GERANDO TELEMETRIA" em vez de tratar o caso apenas como problema de identificação.
-let MOV_PLACA_DIAG_REV=-1, MOV_PLACA_DIAG=null;
-function movimentoPorPlacaDiag(){
-  if(MOV_PLACA_DIAG_REV===DATA_REV && MOV_PLACA_DIAG) return MOV_PLACA_DIAG;
+
+// ===== SAÚDE DA CÂMERA / TELEMETRIA POR PLACA =====
+// FONTE OFICIAL: relatório Movimentação + Identificação da Trimble.
+// As próprias linhas de "MOVIMENTO" carregam duração, DISTÂNCIA e CONSUMO.
+// Regras de qualidade:
+//   • movimento com distância <= 0 = inconsistência de telemetria;
+//   • consumo > 0 com distância <= 0 = inconsistência crítica;
+//   • distância > 0 com consumo <= 0 = possível falha de combustível/CAN.
+// Os demais relatórios Trimble são evidências complementares e NÃO substituem a distância da Movimentação.
+let MOV_PLACA_DIAG_REV=-1, MOV_PLACA_DIAG_KEY='', MOV_PLACA_DIAG=null;
+
+function movimentoPorPlacaDiag(rows){
+  rows=rows||filtered();
+  const key=DATA_REV+'|'+filterStateKey();
+  if(MOV_PLACA_DIAG_REV===DATA_REV && MOV_PLACA_DIAG_KEY===key && MOV_PLACA_DIAG) return MOV_PLACA_DIAG;
   const out=Object.create(null);
-  for(const k in (MOV_TOT||{})){
-    const i=k.indexOf('|'); if(i<=0) continue;
-    const pk=k.slice(0,i), d=k.slice(i+1), min=Math.max(0,+MOV_TOT[k]||0);
-    if(min<=0) continue;
-    const g=(out[pk]=out[pk]||{min:0,dias:0,ult:''}); g.min+=min; g.dias++; if(d>g.ult)g.ult=d;
+
+  for(const r of (rows||[])){
+    const nome=String(r.motoristaEscala||'').trim(), nn=norm(nome);
+    for(const s of (r.movimento||[])){
+      const pk=placaBR(s.placa||r.placa||''); if(!pk)continue;
+      let ini=toMin(s.ini), fim=toMin(s.fim);
+      if(ini==null||fim==null)continue;
+      if(fim<ini)fim+=1440;
+      const dur=Math.max(0,fim-ini);
+      if(dur<=0)continue; // só evento real de movimento
+      const km=Math.max(0,+s.km||0), litros=Math.max(0,+s.litros||0);
+      const g=(out[pk]=out[pk]||{
+        min:0,km:0,litros:0,eventos:0,eventosSemKm:0,litrosSemKm:0,kmSemLitros:0,
+        dias:new Set(),ult:'',motoristas:new Set()
+      });
+      g.min+=dur; g.km+=km; g.litros+=litros; g.eventos++;
+      if(km<=0)g.eventosSemKm++;
+      if(litros>0 && km<=0)g.litrosSemKm++;
+      if(km>0 && litros<=0)g.kmSemLitros++;
+      if(r.data){g.dias.add(r.data);if(r.data>g.ult)g.ult=r.data;}
+      if(nn)g.motoristas.add(nn);
+    }
   }
-  MOV_PLACA_DIAG_REV=DATA_REV; MOV_PLACA_DIAG=out; return out;
+
+  MOV_PLACA_DIAG_REV=DATA_REV; MOV_PLACA_DIAG_KEY=key; MOV_PLACA_DIAG=out;
+  return out;
 }
-function telemetriaDaPlaca(pk){
-  const mov=movimentoPorPlacaDiag()[pk]||null, bdv=BDV&&BDV[pk]?BDV[pk]:null;
-  const movMin=mov?mov.min:0, kmBdv=bdv?Math.max(0,+bdv.km||0):0;
-  const temFonteBdv=!!(BDV&&Object.keys(BDV).length);
+
+function telemetriaDaPlaca(pk, rows){
+  const mov=movimentoPorPlacaDiag(rows)[placaKey(pk)]||null;
+  if(!mov) return {semTelemetria:false,parcial:false,consumoSemDist:false,kmSemConsumo:false,movMin:0,km:0,litros:0,eventos:0,eventosSemKm:0,ultMov:''};
+  const semTodos=mov.eventos>0 && mov.eventosSemKm===mov.eventos;
   return {
-    semTelemetria:!!(temFonteBdv && movMin>0 && (!bdv || kmBdv<=0)),
-    movMin, kmBdv, temBdv:!!bdv, ultMov:mov&&mov.ult||''
+    semTelemetria:semTodos,
+    parcial:mov.eventosSemKm>0 && !semTodos,
+    consumoSemDist:mov.litrosSemKm>0,
+    kmSemConsumo:mov.kmSemLitros>0,
+    movMin:mov.min, km:mov.km, litros:mov.litros, eventos:mov.eventos,
+    eventosSemKm:mov.eventosSemKm, litrosSemKm:mov.litrosSemKm, kmSemLitros:mov.kmSemLitros,
+    dias:mov.dias?mov.dias.size:0, motoristas:mov.motoristas||new Set(), ultMov:mov.ult||''
   };
 }
-// PLANO DE AÇÃO por placa: cruza telemetria × saúde da câmera × identificação.
+
 const PLANO_DEF={
   tele :{ic:'📡',lab:'Não gerando telemetria',cor:'var(--critical)',ink:'var(--crit-ink)'},
+  telep:{ic:'📡',lab:'Telemetria parcial',cor:'var(--critical)',ink:'var(--crit-ink)'},
+  fuel :{ic:'⛽',lab:'Falha consumo/CAN',cor:'var(--warning)',ink:'var(--serious)'},
   equip:{ic:'🔧',lab:'Manutenção de equipamento',cor:'var(--critical)',ink:'var(--crit-ink)'},
   sist :{ic:'🧩',lab:'Ação sistêmica',cor:'var(--warning)',ink:'var(--serious)'},
-  verif:{ic:'❓',lab:'Verificar câmera',cor:'var(--pend)',ink:'var(--pend-ink)'}
+  verif:{ic:'❓',lab:'Verificar câmera',cor:'var(--pend)',ink:'var(--pend-ink)'},
+  ok   :{ic:'✓',lab:'Sem inconsistência',cor:'var(--good)',ink:'var(--good-ink)'}
 };
-function planoDaPlaca(cam, cls){
-  if(cls==='telemetria') return {cat:'tele', txt:'Há movimento no relatório da Trimble, porém o Boletim do Veículo/Placa ID não está gerando distância percorrida. Acionar Telemetria/Trimble e validar equipamento, GPS/odômetro e integração antes de avaliar média ou aderência por KM.'};
+
+function planoDaPlaca(cam, cls, tele){
+  if(tele&&tele.consumoSemDist) return {cat:'tele',txt:'Há linha(s) de MOVIMENTO com consumo de combustível, mas sem distância. Isso é inconsistente na própria telemetria Trimble e deve ser tratado com prioridade.'};
+  if(cls==='telemetria') return {cat:'tele',txt:'Há MOVIMENTO no relatório da Trimble, porém todas as linhas analisadas estão sem distância. Acionar Telemetria/Trimble e validar equipamento/GPS/odômetro/CAN.'};
+  if(cls==='telemetria_parcial') return {cat:'telep',txt:'A placa registra distância em parte do período, porém possui linha(s) de MOVIMENTO sem distância. Validar perda/intermitência de telemetria com a Trimble.'};
+  if(cls==='fuel') return {cat:'fuel',txt:'Há distância registrada na Movimentação, porém existe(m) linha(s) sem consumo. Validar leitura de combustível/CAN.'};
   const c=norm(cam);
-  const problema = c && /(SEM SINAL|OBSTRU|MANIPULAD|SEM VIDEO|DESCONEX|DEFEIT|MANUTEN|AVARIA|DANIFICAD|QUEBRAD|DESLIGAD|INOPERANT|SEM CAMERA|SEM IMAGEM)/.test(c);
-  if(problema) return {cat:'equip', txt:'Acionar manutenção/Trimble — câmera "'+cam+'". Sem o equipamento, não há identificação.'};
-  if(!c) return {cat:'verif', txt:'Sem status de câmera no controle de saúde — confirmar se há câmera instalada e incluir a placa no controle; se tiver, tratar como sistêmico.'};
-  if(cls==='critico') return {cat:'sist', txt:'Câmera reportada OK mas 0 identificação → sistêmico: revisar cadastro/foto do motorista, vigência e posição da lente; validar leitura com a Trimble.'};
-  return {cat:'sist', txt:'Identificação intermitente → revisar cadastro dos motoristas frequentes desta placa e limpeza/posição da câmera.'};
+  const problema=c&&/(SEM SINAL|OBSTRU|MANIPULAD|SEM VIDEO|DESCONEX|DEFEIT|MANUTEN|AVARIA|DANIFICAD|QUEBRAD|DESLIGAD|INOPERANT|SEM CAMERA|SEM IMAGEM)/.test(c);
+  if(problema)return {cat:'equip',txt:'Acionar manutenção/Trimble — câmera "'+cam+'".'};
+  if(cls==='critico')return {cat:'sist',txt:'Telemetria de movimento está coerente, mas a identificação da câmera está crítica. Revisar câmera, cadastro/foto e posicionamento.'};
+  if(!c)return {cat:'verif',txt:'Sem status no controle de saúde da câmera. Confirmar equipamento instalado e situação atual.'};
+  return {cat:'ok',txt:'Sem inconsistência de movimento/distância/consumo no período selecionado.'};
 }
-function renderPlacasSemId(){
+
+function _srcChip(ok,yes='Presente',no='Ausente'){
+  return ok?'<span class="chip conforme">'+yes+'</span>':'<span class="chip pendente">'+no+'</span>';
+}
+
+function renderPlacasSemId(rowsFiltro){
   const kbox=$('#semidKpis'), box=$('#semidBox');
-  if(!PLACA_MOV || !Object.keys(PLACA_MOV).length){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Carregue a <b>Movimentação</b> na aba <b>Dados</b> para listar as placas que se moveram sem identificação do condutor. (precisa que o relatório traga o movimento mesmo sem motorista)</div>'; SEMID_ROWS=[]; return; }
-  const rk={telemetria:0,critico:1,atencao:2};
-  const opF=$('#fOp').value;
-  const pf=placasNoFiltro();   // respeita TODOS os filtros do topo (operação/período/motorista/busca)
-  const rows=Object.keys(PLACA_MOV).filter(pk=> !pf||pf.has(pk)).map(pk=>{ const g=PLACA_MOV[pk];
-    const ader = g.tot>0? Math.round(g.idn/g.tot*100) : null;
-    const op = operacaoDaPlaca(pk) || (PLACA_UO&&PLACA_UO[pk]&&PLACA_UO[pk].uoCurta) || '—';
-    const cam = camDaPlaca(pk), tele=telemetriaDaPlaca(pk);
-    let status, cls;
-    if(tele.semTelemetria){ status='NÃO GERANDO TELEMETRIA'; cls='telemetria'; }
-    else if(g.idn===0){ status='NENHUM condutor identificado'; cls='critico'; }
-    else if(ader!=null && ader<CFG.sem){ status='Identificação abaixo do mínimo'; cls='atencao'; }
-    else { status='OK'; cls='ok'; }
-    return {placa:pk, op, dias:g.dias, diasId:g.diasId, ader, cam, status, cls, movMin:tele.movMin, kmBdv:tele.kmBdv, temBdv:tele.temBdv, plano:planoDaPlaca(cam,cls), ult:g.ult};
-  }).filter(r=>r.cls!=='ok').sort((a,b)=> (rk[a.cls]-rk[b.cls]) || (a.ader||0)-(b.ader||0) || b.dias-a.dias);
-  SEMID_ROWS=rows;
-  const totPlacas=Object.keys(PLACA_MOV).filter(pk=> !pf||pf.has(pk)).length, semNenhum=rows.filter(r=>r.cls==='critico').length, baixa=rows.filter(r=>r.cls==='atencao').length;
-  const nTele=rows.filter(r=>r.cls==='telemetria').length, nEquip=rows.filter(r=>r.plano.cat==='equip').length, nSist=rows.filter(r=>r.plano.cat==='sist').length, nVerif=rows.filter(r=>r.plano.cat==='verif').length;
+  const fr=rowsFiltro||filtered();
+  const movBy=movimentoPorPlacaDiag(fr), placas=Object.keys(movBy);
+  if(!placas.length){
+    kbox.innerHTML='';
+    box.innerHTML='<div class="empty">Não há eventos de <b>MOVIMENTO</b> no recorte atual. A Saúde da câmera usa a Movimentação da Trimble como fonte oficial de movimento, distância e consumo.</div>';
+    SEMID_ROWS=[]; return;
+  }
+
+  const pf=placasNoFiltro();
+  const rk={critico:0,telemetria:1,telemetria_parcial:2,fuel:3,camera:4,atencao:5,ok:9};
+  const list=placas.filter(pk=>!pf||pf.has(pk)).map(pk=>{
+    const m=movBy[pk], tele=telemetriaDaPlaca(pk,fr);
+    const pm=PLACA_MOV&&PLACA_MOV[pk]?PLACA_MOV[pk]:null;
+    const ader=pm&&pm.tot?Math.round(pm.idn/pm.tot*100):null;
+    const cam=camDaPlaca(pk);
+    const cf=(SAUDE&&SAUDE[pk])?camFarol(SAUDE[pk].func,SAUDE[pk].status):{cls:'pend'};
+    const tms=TMS&&TMS[pk]?TMS[pk]:null;
+    const modelo=tms?[tms.marca,tms.modelo].filter(Boolean).join(' '):'';
+    const op=operacaoDaPlaca(pk)||(tms&&tms.centro)||'—';
+
+    let status='OK',cls='ok';
+    if(tele.consumoSemDist){status='CONSUMO SEM DISTÂNCIA';cls='critico';}
+    else if(tele.semTelemetria){status='NÃO GERANDO TELEMETRIA';cls='telemetria';}
+    else if(tele.parcial){status='TELEMETRIA PARCIAL — MOVIMENTO SEM DISTÂNCIA';cls='telemetria_parcial';}
+    else if(tele.kmSemConsumo){status='POSSÍVEL FALHA DE CONSUMO/CAN';cls='fuel';}
+    else if(cf.cls==='bad'){status='PROBLEMA DE CÂMERA';cls='camera';}
+    else if(ader!=null&&ader<CFG.sem){status=ader===0?'SEM IDENTIFICAÇÃO':'IDENTIFICAÇÃO ABAIXO DO MÍNIMO';cls=ader===0?'critico':'atencao';}
+
+    const temAlertas=!!(PLACA_UO&&PLACA_UO[pk]);
+    const temBdv=!!(BDV&&BDV[pk]);
+    const temSaude=!!(SAUDE&&SAUDE[pk]);
+    const temBolMot=!!(BOL&&tele.motoristas&&[...tele.motoristas].some(nn=>BOL[nn]));
+    const plano=planoDaPlaca(cam,cls,tele);
+
+    return {
+      placa:pk,modelo,op,km:tele.km,litros:tele.litros,movMin:tele.movMin,eventos:tele.eventos,
+      eventosSemKm:tele.eventosSemKm,litrosSemKm:tele.litrosSemKm,kmSemLitros:tele.kmSemLitros,
+      dias:tele.dias||0,ader,cam,status,cls,plano,ult:tele.ultMov,
+      temAlertas,temBdv,temSaude,temBolMot
+    };
+  }).sort((a,b)=>(rk[a.cls]-rk[b.cls])||b.eventosSemKm-a.eventosSemKm||a.placa.localeCompare(b.placa));
+
+  SEMID_ROWS=list;
+  const nTele=list.filter(r=>r.cls==='telemetria'||r.cls==='telemetria_parcial'||r.cls==='critico'&&r.litrosSemKm>0).length;
+  const nCrit=list.filter(r=>r.litrosSemKm>0).length;
+  const nFuel=list.filter(r=>r.cls==='fuel').length;
+  const nCam=list.filter(r=>r.cls==='camera'||r.cls==='atencao'||(r.cls==='critico'&&!r.litrosSemKm)).length;
+  const nOk=list.filter(r=>r.cls==='ok').length;
+
   const K=[
-    {lab:'Placas que se moveram',val:totPlacas.toLocaleString('pt-BR'),sub:(opF?opF:'no período'),ac:'var(--s2)'},
-    {lab:'📡 Não gerando telemetria',val:nTele,sub:'movimento existe · distância não',ac:'var(--critical)'},
-    {lab:'🔧 Manutenção equip.',val:nEquip,sub:'câmera c/ falha reportada',ac:'var(--critical)'},
-    {lab:'🧩 Ação sistêmica',val:nSist,sub:'cadastro / foto / posição',ac:'var(--warning)'},
-    {lab:'❓ Verificar câmera',val:nVerif,sub:'sem status no controle',ac:'var(--pend)'},
+    {lab:'Placas com movimento',val:list.length,sub:'no período selecionado',ac:'var(--s2)'},
+    {lab:'📡 Falha de telemetria',val:nTele,sub:'movimento sem distância',ac:'var(--critical)'},
+    {lab:'⚠ Consumo sem distância',val:nCrit,sub:'inconsistência crítica',ac:'var(--critical)'},
+    {lab:'⛽ Possível falha CAN',val:nFuel,sub:'distância sem consumo',ac:'var(--warning)'},
+    {lab:'📷 Câmera / identificação',val:nCam,sub:'problema complementar',ac:'var(--warning)'},
+    {lab:'✓ Sem inconsistência',val:nOk,sub:'movimento/distância/consumo',ac:'var(--good)'}
   ];
   kbox.innerHTML=K.map(k=>`<div class="card kpi"><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
-  if(!rows.length){ box.innerHTML='<div class="empty">🎉 '+(opF?'Nenhuma placa da operação <b>'+opF+'</b> ':'Todas as placas que se moveram tiveram condutor identificado dentro do mínimo.')+(opF?'para ação — tudo identificado dentro do mínimo.':'')+'</div>'; return; }
-  const chip={telemetria:'<span class="chip critico">Não gerando telemetria</span>',critico:'<span class="chip critico">Sem ID</span>',atencao:'<span class="chip atencao">ID baixa</span>'};
-  // banner de PLANO DE AÇÃO — o que fazer, priorizado
-  const planoBanner = `<div class="card planobox" style="margin-bottom:12px">
-    <div class="pb-h">📋 Plano de ação${opF?' — '+opF:''} · ${rows.length} placa(s)</div>
+
+  const chip=r=>{
+    if(r.cls==='ok')return '<span class="chip conforme">OK</span>';
+    if(r.cls==='fuel')return '<span class="chip atencao">Consumo/CAN</span>';
+    if(r.cls==='atencao')return '<span class="chip atencao">ID baixa</span>';
+    if(r.cls==='camera')return '<span class="chip critico">Câmera</span>';
+    if(r.cls==='telemetria_parcial')return '<span class="chip critico">Telemetria parcial</span>';
+    if(r.litrosSemKm>0)return '<span class="chip critico">Consumo sem distância</span>';
+    if(r.cls==='telemetria')return '<span class="chip critico">Sem telemetria</span>';
+    return '<span class="chip critico">Ação</span>';
+  };
+
+  const problems=list.filter(r=>r.cls!=='ok').length;
+  const banner=`<div class="card planobox" style="margin-bottom:12px">
+    <div class="pb-h">Diagnóstico Trimble · ${problems} placa(s) com ponto de atenção</div>
     <div class="pb-grid">
-      <div class="pb-cell equip"><b>📡 ${nTele}</b> Não gerando telemetria<small>há movimento no relatório, porém a Placa ID/Boletim do Veículo não gera distância → acionar Telemetria/Trimble</small></div>
-      <div class="pb-cell equip"><b>🔧 ${nEquip}</b> Manutenção de equipamento<small>câmera sem sinal/obstruída/manipulada/em manutenção → abrir chamado p/ manutenção ou Trimble</small></div>
-      <div class="pb-cell sist"><b>🧩 ${nSist}</b> Ação sistêmica<small>câmera OK mas não identifica → cadastro/foto do motorista, vigência e posição da lente</small></div>
-      <div class="pb-cell verif"><b>❓ ${nVerif}</b> Verificar câmera<small>placa sem status no controle de saúde → confirmar se há equipamento instalado</small></div>
+      <div class="pb-cell equip"><b>📡 ${nTele}</b> Movimento sem distância<small>a distância oficial vem da própria Movimentação; qualquer evento de movimento sem KM é inconsistente</small></div>
+      <div class="pb-cell equip"><b>⚠ ${nCrit}</b> Consumo sem distância<small>se houve litros consumidos, obrigatoriamente deve existir distância no mesmo evento</small></div>
+      <div class="pb-cell sist"><b>⛽ ${nFuel}</b> Distância sem consumo<small>possível ausência/intermitência da leitura de combustível/CAN</small></div>
+      <div class="pb-cell verif"><b>📷 ${nCam}</b> Câmera / identificação<small>telemetria pode estar normal, mas câmera ou identificação exige ação separada</small></div>
     </div></div>`;
-  box.innerHTML=identCoverageWarning()+planoBanner+(opF?'<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">Filtrado por operação <b>'+opF+'</b> · clique numa placa para ver a linha do tempo dela</div>':'')+
-    '<div class="tblwrap"><table style="min-width:1180px"><thead><tr><th>Placa</th><th>Operação</th><th>Dias moveu</th><th>Dias c/ ID</th><th>Movimento (rel.)</th><th>Distância Placa ID</th><th>Aderência</th><th>Câmera (saúde)</th><th>Situação</th><th>Plano de ação — o que fazer</th><th></th></tr></thead><tbody>'+
-    rows.map(r=>{ const pl=PLANO_DEF[r.plano.cat]; return `<tr class="semidrow" data-placa="${r.placa}" title="ver a linha do tempo desta placa" style="cursor:pointer"><td class="tnum">${r.placa}</td><td>${r.op}</td><td class="tnum">${r.dias}</td><td class="tnum">${r.diasId}</td>
-      <td class="tnum">${r.movMin>0?hDec(r.movMin):'—'}</td><td class="tnum" style="color:${r.cls==='telemetria'?'var(--crit-ink)':'inherit'}">${r.temBdv?Math.round(r.kmBdv).toLocaleString('pt-BR')+' km':'—'}</td>
-      <td class="tnum" style="color:${r.ader===0?'var(--crit-ink)':(r.ader<CFG.sem?'var(--serious)':'inherit')}">${r.ader==null?'—':r.ader+'%'}</td>
-      <td>${r.cam||'—'}</td><td>${chip[r.cls]||''}</td>
-      <td style="max-width:360px"><span class="planotag" style="background:color-mix(in srgb,${pl.cor} 15%,transparent);color:${pl.ink};border:1px solid color-mix(in srgb,${pl.cor} 35%,transparent)">${pl.ic} ${pl.lab}</span><div style="font-size:11.5px;color:var(--ink-2);margin-top:3px;white-space:normal">${r.plano.txt}</div></td>
-      <td style="color:var(--gold-2)">↗</td></tr>`; }).join('')+
+
+  box.innerHTML=banner+
+    '<div class="tblwrap"><table style="min-width:1660px"><thead><tr>'+
+    '<th>Placa</th><th>Modelo</th><th>Operação</th><th>Movimento</th><th>Distância (Movimentação)</th><th>Consumo</th>'+
+    '<th>Eventos sem distância</th><th>Aderência ID</th><th>Alertas</th><th>Boletim Veículo</th><th>Boletim Motorista</th><th>Saúde câmera</th>'+
+    '<th>Situação</th><th>Plano de ação</th><th></th></tr></thead><tbody>'+
+    list.map(r=>{const pl=PLANO_DEF[r.plano.cat]||PLANO_DEF.ok;return `<tr class="semidrow" data-placa="${r.placa}" title="ver a linha do tempo desta placa" style="cursor:pointer">
+      <td class="tnum"><b>${r.placa}</b></td><td>${r.modelo||'—'}</td><td>${r.op||'—'}</td>
+      <td class="tnum">${r.movMin>0?hDec(r.movMin):'—'} · ${r.eventos} evt</td>
+      <td class="tnum" style="color:${r.eventosSemKm?'var(--crit-ink)':'inherit'}">${r.km.toLocaleString('pt-BR',{maximumFractionDigits:1})} km</td>
+      <td class="tnum">${r.litros.toLocaleString('pt-BR',{maximumFractionDigits:1})} L</td>
+      <td class="tnum" style="color:${r.eventosSemKm?'var(--crit-ink)':'var(--good-ink)'}">${r.eventosSemKm}</td>
+      <td class="tnum">${r.ader==null?'—':r.ader+'%'}</td>
+      <td>${_srcChip(r.temAlertas)}</td><td>${_srcChip(r.temBdv)}</td><td>${_srcChip(r.temBolMot)}</td>
+      <td>${r.temSaude?_srcChip(true,'Base saúde',''):_srcChip(false,'','Sem base')}</td>
+      <td>${chip(r)}<div style="font-size:10.5px;color:var(--muted);margin-top:3px">${r.status}</div></td>
+      <td style="max-width:330px"><span class="planotag" style="background:color-mix(in srgb,${pl.cor} 15%,transparent);color:${pl.ink};border:1px solid color-mix(in srgb,${pl.cor} 35%,transparent)">${pl.ic} ${pl.lab}</span><div style="font-size:11.5px;color:var(--ink-2);margin-top:3px;white-space:normal">${r.plano.txt}</div></td>
+      <td style="color:var(--gold-2)">↗</td></tr>`;}).join('')+
     '</tbody></table></div>';
 }
-function exportSemId(){ if(!SEMID_ROWS.length){toast('Nada para exportar');return;} const head=['Placa','Operacao','Dias_moveu','Dias_com_ID','Movimento_relatorio_min','Distancia_Placa_ID_km','Aderencia_pct','Camera_saude','Situacao','Categoria_plano','Plano_de_acao','Ultima_mov']; const lines=[head.join(';')]; SEMID_ROWS.forEach(r=>lines.push([r.placa,'"'+r.op+'"',r.dias,r.diasId,Math.round(r.movMin||0),Math.round(r.kmBdv||0),(r.ader==null?'':r.ader),'"'+(r.cam||'')+'"','"'+r.status+'"','"'+PLANO_DEF[r.plano.cat].lab+'"','"'+r.plano.txt.replace(/"/g,'""')+'"',r.ult].join(';'))); baixarCsv(lines,'plano_acao_placas.csv'); }
+
+function exportSemId(){
+  if(!SEMID_ROWS.length){toast('Nada para exportar');return;}
+  const head=['Placa','Modelo','Operacao','Movimento_min','Distancia_Movimentacao_km','Consumo_litros','Eventos_movimento','Eventos_sem_distancia','Consumo_sem_distancia','Distancia_sem_consumo','Aderencia_ID_pct','Alertas_Trimble','Boletim_Veiculo','Boletim_Motorista','Saude_Camera','Situacao','Plano_de_acao','Ultimo_movimento'];
+  const lines=[head.join(';')];
+  SEMID_ROWS.forEach(r=>lines.push([
+    r.placa,'"'+(r.modelo||'').replace(/"/g,'""')+'"','"'+(r.op||'').replace(/"/g,'""')+'"',
+    Math.round(r.movMin||0),(r.km||0).toFixed(2).replace('.',','),(r.litros||0).toFixed(2).replace('.',','),
+    r.eventos||0,r.eventosSemKm||0,r.litrosSemKm||0,r.kmSemLitros||0,(r.ader==null?'':r.ader),
+    r.temAlertas?'SIM':'NAO',r.temBdv?'SIM':'NAO',r.temBolMot?'SIM':'NAO',r.temSaude?'SIM':'NAO',
+    '"'+r.status.replace(/"/g,'""')+'"','"'+r.plano.txt.replace(/"/g,'""')+'"',r.ult||''
+  ].join(';')));
+  baixarCsv(lines,'saude_camera_telemetria_placas.csv');
+}
+
 function renderBatimento(){
   const kbox=$('#opKpis'), box=$('#opBox'); let rows=batimentoRows();
   if(!rows){ kbox.innerHTML=''; box.innerHTML='<div class="empty">Carregue os relatórios de <b>Alertas</b> (dá a UO da Trimble por placa) e do <b>TMS</b> (centro de resultado) na aba <b>Dados</b> para ver o batimento de operação.</div>'; return; }
@@ -7377,9 +7425,8 @@ $('#aderBox').addEventListener('click',e=>{
 $('#aderKpis').addEventListener('click',e=>{ if(e.target.closest('[data-goplacas-all]')){ const st=readTopFilterState(); st.fBusca=''; setTabFilterState('semid',st,true); goTab('semid'); } });
 // helper: focar uma placa na Linha do tempo (modo placa)
 function focusPlaca(placa){ const src=readTopFilterState(), st=emptyTopFilterState(); st.fOp=src.fOp||''; st.fBusca=placa||''; setTabFilterState('linha',st,true); goTab('linha'); }
-// clicar numa placa em "Placas sem ID" / Saúde / Operação por placa → Linha do tempo daquela placa
+// clicar numa placa em Saúde da câmera / Operação por placa → Linha do tempo daquela placa
 $('#semidBox').addEventListener('click',e=>{ const tr=e.target.closest('.semidrow'); if(tr) focusPlaca(tr.dataset.placa); });
-$('#saudeBox').addEventListener('click',e=>{ const tr=e.target.closest('.sauderow'); if(tr) focusPlaca(tr.dataset.placa); });
 $('#opBox').addEventListener('click',e=>{ const tr=e.target.closest('.oprow'); if(tr) focusPlaca(tr.dataset.placa); });
 // clicar numa linha do Consolidado → Linha do tempo daquele motorista+dia
 $('#tblBody').addEventListener('click',e=>{ const tr=e.target.closest('.tblrow'); if(tr) focusRecord(decodeURIComponent(tr.dataset.mot||''), tr.dataset.dia); });
@@ -7476,7 +7523,6 @@ $('#expCsv').onclick=exportCsv;
 $('#expSemana').onclick=exportSemana;
 $('#expOper').onclick=exportOperacao;
 $('#expMedia').onclick=exportMedia;
-$('#expSaude').onclick=exportSaude;
 $('#expSemId').onclick=exportSemId;
 // config
 function bindCfg(id,key){ const el=$(id); el.value=CFG[key]; el.addEventListener('input',()=>{ CFG[key]=parseFloat(el.value)||0; saveCfg(); build(true); fillFilters(); renderAll(); }); }
