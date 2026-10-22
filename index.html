@@ -3724,7 +3724,7 @@ function renderFicha(){
 
     ${fichaEvolTratativas(nome)}
 
-    <div class="sec-title"><h2>Pontos de atenção × pontos fortes</h2><span>${periodoLabel()} · resumo executivo (o mesmo do PDF)</span></div>
+    <div class="sec-title" id="fichaPontosInicio"><h2>Pontos de atenção × pontos fortes</h2><span>${periodoLabel()} · resumo executivo (o mesmo do PDF)</span></div>
     <div class="pontos">
       <div class="card pontos-col crit"><div class="pt-h">⚠️ Pontos de atenção</div><ul>${P.crit.map(t=>'<li>'+t+'</li>').join('')}</ul></div>
       <div class="card pontos-col pos"><div class="pt-h">✅ Pontos fortes</div><ul>${P.pos.map(t=>'<li>'+t+'</li>').join('')}</ul></div>
@@ -3780,13 +3780,15 @@ function renderFicha(){
   // A faixa fixa só aparece quando o usuário desce até a parte de evidência/linha do tempo.
   try{
     const fix=$('.ficha-fixbar'), evid=$('#fichaEvidBox');
-    if(fix&&evid){
+    const pontos=$('#fichaPontosInicio');
+    if(fix&&evid&&pontos){
       const toggle=()=>{
-        const r=evid.getBoundingClientRect();
-        // Mostrar apenas quando a seção de evidência estiver na área de leitura.
-        // Fora dela (inclusive no topo da ficha), manter a faixa escondida.
-        const limite=360;
-        fix.classList.toggle('show', r.top <= limite && r.bottom > limite);
+        const inicio=pontos.getBoundingClientRect();
+        const fim=evid.getBoundingClientRect();
+        // Mostrar do início dos pontos de atenção até o final da evidência.
+        // Não duplicar a identificação no cabeçalho inicial da ficha.
+        const limite=230;
+        fix.classList.toggle('show', inicio.top <= limite && fim.bottom > limite);
       };
       toggle();
       window.removeEventListener('scroll', window._pulsoFichaFixScroll||(()=>{}));
