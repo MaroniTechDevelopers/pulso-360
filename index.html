@@ -526,6 +526,10 @@
   .evt-verd.evt-dn{background:color-mix(in srgb,var(--warning) 20%,transparent);color:var(--warning)}
   .evt-verd.evt-fl{background:color-mix(in srgb,var(--muted) 15%,transparent)}
   .evt-verd.evt-wait{background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted)}
+  .evt-toggle{cursor:pointer;color:var(--ink);padding:2px 0}
+  .evt-toggle .evt-h{display:inline-flex;margin:0;vertical-align:middle}
+  .evt-collapse[open]>.evt-toggle{margin-bottom:12px}
+  .evt-toggle:focus-visible{outline:2px solid var(--gold);outline-offset:4px;border-radius:4px}
   .evt-table-wrap{overflow-x:auto;margin:8px 0}
   .evt-table{width:100%;min-width:480px;border-collapse:collapse;font-size:13px}
   .evt-table th{text-align:left;padding:7px 10px;color:var(--muted);font-size:11px;font-weight:600}
@@ -3805,10 +3809,13 @@ function fichaEvolTratativas(nome){
   const events=source?(source[nn]||[]).map((e,i)=>({date:e[0],type:e[3],id:e[4]&&e[4].key||'source:'+i})):[];
   const esc=pdfEsc,f=v=>(Math.round(v*100)/100).toLocaleString('pt-BR');
   const head='<div class="sec-title"><h2>📈 Evolução por tratativa</h2><span>temas da observação do gestor · comparação desde a data da conversa</span></div>';
-  const intro='<p class="evt-details" style="margin:0 0 12px">Compare os temas abaixo. O resultado considera a frequência das ocorrências, ajustada pelo tempo dirigido.</p>';
+  const intro='<p class="evt-details" style="margin:0 0 12px">Clique na seta de cada tratativa para ver a evolução. Feedbacks positivos mostram apenas o registro da conversa.</p>';
   const cards=trats.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(t=>{
+    const header=`<span class="evt-h"><span class="evt-date">${esc(brDate(t.data))}</span><span class="evt-tag">${esc(t.tipo||'—')}</span><span class="evt-g">👤 ${esc(t.gestor||'—')}</span></span>`;
+    if(norm(t.tipo||'')==='FEEDBACK POSITIVO'){
+      return `<div class="evt-card evt-positive">${header}<div class="evt-note">${esc(t.obs||'Sem observação registrada.')}</div></div>`;
+    }
     const e=tratEvolution(t,byDay,events,coverage);
-    const header=`<div class="evt-h"><span class="evt-date">${esc(brDate(t.data))}</span><span class="evt-tag">${esc(t.tipo||'—')}</span><span class="evt-g">👤 ${esc(t.gestor||'—')}</span></div>`;
     let detail='';
     if(!e.topics.length)detail='<div class="evt-ai">Tema não reconhecido automaticamente na observação. Revise a descrição; não foi atribuída evolução pela nota geral.</div>';
     else if(e.reason)detail=`<div class="evt-ai">${esc(e.reason)} Temas identificados: ${esc(e.topics.map(x=>x.label).join(', '))}.</div>`;
@@ -3826,7 +3833,7 @@ function fichaEvolTratativas(nome){
       const evidence=e.results.map(r=>`<div style="margin-top:8px"><b>${esc(r.label)}:</b> ${esc(r.message)}${r.status!=='unavailable'?`<br>${esc(r.unit)}: ${f(r.rateBefore)} → ${f(r.rateAfter)}`:''}</div>`).join('');
       detail+=`<details class="evt-details"><summary>Ver observação e detalhes</summary><div class="evt-note">${esc(t.obs||'Sem observação registrada.')}</div><div>Antes: ${brDate(e.before.de)} a ${brDate(e.before.ate)} · ${f(e.a.hours)}h de direção<br>Depois: ${brDate(e.after.de)} a ${brDate(e.after.ate)} · ${f(e.b.hours)}h de direção</div>${evidence}<p>Períodos de igual duração, até 30 dias. A data registrada define o marco; o dia da conversa fica fora. Usa todo o histórico carregado do condutor. A comparação mostra uma variação observada, sem comprovar causa. A cobertura de alertas usa as datas da fonte e não certifica sua integridade.</p></details>`;
     }
-    return `<div class="evt-card">${header}${e.reason||!e.topics.length?`<div class="evt-note">${esc(t.obs||'Sem observação registrada.')}</div>`:''}${detail}</div>`;
+    return `<details class="evt-card evt-collapse"><summary class="evt-toggle">${header}<span class="evt-sub">Ver evolução</span></summary>${e.reason||!e.topics.length?`<div class="evt-note">${esc(t.obs||'Sem observação registrada.')}</div>`:''}${detail}</details>`;
   }).join('');return head+intro+cards;
 }
 function renderFicha(){
