@@ -559,8 +559,9 @@
     border:1px solid var(--border);border-left:4px solid var(--gold-2);border-radius:10px;
     background:color-mix(in srgb,var(--surface) 96%,transparent);
     box-shadow:0 6px 20px rgba(15,23,42,.10);backdrop-filter:blur(8px);
-    display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap
+    display:none;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap
   }
+  .ficha-fixbar.show{display:flex}
   .ficha-fixbar .ff-nome{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;color:var(--muted)}
   .ficha-fixbar .ff-nome b{color:var(--ink);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:620px}
   .ficha-fixbar .ff-periodo{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);white-space:nowrap}
@@ -3770,7 +3771,22 @@ function renderFicha(){
   const _runEvid=()=>{ if(evidJob!==FICHA_EVID_JOB||fichaAtual!==nome)return; const wk=buildWeekCards(_recsEvid,'fztl',60,false,_dayF?'dia':'week'); const eb=$('#fichaEvidBox'); if(!eb)return; eb.innerHTML=wk.html||'<div class="empty">Sem dias.</div>'; setupZoomLazy(wk.ids); };
   if('requestIdleCallback' in window)requestIdleCallback(_runEvid,{timeout:220});else setTimeout(_runEvid,0);
   const verTodas=$('#fichaVerTodas'); if(verTodas) verTodas.onclick=(ev)=>{ ev.preventDefault(); $('#fOp').value=''; renderAll(); };
-  $$('.trat-del').forEach(btn=>{ btn.onclick=async()=>{ const uid=decodeURIComponent(btn.dataset.uid||''); if(uid) await excluirTratativa(nome,uid); }; });
+  $('.trat-del').forEach(btn=>{ btn.onclick=async()=>{ const uid=decodeURIComponent(btn.dataset.uid||''); if(uid) await excluirTratativa(nome,uid); }; });
+
+  // A faixa fixa só aparece quando o usuário desce até a parte de evidência/linha do tempo.
+  try{
+    const fix=$('.ficha-fixbar'), evid=$('#fichaEvidBox');
+    if(fix&&evid){
+      const toggle=()=>{
+        const r=evid.getBoundingClientRect();
+        fix.classList.toggle('show', r.top < 360);
+      };
+      toggle();
+      window.removeEventListener('scroll', window._pulsoFichaFixScroll||(()=>{}));
+      window._pulsoFichaFixScroll=toggle;
+      window.addEventListener('scroll', toggle, {passive:true});
+    }
+  }catch(e){}
 }
 
 /* ============================================================
