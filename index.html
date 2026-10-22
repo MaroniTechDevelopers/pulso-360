@@ -562,6 +562,11 @@
     display:none;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap
   }
   .ficha-fixbar.show{display:flex}
+  /* Tons suaves pela nota exibida de 0 a 10 (score interno 0 a 100). */
+  .ficha-fixbar.score-good{background:#e9f7ee;border-left-color:#22a65a}
+  .ficha-fixbar.score-warn{background:#fff5db;border-left-color:#e5a000}
+  .ficha-fixbar.score-bad{background:#fdecec;border-left-color:#e5484d}
+  .ficha-fixbar.score-none{background:#f8fafc;border-left-color:#cbd5e1}
   .ficha-fixbar .ff-nome{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;color:var(--muted)}
   .ficha-fixbar .ff-nome b{color:var(--ink);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:620px}
   .ficha-fixbar .ff-periodo{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);white-space:nowrap}
@@ -3691,9 +3696,10 @@ function renderFicha(){
     : ALERTA_DEF.map(a=>{ const n=(d.alertas&&d.alertas[a.k])||0; return `<div class="alert-tile ${n>=5?'hot':''}"><div class="n">${a.ic} ${n}</div><div class="l">${a.lab}</div>${_multaSub(a.lab)}</div>`; }).join('');
 
 
-  const _notaScore=notaDe(nome), _notaCor=notaCor(_notaScore);   // cor da ficha = NOTA (mesma régua da capinha)
+  const _notaScore=notaDe(nome), _notaCor=notaCor(_notaScore);   // score interno 0–100; nota exibida = score / 10
+  const _faixaNota=(_notaScore==null||!Number.isFinite(Number(_notaScore)))?'score-none':(_notaScore>=80?'score-good':_notaScore>=60?'score-warn':'score-bad');
   $('#fichaBox').innerHTML = `
-    <div class="ficha-fixbar">
+    <div class="ficha-fixbar ${_faixaNota}">
       <div class="ff-nome"><span>Condutor</span><b>${nome}</b></div>
       <div class="ff-periodo"><span>Período</span><b>${periodoFicha}</b></div>
     </div>
