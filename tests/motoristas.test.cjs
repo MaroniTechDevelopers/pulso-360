@@ -23,10 +23,13 @@ test('troca sem CPF seguida de CPF não deixa duplicata reaparecer',()=>{const c
 test('Bitrem exclui sem CR, outra operação e cadastro só no ponto',()=>{const c=context();const rs=[row(),row({cpf:'22233344455',centro:''}),row({cpf:'33344455566',centro:'MERCADO LIVRE'}),row({cpf:'44455566677',soPonto:true})];assert.equal(c.selectMotoristas(rs,{op:'BITREM'}).length,1);assert.equal(c.selectMotoristas(rs).length,4);});
 test('CR conflitante entre duplicatas não vaza para operação',()=>{const c=context();assert.equal(c.selectMotoristas([row(),row({centro:'MERCADO LIVRE'})],{op:'BITREM'}).length,0);});
 test('filtros locais e indicadores usam conjunto único selecionado',()=>{const c=context();const rows=c.selectMotoristas([row(),row(),row({cpf:'99988877766',status:'INATIVO',classif:'INATIVO_PONTO'})],{f:'ATIVOS',q:'JOAO'});const sm=c.motoristasSummary(rows);assert.equal(rows.length,1);assert.equal(sm.totalTms,1);assert.equal(sm.ativos,1);assert.equal(sm.comP,1);});
-test('18h inclui limite exato e mais, exclui 17h59 e ausência de movimento',()=>{const c=context();assert.equal(c.filterContinuousDrivers([rec()],1080).length,1);assert.equal(c.filterContinuousDrivers([rec({mov:[{ini:0,fim:1079}]})],1080).length,0);assert.equal(c.filterContinuousDrivers([rec({mov:[{ini:0,fim:1200}]})],1080).length,1);assert.equal(c.filterContinuousDrivers([rec({mov:[]})],1080).length,0);});
-test('não soma trechos separados, duplicados ou sobrepostos',()=>{const c=context();assert.equal(c.filterContinuousDrivers([rec({mov:[{ini:0,fim:600},{ini:601,fim:1201}]})],1080).length,0);assert.equal(c.filterContinuousDrivers([rec({mov:[{ini:0,fim:600},{ini:0,fim:600}]})],1080).length,0);assert.equal(c.filterContinuousDrivers([rec({mov:[{ini:0,fim:600},{ini:500,fim:1080}]})],1080).length,1);});
-test('continuidade atravessa meia-noite e respeita recorte de datas',()=>{const c=context();const rs=[rec({data:'2026-10-21',mov:[{ini:720,fim:1440}]}),rec({mov:[{ini:0,fim:360}]})];assert.equal(c.filterContinuousDrivers(rs,1080).length,2);assert.equal(c.filterContinuousDrivers(rs,1080,{de:'2026-10-22',ate:'2026-10-22'}).length,0);});
-test('CPFs diferentes não acumulam direção por homonímia; inválidos são ignorados',()=>{const c=context();assert.equal(c.filterContinuousDrivers([rec({mov:[{ini:0,fim:600}]}),rec({cpf:'99988877766',mov:[{ini:600,fim:1200}]})],1080).length,0);assert.equal(c.filterContinuousDrivers([rec({mov:[{ini:0,fim:1500},{ini:null,fim:1080}]})],1080).length,0);});
+test('mais de 18h é estrito: exclui 18h exatas, 17h59 e ausência de movimento',()=>{const c=context();assert.equal(c.filterDriving24hDrivers([rec()],1080).length,0);assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:1079}]})],1080).length,0);assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:1081}]})],1080).length,1);assert.equal(c.filterDriving24hDrivers([rec({mov:[]})],1080).length,0);});
+test('soma trechos com pausas, mas une duplicados e sobreposições',()=>{const c=context();assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:600},{ini:601,fim:1201}]})],1080).length,1);assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:600},{ini:0,fim:600}]})],1080).length,0);assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:600},{ini:500,fim:1080}]})],1080).length,0);});
+test('janela 21/10 18h a 22/10 18h: 10h direção + 5h pausa + 9h direção',()=>{const c=context();const rs=[rec({data:'2026-10-21',mov:[{ini:1080,fim:1440}]}),rec({mov:[{ini:0,fim:240},{ini:540,fim:1080}]})];assert.equal(c.filterDriving24hDrivers(rs,1080).length,2);assert.equal(c.filterDriving24hDrivers(rs,1080,{de:'2026-10-22',ate:'2026-10-22'}).length,0);});
+test('não soma direção distante fora de uma mesma janela de 24h, mesmo após interjornada',()=>{const c=context();const rs=[rec({data:'2026-10-21',mov:[{ini:0,fim:600}]}),rec({mov:[{ini:0,fim:600}]})];assert.equal(c.filterDriving24hDrivers(rs,1080).length,0);});
+test('janela móvel recorta parcialmente o primeiro trecho e não depende de meia-noite',()=>{const c=context();const rs=[rec({data:'2026-10-21',mov:[{ini:1080,fim:1440}]}),rec({mov:[{ini:0,fim:240},{ini:300,fim:1140}]})];assert.equal(c.filterDriving24hDrivers(rs,1080).length,2);});
+test('interjornada não reinicia acumulador e tempo parado não entra na soma',()=>{const c=context();const rs=[rec({data:'2026-10-21',mov:[{ini:0,fim:600},{ini:1260,fim:1440}]}),rec({mov:[{ini:0,fim:420}]})];assert.equal(c.filterDriving24hDrivers(rs,1080).length,0);assert.equal(c.filterDriving24hDrivers(rs,700).length,2);});
+test('CPFs diferentes não acumulam direção por homonímia; inválidos são ignorados',()=>{const c=context();assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:600}]}),rec({cpf:'99988877766',mov:[{ini:600,fim:1200}]})],1080).length,0);assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:1500},{ini:null,fim:1080}]})],1080).length,0);});
 test('worker e fallback não associam ponto de CPF diferente por nome',()=>{const c=context(),cad=row({cpf:'99988877766'}),pt={key:'C:12345678901',nome:cad.nome,cpf:'12345678901',nn:cad.nome,cn:cad.nome,dias:1};assert.equal(c.matchPontoCad(cad,{byCpf:{},byName:{[cad.nome]:pt},canonCount:{[cad.nome]:1},byCanon:{[cad.nome]:pt}}),null);let out;c.self={postMessage:r=>out=r};vm.runInContext(c._motorWorkerCode(),c);c.self.onmessage({data:{cads:[{...cad,nn:cad.nome,cn:cad.nome}],pts:[pt]}});assert.equal(out.rows.find(r=>r.cpf===cad.cpf).ponto,false);});
 test('alertas sem movimento são preservados e sinalizados; fronteira final é exclusiva',()=>{const c=context(),alerts=[{t:59,tipo:'CELULAR'},{t:60},{t:120},{t:200}];const out=c.validateTimelineAlerts(alerts,[{a:60,b:120}]);assert.equal(out.length,4);assert.deepEqual(Array.from(out,a=>a.movimentoConfirmado),[false,true,false,false]);assert.equal(c.validateTimelineAlerts(alerts,[]).filter(a=>a.movimentoConfirmado).length,0);});
 test('scripts inline publicados têm sintaxe válida',()=>{for(const m of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)){if(m[1].trim())new vm.Script(m[1]);}});
@@ -46,9 +49,28 @@ test('importação síncrona e assíncrona deduplicam arquivos sobrepostos e pre
  const head='MOTORISTA;TIPO;NIVEL;DATA;HORA;PLACA;UO\n',event='JOAO SILVA;CELULAR;ALTO;2026-10-22;10:00:01;ABC1D23;BITREM\n',later=event.replace('10:00:01','10:00:02'),other=event.replace('ABC1D23','DEF4G56');
  for(const parse of [c.aggAlertas,c.aggAlertasAsync]){const seen=new Set(),diag={};const a=await parse(head+event+event+later+other,null,seen,diag),b=await parse(head+event,null,seen,diag);assert.equal(a.n,3);assert.equal(a.A['JOAO SILVA'].total,3);assert.equal(a.tl['JOAO SILVA'].length,3);assert.equal(b.n,0);assert.equal(diag.dup,2);assert.notEqual(a.tl['JOAO SILVA'][0][4].key,a.tl['JOAO SILVA'][1][4].key);}
 });
-test('filtro global inclui 18h no cache e devolve todos os registros do motorista elegível',()=>{
+test('filtro global inclui direção em 24h no cache e devolve todos os registros do motorista elegível',()=>{
  const c=context(),els=Object.fromEntries(['fFecha','fOp','fDia','fDe','fAte','fMot','fStatus','fBusca','fDirecao'].map(k=>['#'+k,{value:''}]));els['#fDirecao'].value='18';
- const rows=[rec(),rec({data:'2026-10-21',mov:[]}),rec({motoristaEscala:'OUTRO',cpf:'99988877766',mov:[{ini:0,fim:1079}]})];Object.assign(c,{$:s=>els[s],DATA_REV:1,FILTER_CACHE_KEY:'',FILTER_CACHE_ROWS:null,FILTER_CACHE_DIV_COUNT:0,GLOBAL_DIV_COUNT:0,RECORDS:rows,activeRange:()=>null});
+ const rows=[rec({mov:[{ini:0,fim:1081}]}),rec({data:'2026-10-21',mov:[]}),rec({motoristaEscala:'OUTRO',cpf:'99988877766',mov:[{ini:0,fim:1079}]})];Object.assign(c,{$:s=>els[s],DATA_REV:1,FILTER_CACHE_KEY:'',FILTER_CACHE_ROWS:null,FILTER_CACHE_DIV_COUNT:0,GLOBAL_DIV_COUNT:0,RECORDS:rows,activeRange:()=>null});
  for(const name of ['filterStateKey','_smallestPool','filtered'])vm.runInContext(source(name),c);
  assert.equal(c.filtered().length,2);assert.equal(c.filtered(),c.FILTER_CACHE_ROWS);els['#fDirecao'].value='';assert.equal(c.filtered().length,3);
+});
+
+test('janela móvel confere com referência minuto a minuto em cenários determinísticos',()=>{
+ const c=context();let seed=12345;const random=n=>{seed=(seed*1664525+1013904223)>>>0;return seed%n;};
+ for(let trial=0;trial<80;trial++){
+  const occupied=new Uint8Array(4320),records=[];
+  for(let day=0;day<3;day++){
+   const mov=[];for(let i=0;i<8;i++){const ini=random(1440),fim=Math.min(1440,ini+random(900)+1);mov.push({ini,fim});occupied.fill(1,day*1440+ini,day*1440+fim);}
+   records.push(rec({data:'2026-10-'+(20+day),mov}));
+  }
+  let sum=0,max=0;for(let i=0;i<occupied.length;i++){sum+=occupied[i];if(i>=1440)sum-=occupied[i-1440];max=Math.max(max,sum);}
+  assert.equal(c.filterDriving24hDrivers(records,max).length,0,'limite estrito '+trial);
+  assert.equal(c.filterDriving24hDrivers(records,max-1).length,3,'máximo encontrado '+trial);
+ }
+});
+test('filtro explica soma com pausas em 24h e remove texto de direção sem parada',()=>{
+ assert.match(html,/Mais de 18h de direção em 24h/);
+ assert.match(html,/Pausas e interjornada não zeram a soma; tempo parado não conta/);
+ assert.doesNotMatch(html,/≥ 18 horas sem parada|Direção contínua<\/label>/);
 });
