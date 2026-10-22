@@ -3779,7 +3779,10 @@ function renderFicha(){
     if(fix&&evid){
       const toggle=()=>{
         const r=evid.getBoundingClientRect();
-        fix.classList.toggle('show', r.top < 360);
+        // Mostrar apenas quando a seção de evidência estiver na área de leitura.
+        // Fora dela (inclusive no topo da ficha), manter a faixa escondida.
+        const limite=360;
+        fix.classList.toggle('show', r.top <= limite && r.bottom > limite);
       };
       toggle();
       window.removeEventListener('scroll', window._pulsoFichaFixScroll||(()=>{}));
