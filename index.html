@@ -4192,10 +4192,23 @@ function renderMotoristas(){
   setTimeout(()=>motoristasComparadosAsync().then(res=>{
     if(job!==MOTOR_RENDER_JOB||activeViewName()!=='motoristas')return;
     const base=res.rows||[], sm=res.summary||{totalTms:0,ativos:0,inativos:0,comP:0,ativoSem:0,inativoP:0,soP:0}, rows=[];
-    for(let i=0;i<base.length;i++){ const r=base[i]; if(!motCadPassClass(r,f))continue; if(q&&!(r._nSearch||'').includes(q))continue; if(op&&r.centro&&opFamily(r.centro)!==op&&r.centro!==op)continue; rows.push(r); }
-    MOTORISTAS_ROWS=rows;
+    for(let i=0;i<base.length;i++){ const r=base[i]; if(!motCadPassClass(r,f))continue; if(q&&!(r._nSearch||'').includes(q))continue; if(op&&(!r.centro||(opFamily(r.centro)!==op&&norm(r.centro)!==norm(op))))continue; rows.push(r); }
+    // Mesmo cadastro pode vir duplicado em arquivos TMS; preservar CPFs distintos.
+    const unique=[],seenCpf=new Set(),seenNames=new Map();
+    for(const r of rows){
+      const cpf=String(r.cpf||'').replace(/\\D/g,'');
+      const nn=norm(r.nome||'');
+      if(cpf&&seenCpf.has(cpf))continue;
+      if(nn&&seenNames.has(nn)){
+        const previous=seenNames.get(nn),prevCpf=String(previous.cpf||'').replace(/\\D/g,'');
+        if(!cpf||!prevCpf){ if(cpf&&!prevCpf){const idx=unique.indexOf(previous);if(idx>=0)unique[idx]=r;seenNames.set(nn,r);}continue; }
+        if(cpf===prevCpf)continue;
+      }
+      unique.push(r);if(cpf)seenCpf.add(cpf);if(nn&&!seenNames.has(nn))seenNames.set(nn,r);
+    }
+    MOTORISTAS_ROWS=unique;
     sum.innerHTML=(!MOTORISTAS_TMS?'<span style="flex-basis:100%;color:var(--warning)"><b>⚠ Cadastro TMS não está no conjunto de dados atual.</b> Exibindo os motoristas encontrados no Ponto; importe/publice o Relatório de Motoristas para ver ativo/inativo.</span>':'')+'<span>TMS: <b>'+sm.totalTms.toLocaleString('pt-BR')+'</b></span><span>Ativos: <b>'+sm.ativos.toLocaleString('pt-BR')+'</b></span><span>Inativos: <b>'+sm.inativos.toLocaleString('pt-BR')+'</b></span><span>Com ponto no período: <b>'+sm.comP.toLocaleString('pt-BR')+'</b></span><span>Ativos sem ponto: <b>'+sm.ativoSem.toLocaleString('pt-BR')+'</b></span><span style="color:var(--crit-ink)">Inativos com ponto: <b>'+sm.inativoP.toLocaleString('pt-BR')+'</b></span><span>Só no Ponto: <b>'+sm.soP.toLocaleString('pt-BR')+'</b></span><span>Exibindo: <b>'+rows.length.toLocaleString('pt-BR')+'</b></span>';
-    _renderMotoristasProgressivo(rows); body.dataset.ready='1'; MOTOR_DOM_KEY=uiKey;
+    _renderMotoristasProgressivo(unique); body.dataset.ready='1'; MOTOR_DOM_KEY=uiKey;
   }).catch(e=>{ console.error(e); if(job!==MOTOR_RENDER_JOB)return; body.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--critical);padding:30px">Não foi possível processar a aba Motoristas.</td></tr>'; sum.innerHTML=''; }),0);
 }
 function exportMotoristas(){ const lines=[['Motorista','Status_TMS','Ponto_periodo','Ultimo_ponto','Dias_ponto','Admissao','Centro_resultado','Cargo','Aderencia_camera_pct','Classificacao'].join(';')]; MOTORISTAS_ROWS.forEach(r=>{const rr=(RECORDS_BY_DRIVER_N&&RECORDS_BY_DRIVER_N[norm(r.nome)])||[],ad=rr.length?aderRecs(rr):null;lines.push([r.nome,r.status,r.ponto?'SIM':'NAO',r.ultimo?brDate(r.ultimo):'',r.dias,r.admissao?brDate(r.admissao):'',r.centro,r.cargo,ad==null?'':ad,classMotLabel(r.classif)].map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';'));}); baixarCsv(lines,'motoristas_tms_x_ponto.csv'); }
