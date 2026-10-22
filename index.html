@@ -554,6 +554,9 @@
   .multalist .mplate{font-weight:750;color:var(--ink)}
   .multalist .maudit{font-weight:700}.multalist .maudit.ok{color:var(--good-ink)}.multalist .maudit.bad{color:var(--critical)}.multalist .maudit.muted{color:var(--muted)}
   @media(max-width:980px){.multalist li{grid-template-columns:1fr 1fr}.multalist li>span:last-child{grid-column:1/-1}}
+  .ficha-sticky{position:sticky;top:146px;z-index:24;margin-bottom:14px;box-shadow:0 8px 24px rgba(15,23,42,.10)}
+  .ficha-sticky .ficha-hero{background:var(--surface)}
+  @media(max-width:980px){.ficha-sticky{top:138px}}
   .ficha-hero{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
   .ficha-hero .avatar{width:60px;height:60px;border-radius:14px;font-size:20px}
   .ficha-hero h2{font-size:20px}
@@ -1132,7 +1135,7 @@
     <div class="tblwrap"><table id="motCadTbl" style="min-width:1100px">
       <thead><tr>
         <th>Motorista</th><th>Status TMS</th><th>Ponto no período</th><th>Último ponto</th><th>Dias c/ ponto</th>
-        <th>Admissão</th><th>Tempo de casa</th><th>Centro de resultado</th><th>Cargo</th><th>Identificador</th><th>Classificação</th>
+        <th>Admissão</th><th>Tempo de casa</th><th>Centro de resultado</th><th>Cargo</th><th>Aderência câmera</th><th>Identificador</th><th>Classificação</th>
       </tr></thead>
       <tbody id="motCadBody"></tbody>
     </table></div>
@@ -1141,7 +1144,7 @@
   <!-- ===== ADERÊNCIA POR OPERAÇÃO ===== -->
   <section class="view" id="view-aderencia">
     <div class="grid kpis" id="aderKpis"></div>
-    <div class="sec-title"><h2>Aderência de identificação — por operação</h2><span>% do movimento com condutor identificado · clique numa operação para ver o resumo dela</span></div>
+    <div class="sec-title"><h2>Aderência de identificação — por operação</h2><span>operação = Centro de Resultado do TMS · % do movimento com condutor identificado</span></div>
     <div class="grid" id="aderBox" style="grid-template-columns:repeat(auto-fill,minmax(250px,1fr))"></div>
   </section>
 
@@ -1880,11 +1883,19 @@ function metaExata(placa){
 // meta oficial do veículo: EXATA (placa > centro+modelo) > família de operação > meta única da config
 function metaVeic(placa, operacao){ const ex=metaExata(placa); if(ex!=null) return ex; return metaDe(operacao); }
 // operação de um veículo pela placa — usada quando a jornada não traz o departamento
-function operacaoDaPlaca(placa){ if(!placa) return '';
-  // prioridade: UO da Trimble (relatório de Alertas — leve) > centro de resultado do TMS (por placa)
-  if(typeof PLACA_UO!=='undefined' && PLACA_UO){ const u=PLACA_UO[placaKey(placa)]; if(u&&u.uoCurta){ const f=opFamily(u.uoCurta); return (f&&f!=='(não-operacional)')?f:u.uoCurta; } }
-  if(typeof TMS!=='undefined' && TMS){ const t=TMS[placaKey(placa)]; if(t&&t.fam && t.fam!=='(não-operacional)') return t.fam; }
-  return ''; }
+function operacaoDaPlaca(placa){
+  if(!placa||typeof TMS==='undefined'||!TMS) return '';
+  const t=TMS[placaKey(placa)];
+  if(!t||!t.centro) return '';
+  const f=opFamily(t.centro);
+  return (f&&f!=='(não-operacional)')?f:t.centro;
+}
+function operacaoTmsMotorista(nome){
+  const cad=cadMotoristaDe(nome);
+  if(!cad||!cad.centro)return '';
+  const f=opFamily(cad.centro);
+  return (f&&f!=='(não-operacional)')?f:cad.centro;
+}
 // operação da VIAGEM (Pedidos), pela placa + dia — mais precisa que a do veículo (a placa muda de operação por viagem)
 function opDaViagem(placas, data){ if(typeof PED_OP==='undefined'||!PED_OP) return ''; for(const p of (placas||[])){ if(!p) continue; const c=PED_OP[placaKey(p)+'|'+data]; if(c){ const f=opFamily(c); if(f && f!=='(não-operacional)') return f; } } return ''; }
 
@@ -1898,11 +1909,11 @@ function saveData(){ try{ if(RAW){ RAW._savedAt=Date.now(); DATA_UPDATED_AT=RAW.
    ============================================================ */
 function analyze(rec){
   const tol=CFG.tol, movMin=CFG.movMin;
-  // operação: da jornada; se vazia, deduz pela placa (alertas/TMS) — recalcula quando essas bases chegam
-  // operação do motorista: PRIORIDADE = UO da Trimble/placa (leve) > pedido (por viagem) > departamento da jornada
+  // OPERAÇÃO: fonte única = Centro de Resultado do TMS.
+  // Com veículo, usa o cadastro TMS da placa. Sem veículo, usa o Centro de Resultado do motorista no TMS.
   const placasR = (rec.placas&&rec.placas.length)?rec.placas:(rec.placa?[rec.placa]:[]);
   let opPlaca=''; for(const p of placasR){ opPlaca=operacaoDaPlaca(p); if(opPlaca) break; }
-  const operacao = opPlaca || opDaViagem(placasR, rec.data) || ((rec.operacao && rec.operacao!=='—') ? rec.operacao : '—');
+  const operacao = opPlaca || operacaoTmsMotorista(rec.motoristaEscala) || '—';
   // --- ponto: preserva a ORDEM das batidas; ao virar 23:xx → 00:xx, continua no dia seguinte ---
   // Não ordenar aqui: ordenar quebrava jornadas noturnas e fazia aparecer marcações em horários errados.
   const rawP=(rec.ponto||[]).map(toMin).filter(v=>v!=null);
@@ -3628,6 +3639,9 @@ function renderFicha(){
   const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,placasDetalhadas,placasDetalhadasHtml,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaInconsistente,mediaRawTrimble,mediaCoverage,metaFicha,medaOk,reco,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF}=M;
   const horasTrabalhadas=(M.audit&&M.audit.hPonto)||0;
   const periodoFicha=periodoLabel();
+  const alertasPorMilKm=(kmR>0)?(totAl/(kmR/1000)):null;
+  const alertaKmMeta=75;
+  const alertaKmCrit=alertasPorMilKm!=null&&alertasPorMilKm>alertaKmMeta;
   const fichaRisco=M.risco;
   const weeks=GLOBAL_WEEKS.length?GLOBAL_WEEKS:Object.values(recs.reduce((a,r)=>{if(r.semKey&&!a[r.semKey])a[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};return a;},{})).sort((a,b)=>a.key<b.key?-1:1);
   const _dayF=dayFilter(); let _recsEvid=(_dayF?recs.filter(r=>r.data===_dayF):recs).slice();
@@ -3670,7 +3684,7 @@ function renderFicha(){
 
   const _notaScore=notaDe(nome), _notaCor=notaCor(_notaScore);   // cor da ficha = NOTA (mesma régua da capinha)
   $('#fichaBox').innerHTML = `
-    <div class="card" style="margin-bottom:14px">
+    <div class="card ficha-sticky">
       <div class="ficha-hero">
         <span class="avatar" title="Nota ${_notaScore!=null?Math.round(_notaScore)+'/100':'—'}${fichaRisco.reasons.length?' · sinais: '+fichaRisco.reasons.join(' · '):''}" style="background:${_notaCor}">${iniciais(nome)}</span>
         <div style="flex:1;min-width:180px">
@@ -3727,6 +3741,8 @@ function renderFicha(){
         <div class="lab">Descanso entre jornadas</div><div class="val tnum">${restMinF==null?'—':hDec(restMinF)}</div><div class="sub">${interjViol>0?('⚠ '+interjViol+' dia(s) < 11h'):(restMinF!=null?'menor descanso · mín 11h ✓':'sem dados')}</div></div>
       <div class="card kpi"><div class="accent" style="background:${(velR.alto)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
         <div class="lab">Alertas (total)</div><div class="val tnum">${totAl.toLocaleString('pt-BR')}</div><div class="sub">todos os tipos${velR.alto?' · '+velR.alto+' veloc. em nível alto':''}</div></div>
+      <div class="card kpi"><div class="accent" style="background:${alertaKmCrit?'var(--critical)':'var(--good)'}"></div>
+        <div class="lab">Alertas / 1.000 km</div><div class="val tnum">${alertasPorMilKm==null?'—':alertasPorMilKm.toFixed(1).replace('.',',')}</div><div class="sub">meta ≤ ${alertaKmMeta} · ${alertaKmCrit?'⚠ ponto de atenção':'dentro da meta'}</div></div>
       ${MULTAS_N?`<div class="card kpi"><div class="accent" style="background:${_multaList.length?'var(--warning)':'var(--muted)'}"></div>
         <div class="lab">Multas</div><div class="val tnum">${_multaList.length.toLocaleString('pt-BR')}</div><div class="sub">${_multaCel} celular · ${_multaVel} velocidade · período operacional</div></div>`:''}
     </div>
@@ -3827,7 +3843,7 @@ function pdfOpen(html){
 }
 function exportFichaPDF(){
   const nome=fichaAtual; if(!nome){ toast('Abra a ficha de um motorista primeiro'); return; }
-  const M=fichaMetrics(nome), P=fichaPontos(M);
+  const M=fichaMetrics(nome), P0=fichaPontos(M), _safePdfTxt=t=>!/(HORA EXTRA|DESCANSO ENTRE JORNADAS|FORA DA JORNADA)/i.test(String(t||'')), P={crit:(P0.crit||[]).filter(_safePdfTxt),pos:(P0.pos||[]).filter(_safePdfTxt)};
   const nf=v=>v==null?'—':v.toFixed(2).replace('.',',');
   const alto=(M.alR.velocidade&&M.alR.velocidade.alto)||0;
   // Mesma regra da ficha: multas de celular + velocidade, canceladas fora,
@@ -3838,15 +3854,16 @@ function exportFichaPDF(){
   const multaVelPDF=multaListPDF.filter(m=>multaTipoClasse(m.tipo)==='VELOCIDADE').length;
   const multaByTipoPDF={CELULAR:multaCelPDF,VELOCIDADE:multaVelPDF};
   const multaSubPDF=(tp)=>{ const c=multaTipoClasse(tp), n=multaByTipoPDF[c]||0; return (c==='CELULAR'||c==='VELOCIDADE')?`<div class="amsub">${n.toLocaleString('pt-BR')} multa${n===1?'':'s'}</div>`:''; };
+  const _alertaKmPDF=(M.kmR>0)?(M.totAl/(M.kmR/1000)):null, _alertaKmCrit=_alertaKmPDF!=null&&_alertaKmPDF>75;
   const kpis=`<div class="kgrid p6">
     ${MEDIA_OFF?'':pdfKpi('④ Média realizada', (M.mediaR==null?'—':nf(M.mediaR)), 'meta '+nf(M.metaFicha)+(M.mediaR!=null?(M.medaOk?' ✓':' ✗'):''), M.medaOk?'#10b981':'#ef4444')}
     ${pdfKpi('① Aderência (câmera)', (M.semel==null?'—':M.semel+'<small>%</small>'), 'movimento do veículo identificado', M.semel==null?'#94a3b8':(M.semel>=CFG.sem?'#10b981':'#ef4444'))}
     ${pdfKpi('Aderência (motorista)', (M.semelMot==null?'—':M.semelMot+'<small>%</small>'), 'reconhecido como '+pdfEsc(firstName(nome)), M.semelMot==null?'#94a3b8':(M.semelMot>=CFG.sem?'#10b981':'#ef4444'))}
-    ${pdfKpi('③ Aderência de jornada', (M.aderJornadaVal==null?'—':M.aderJornadaVal+'<small>%</small>'), hDec(M.ddRealTotal)+' fora da jornada', M.aderJornadaVal==null?'#94a3b8':(M.aderJornadaVal>=90?'#10b981':M.aderJornadaVal>=70?'#f59e0b':'#ef4444'))}
-    ${pdfKpi('Hora extra (&gt;7h20)', hDec(M.hexTotal), M.diasHex+' dia(s) acima', M.hexTotal>0?'#f59e0b':'#94a3b8')}
+    ${pdfKpi('③ Aderência de jornada', (M.aderJornadaVal==null?'—':M.aderJornadaVal+'<small>%</small>'), 'aderência ao período de jornada', M.aderJornadaVal==null?'#94a3b8':(M.aderJornadaVal>=90?'#10b981':M.aderJornadaVal>=70?'#f59e0b':'#ef4444'))}
+    ${pdfKpi('KM rodado', Math.round(M.kmR||0).toLocaleString('pt-BR'), 'quilômetros no período', '#3b82f6')}
+    ${pdfKpi('Alertas / 1.000 km', _alertaKmPDF==null?'—':_alertaKmPDF.toFixed(1).replace('.',','), 'meta ≤ 75'+(_alertaKmCrit?' · ponto de atenção':' · dentro da meta'), _alertaKmCrit?'#ef4444':'#10b981')}
     ${pdfKpi('Alertas (total)', M.totAl.toLocaleString('pt-BR'), (alto?alto+' veloc. em nível alto':'todos os tipos'), alto?'#ef4444':(M.totAl>0?'#f59e0b':'#94a3b8'))}
     ${MULTAS_N?pdfKpi('Multas', multaListPDF.length.toLocaleString('pt-BR'), multaCelPDF+' celular · '+multaVelPDF+' velocidade · período operacional', multaListPDF.length?'#f59e0b':'#94a3b8'):''}
-    ${pdfKpi('Descanso entre jornadas', (M.restMinF==null?'—':hDec(M.restMinF)), (M.interjViol>0?M.interjViol+' dia(s) < 11h':(M.restMinF!=null?'mín · 11h ✓':'sem dados')), (M.restMinF!=null&&M.restMinF<CFG.interjornadaMin)?'#ef4444':(M.restMinF!=null?'#10b981':'#94a3b8'))}
   </div>`;
   const pontos=`<div class="cols">
     <div class="col crit"><h3>⚠️ Pontos de atenção</h3><ul>${P.crit.map(t=>'<li>'+t+'</li>').join('')}</ul></div>
@@ -4013,7 +4030,7 @@ function renderTable(rows){
       <td class="tnum">${hexCell}</td>
       <td class="tnum">${ddCell}</td>
       <td>${chip}</td></tr>`;
-  }).join('') + (sorted.length>CAP?'<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:14px">Mostrando '+CAP.toLocaleString('pt-BR')+' de '+sorted.length.toLocaleString('pt-BR')+' registros. Os cálculos e a exportação continuam considerando todos.</td></tr>':'') || '<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:30px">Nenhum registro.</td></tr>';
+  }).join('') + (sorted.length>CAP?'<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:14px">Mostrando '+CAP.toLocaleString('pt-BR')+' de '+sorted.length.toLocaleString('pt-BR')+' registros. Os cálculos e a exportação continuam considerando todos.</td></tr>':'') || '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:30px">Nenhum registro.</td></tr>';
 }
 
 /* ============================================================
@@ -4105,7 +4122,13 @@ function motoristasComparadosAsync(){
 }
 let MOTORISTAS_ROWS=[];
 function motCadPassClass(r,f){ if(!f)return true; if(f==='ATIVOS')return r.status==='ATIVO'; if(f==='INATIVOS')return r.status==='INATIVO'; if(f==='COM_PONTO')return r.ponto; if(f==='SEM_PONTO')return !r.ponto; if(f==='SEM_STATUS')return r.status==='SEM STATUS'; return r.classif===f; }
-function _motorRowHtml(r){ return '<tr><td><b>'+String(r.nome||'—').replace(/</g,'&lt;')+'</b></td><td>'+motStatusHtml(r.status==='NÃO LOCALIZADO'?'SEM STATUS':r.status)+'</td><td>'+(r.ponto?'<span style="color:var(--good-ink);font-weight:700">Sim</span>':'<span style="color:var(--muted)">Não</span>')+'</td><td class="tnum">'+(r.ultimo?brDate(r.ultimo):'—')+'</td><td class="tnum">'+r.dias+'</td><td class="tnum">'+(r.admissao?brDate(r.admissao):'—')+'</td><td>'+(r.admissao?tempoDeCasa(r.admissao):'—')+'</td><td>'+((r.centro||'—').replace(/</g,'&lt;'))+'</td><td>'+((r.cargo||'—').replace(/</g,'&lt;'))+'</td><td>'+cpfCurto(r.cpf)+'</td><td><span class="mot-cruz '+classMotCls(r.classif)+'">'+classMotLabel(r.classif)+'</span></td></tr>'; }
+function _motorRowHtml(r){
+  const rr=(RECORDS_BY_DRIVER_N&&RECORDS_BY_DRIVER_N[norm(r.nome)])||[];
+  const ad=rr.length?aderRecs(rr):null;
+  const adh=ad==null?'—':(ad+'%');
+  const adc=ad==null?'var(--muted)':(ad>=CFG.sem?'var(--good-ink)':'var(--crit-ink)');
+  return '<tr><td><b>'+String(r.nome||'—').replace(/</g,'&lt;')+'</b></td><td>'+motStatusHtml(r.status==='NÃO LOCALIZADO'?'SEM STATUS':r.status)+'</td><td>'+(r.ponto?'<span style="color:var(--good-ink);font-weight:700">Sim</span>':'<span style="color:var(--muted)">Não</span>')+'</td><td class="tnum">'+(r.ultimo?brDate(r.ultimo):'—')+'</td><td class="tnum">'+r.dias+'</td><td class="tnum">'+(r.admissao?brDate(r.admissao):'—')+'</td><td>'+(r.admissao?tempoDeCasa(r.admissao):'—')+'</td><td>'+((r.centro||'—').replace(/</g,'&lt;'))+'</td><td>'+((r.cargo||'—').replace(/</g,'&lt;'))+'</td><td class="tnum" style="font-weight:800;color:'+adc+'">'+adh+'</td><td>'+cpfCurto(r.cpf)+'</td><td><span class="mot-cruz '+classMotCls(r.classif)+'">'+classMotLabel(r.classif)+'</span></td></tr>';
+}
 function _renderMotoristasProgressivo(rows){
   const body=$('#motCadBody'); if(!body)return;
   if(MOTOR_TABLE_OBSERVER){try{MOTOR_TABLE_OBSERVER.disconnect();}catch(e){} MOTOR_TABLE_OBSERVER=null;}
@@ -4115,10 +4138,10 @@ function _renderMotoristasProgressivo(rows){
     const fim=Math.min(pos+CHUNK,rows.length); let html=''; for(let i=pos;i<fim;i++)html+=_motorRowHtml(rows[i]); pos=fim;
     if(html)body.insertAdjacentHTML('beforeend',html);
     const old=body.querySelector('tr[data-mot-sentinel]'); if(old)old.remove();
-    if(pos<rows.length){ const tr=document.createElement('tr'); tr.dataset.motSentinel='1'; tr.innerHTML='<td colspan="11" style="text-align:center;color:var(--muted);padding:12px">'+pos.toLocaleString('pt-BR')+' de '+rows.length.toLocaleString('pt-BR')+' carregados · role para continuar</td>'; body.appendChild(tr);
+    if(pos<rows.length){ const tr=document.createElement('tr'); tr.dataset.motSentinel='1'; tr.innerHTML='<td colspan="12" style="text-align:center;color:var(--muted);padding:12px">'+pos.toLocaleString('pt-BR')+' de '+rows.length.toLocaleString('pt-BR')+' carregados · role para continuar</td>'; body.appendChild(tr);
       if('IntersectionObserver' in window){ MOTOR_TABLE_OBSERVER=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)){ MOTOR_TABLE_OBSERVER.disconnect(); MOTOR_TABLE_OBSERVER=null; appendChunk(); } },{rootMargin:'500px 0px'}); MOTOR_TABLE_OBSERVER.observe(tr); }
       else setTimeout(appendChunk,0);
-    }else if(!rows.length) body.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:30px">Nenhum motorista para os filtros atuais.</td></tr>';
+    }else if(!rows.length) body.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:30px">Nenhum motorista para os filtros atuais.</td></tr>';
   };
   appendChunk();
 }
@@ -4127,19 +4150,19 @@ function renderMotoristas(){
   const job=++MOTOR_RENDER_JOB, f=$('#motCadClass')?$('#motCadClass').value:'', q=norm($('#motCadBusca')?$('#motCadBusca').value:''), op=$('#fOp').value;
   const uiKey=_motorCompareKey()+'|'+f+'|'+q+'|'+op;
   if(MOTOR_DOM_KEY===uiKey && body.dataset.ready==='1') return;
-  body.dataset.ready='0'; body.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:34px"><b>Preparando motoristas…</b><br><span style="font-size:12px">cruzando TMS × Ponto sem bloquear a navegação</span></td></tr>';
+  body.dataset.ready='0'; body.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:34px"><b>Preparando motoristas…</b><br><span style="font-size:12px">cruzando TMS × Ponto sem bloquear a navegação</span></td></tr>';
   sum.innerHTML='<span style="color:var(--muted)">Processando cadastro sob demanda…</span>';
   // permite ao navegador pintar a aba antes de iniciar o cruzamento
   setTimeout(()=>motoristasComparadosAsync().then(res=>{
     if(job!==MOTOR_RENDER_JOB||activeViewName()!=='motoristas')return;
     const base=res.rows||[], sm=res.summary||{totalTms:0,ativos:0,inativos:0,comP:0,ativoSem:0,inativoP:0,soP:0}, rows=[];
-    for(let i=0;i<base.length;i++){ const r=base[i]; if(!motCadPassClass(r,f))continue; if(q&&!(r._nSearch||'').includes(q))continue; if(op&&!r.ponto&&r.centro&&opFamily(r.centro)!==op)continue; rows.push(r); }
+    for(let i=0;i<base.length;i++){ const r=base[i]; if(!motCadPassClass(r,f))continue; if(q&&!(r._nSearch||'').includes(q))continue; if(op&&r.centro&&opFamily(r.centro)!==op&&r.centro!==op)continue; rows.push(r); }
     MOTORISTAS_ROWS=rows;
     sum.innerHTML=(!MOTORISTAS_TMS?'<span style="flex-basis:100%;color:var(--warning)"><b>⚠ Cadastro TMS não está no conjunto de dados atual.</b> Exibindo os motoristas encontrados no Ponto; importe/publice o Relatório de Motoristas para ver ativo/inativo.</span>':'')+'<span>TMS: <b>'+sm.totalTms.toLocaleString('pt-BR')+'</b></span><span>Ativos: <b>'+sm.ativos.toLocaleString('pt-BR')+'</b></span><span>Inativos: <b>'+sm.inativos.toLocaleString('pt-BR')+'</b></span><span>Com ponto no período: <b>'+sm.comP.toLocaleString('pt-BR')+'</b></span><span>Ativos sem ponto: <b>'+sm.ativoSem.toLocaleString('pt-BR')+'</b></span><span style="color:var(--crit-ink)">Inativos com ponto: <b>'+sm.inativoP.toLocaleString('pt-BR')+'</b></span><span>Só no Ponto: <b>'+sm.soP.toLocaleString('pt-BR')+'</b></span><span>Exibindo: <b>'+rows.length.toLocaleString('pt-BR')+'</b></span>';
     _renderMotoristasProgressivo(rows); body.dataset.ready='1'; MOTOR_DOM_KEY=uiKey;
-  }).catch(e=>{ console.error(e); if(job!==MOTOR_RENDER_JOB)return; body.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--critical);padding:30px">Não foi possível processar a aba Motoristas.</td></tr>'; sum.innerHTML=''; }),0);
+  }).catch(e=>{ console.error(e); if(job!==MOTOR_RENDER_JOB)return; body.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--critical);padding:30px">Não foi possível processar a aba Motoristas.</td></tr>'; sum.innerHTML=''; }),0);
 }
-function exportMotoristas(){ const lines=[['Motorista','Status_TMS','Ponto_periodo','Ultimo_ponto','Dias_ponto','Admissao','Centro_resultado','Cargo','Classificacao'].join(';')]; MOTORISTAS_ROWS.forEach(r=>lines.push([r.nome,r.status,r.ponto?'SIM':'NAO',r.ultimo?brDate(r.ultimo):'',r.dias,r.admissao?brDate(r.admissao):'',r.centro,r.cargo,classMotLabel(r.classif)].map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';'))); baixarCsv(lines,'motoristas_tms_x_ponto.csv'); }
+function exportMotoristas(){ const lines=[['Motorista','Status_TMS','Ponto_periodo','Ultimo_ponto','Dias_ponto','Admissao','Centro_resultado','Cargo','Aderencia_camera_pct','Classificacao'].join(';')]; MOTORISTAS_ROWS.forEach(r=>{const rr=(RECORDS_BY_DRIVER_N&&RECORDS_BY_DRIVER_N[norm(r.nome)])||[],ad=rr.length?aderRecs(rr):null;lines.push([r.nome,r.status,r.ponto?'SIM':'NAO',r.ultimo?brDate(r.ultimo):'',r.dias,r.admissao?brDate(r.admissao):'',r.centro,r.cargo,ad==null?'':ad,classMotLabel(r.classif)].map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';'));}); baixarCsv(lines,'motoristas_tms_x_ponto.csv'); }
 
 
 /* ============================================================
