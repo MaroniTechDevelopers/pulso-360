@@ -1050,8 +1050,8 @@
       <option value="pendente">A conferir</option>
       <option value="conforme">Tudo certo</option>
     </select></div>
-    <div class="f"><label for="fDirecao">Direção contínua</label><select id="fDirecao" title="Pelo menos um trecho sem parada de 18 horas ou mais no período. Não soma trechos separados.">
-      <option value="">Todos</option><option value="18">≥ 18 horas sem parada</option>
+    <div class="f"><label for="fDirecao">Direção em 24 horas</label><select id="fDirecao" title="Mais de 18 horas de direção acumulada em qualquer janela de 24 horas dentro do período selecionado. Pausas e interjornada não zeram a soma; tempo parado não conta.">
+      <option value="">Todos</option><option value="18">Mais de 18h de direção em 24h</option>
     </select></div>
     <div class="f" style="flex:1;min-width:170px"><label>Busca (nome / placa)</label><input type="text" id="fBusca" placeholder="Filtrar…"></div>
     <button class="btn" id="clearFilters" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Limpar</button>
@@ -2326,7 +2326,7 @@ function recordDriverKey(r){
   const cpf=cpfKey(r.cpf||cpfDeNome(name));
   return cpf?'C:'+cpf:'N:'+norm(name);
 }
-function continuousDriverKeys(rows,minMinutes,range){
+function driving24hDriverKeys(rows,minMinutes,range){
   const groups=new Map(),qualified=new Set();
   const lo=range&&range.de?Date.parse(range.de)/60000:-Infinity;
   const hi=range&&range.ate?(Date.parse(range.ate)/60000+1440):Infinity;
@@ -2341,16 +2341,27 @@ function continuousDriverKeys(rows,minMinutes,range){
     }
   }
   for(const [key,intervals] of groups){
-    intervals.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);let start=null,end=null;
+    // Union prevents duplicate records or simultaneous vehicle assignments from
+    // counting the same minute twice for one driver.
+    intervals.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const merged=[];
     for(const [a,b] of intervals){
-      if(start===null||a>end){start=a;end=b;}else end=Math.max(end,b);
-      if(end-start>=minMinutes){qualified.add(key);break;}
+      const last=merged[merged.length-1];
+      if(last&&a<=last[1])last[1]=Math.max(last[1],b);else merged.push([a,b]);
+    }
+    // A maximum of the rolling 24h sum occurs at a movement interval's end.
+    // Keep whole intervals in total, then clip the first to the window boundary.
+    let left=0,total=0;
+    for(let right=0;right<merged.length;right++){
+      const [a,b]=merged[right],cutoff=b-1440;total+=b-a;
+      while(left<=right&&merged[left][1]<=cutoff){total-=merged[left][1]-merged[left][0];left++;}
+      const minutes=total-(left<=right?Math.max(0,cutoff-merged[left][0]):0);
+      if(minutes>minMinutes){qualified.add(key);break;}
     }
   }
   return qualified;
 }
-function filterContinuousDrivers(rows,minMinutes,range){
-  const keys=continuousDriverKeys(rows,minMinutes,range);
+function filterDriving24hDrivers(rows,minMinutes,range){
+  const keys=driving24hDriverKeys(rows,minMinutes,range);
   return rows.filter(r=>keys.has(recordDriverKey(r)));
 }
 function dedupeMotoristas(rows){
@@ -2438,7 +2449,7 @@ function filtered(){
     if(q && !(r._nBusca||'').includes(q)) continue;
     out.push(r); if(r.sev!=='conforme') div++;
   }
-  const result=$('#fDirecao').value?filterContinuousDrivers(out,Number($('#fDirecao').value)*60,activeRange()):out;
+  const result=$('#fDirecao').value?filterDriving24hDrivers(out,Number($('#fDirecao').value)*60,activeRange()):out;
   FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=result; FILTER_CACHE_DIV_COUNT=result.reduce((n,r)=>n+(r.sev!=='conforme'),0); return result;
 }
 // Placas presentes no recorte de filtros atuais (null = SEM filtro → mostra tudo).
