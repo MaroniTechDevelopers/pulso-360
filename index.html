@@ -526,6 +526,16 @@
   .evt-verd.evt-dn{background:color-mix(in srgb,var(--warning) 20%,transparent);color:var(--warning)}
   .evt-verd.evt-fl{background:color-mix(in srgb,var(--muted) 15%,transparent)}
   .evt-verd.evt-wait{background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted)}
+  .evt-table-wrap{overflow-x:auto;margin:8px 0}
+  .evt-table{width:100%;min-width:480px;border-collapse:collapse;font-size:13px}
+  .evt-table th{text-align:left;padding:7px 10px;color:var(--muted);font-size:11px;font-weight:600}
+  .evt-table td{padding:11px 10px;border-top:1px solid var(--border);vertical-align:middle}
+  .evt-table th:nth-child(2),.evt-table th:nth-child(3),.evt-table td:nth-child(2),.evt-table td:nth-child(3){text-align:center;font-variant-numeric:tabular-nums}
+  .evt-result{font-weight:700;white-space:nowrap}
+  .evt-sub{display:block;color:var(--muted);font-size:11.5px;margin-top:3px;font-weight:400}
+  .evt-details{margin-top:10px;color:var(--muted);font-size:12px;line-height:1.5}
+  .evt-details summary{cursor:pointer;color:var(--ink);font-weight:600;padding:4px 0}
+  .evt-details[open] summary{margin-bottom:8px}
   .evt-note{font-size:12.5px;color:var(--muted);border-left:2px solid var(--border);padding-left:10px;margin-bottom:10px;font-style:italic}
   .evt-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px}
   .evt-mt{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:7px 10px}
@@ -3795,7 +3805,7 @@ function fichaEvolTratativas(nome){
   const events=source?(source[nn]||[]).map((e,i)=>({date:e[0],type:e[3],id:e[4]&&e[4].key||'source:'+i})):[];
   const esc=pdfEsc,f=v=>(Math.round(v*100)/100).toLocaleString('pt-BR');
   const head='<div class="sec-title"><h2>📈 Evolução por tratativa</h2><span>temas da observação do gestor · comparação desde a data da conversa</span></div>';
-  const intro='<div class="card" style="padding:16px;margin-bottom:12px">Análise por regras de temas explícitos, com base no histórico carregado do condutor, independente dos filtros do topo. Compara períodos de igual duração (até 30 dias). Usa a data registrada da tratativa; datas citadas no texto não alteram esse marco. O dia da tratativa é excluído porque não há horário da conversa. Taxas ajustadas pela exposição; a comparação não comprova que a conversa causou a mudança. A cobertura de alertas usa as datas existentes na fonte e não certifica a integridade do relatório.</div>';
+  const intro='<p class="evt-details" style="margin:0 0 12px">Compare os temas abaixo. O resultado considera a frequência das ocorrências, ajustada pelo tempo dirigido.</p>';
   const cards=trats.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))).map(t=>{
     const e=tratEvolution(t,byDay,events,coverage);
     const header=`<div class="evt-h"><span class="evt-date">${esc(brDate(t.data))}</span><span class="evt-tag">${esc(t.tipo||'—')}</span><span class="evt-g">👤 ${esc(t.gestor||'—')}</span></div>`;
@@ -3803,14 +3813,20 @@ function fichaEvolTratativas(nome){
     if(!e.topics.length)detail='<div class="evt-ai">Tema não reconhecido automaticamente na observação. Revise a descrição; não foi atribuída evolução pela nota geral.</div>';
     else if(e.reason)detail=`<div class="evt-ai">${esc(e.reason)} Temas identificados: ${esc(e.topics.map(x=>x.label).join(', '))}.</div>`;
     else{
-      detail=`<div style="padding:12px 0">Antes: <b>${brDate(e.before.de)} a ${brDate(e.before.ate)}</b> · ${f(e.a.hours)}h de direção<br>Depois: <b>${brDate(e.after.de)} a ${brDate(e.after.ate)}</b> · ${f(e.b.hours)}h de direção · ${e.span} dia(s) em cada período</div>`;
-      detail+=e.results.map(r=>{
-        const verdict={improved:['evt-up','Redução observada'],worse:['evt-dn','Aumento observado'],stable:['evt-fl','Estável'],unavailable:['evt-wait','Sem evidência suficiente']}[r.status];
-        const metric=r.status==='unavailable'?'':`<div>${r.kind==='alert'?`Ocorrências: <b>${r.before} → ${r.after}</b> · `:''}${esc(r.unit)}: <b>${f(r.rateBefore)} → ${f(r.rateAfter)}</b></div>`;
-        return `<div class="evt-ai" style="display:block"><b>${esc(r.label)}</b> · <span class="${verdict[0]}">${verdict[1]}</span>${metric}<div>${esc(r.message)}</div></div>`;
+      const lines=e.results.map(r=>{
+        const verdict={improved:['evt-up','↓ Melhorou'],worse:['evt-dn','↑ Piorou'],stable:['evt-fl','→ Estável'],unavailable:['evt-fl','— Sem avaliação']}[r.status];
+        const valid=r.status!=='unavailable',isAlert=r.kind==='alert';
+        const before=valid?(isAlert?r.before:f(r.rateBefore)+'%'):'—';
+        const after=valid?(isAlert?r.after:f(r.rateAfter)+'%'):'—';
+        const change=valid&&r.rateBefore>0?(r.rateAfter/r.rateBefore-1)*100:null;
+        const sub=!valid?(r.kind==='unsupported'?'Fonte específica necessária':'Dados insuficientes'):r.before===0&&r.after===0?'Sem ocorrências nos dois períodos':change!=null?f(Math.abs(change))+'% '+(change<0?'menor':change>0?'maior':'de variação')+' na taxa':r.status==='worse'?'Novas ocorrências registradas':'Sem variação na taxa';
+        return `<tr><td><b>${esc(r.label)}</b><span class="evt-sub">${isAlert?'ocorrências':valid?esc(r.unit):''}</span></td><td><b>${before}</b></td><td><b>${after}</b></td><td><span class="evt-result ${verdict[0]}">${verdict[1]}</span><span class="evt-sub">${esc(sub)}</span></td></tr>`;
       }).join('');
+      detail=`<div class="evt-sub">${e.span} dia(s) antes × ${e.span} dia(s) depois · acompanhado até ${brDate(e.after.ate)}</div><div class="evt-table-wrap"><table class="evt-table"><thead><tr><th scope="col">Tema tratado</th><th scope="col">Antes</th><th scope="col">Depois</th><th scope="col">Evolução</th></tr></thead><tbody>${lines}</tbody></table></div>`;
+      const evidence=e.results.map(r=>`<div style="margin-top:8px"><b>${esc(r.label)}:</b> ${esc(r.message)}${r.status!=='unavailable'?`<br>${esc(r.unit)}: ${f(r.rateBefore)} → ${f(r.rateAfter)}`:''}</div>`).join('');
+      detail+=`<details class="evt-details"><summary>Ver observação e detalhes</summary><div class="evt-note">${esc(t.obs||'Sem observação registrada.')}</div><div>Antes: ${brDate(e.before.de)} a ${brDate(e.before.ate)} · ${f(e.a.hours)}h de direção<br>Depois: ${brDate(e.after.de)} a ${brDate(e.after.ate)} · ${f(e.b.hours)}h de direção</div>${evidence}<p>Períodos de igual duração, até 30 dias. A data registrada define o marco; o dia da conversa fica fora. Usa todo o histórico carregado do condutor. A comparação mostra uma variação observada, sem comprovar causa. A cobertura de alertas usa as datas da fonte e não certifica sua integridade.</p></details>`;
     }
-    return `<div class="evt-card">${header}<div class="evt-note">${esc(t.obs||'Sem observação registrada.')}</div>${detail}</div>`;
+    return `<div class="evt-card">${header}${e.reason||!e.topics.length?`<div class="evt-note">${esc(t.obs||'Sem observação registrada.')}</div>`:''}${detail}</div>`;
   }).join('');return head+intro+cards;
 }
 function renderFicha(){
