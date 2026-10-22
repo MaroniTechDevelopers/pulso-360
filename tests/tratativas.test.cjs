@@ -23,3 +23,17 @@ test('renderização usa histórico completo, escapa observação e não depende
 });
 
 test('direção fora da jornada compara apenas períodos com cobertura de ponto',()=>{const c=context(),r=c.tratEvolution({data:t.data,obs:'fora da jornada'},{'2026-10-18':{hCond:600,hCondWithPoint:600,hFora:60},'2026-10-20':{hCond:300,hCondWithPoint:300,hFora:15}},[],null).results[0];assert.equal(r.rateBefore,10);assert.equal(r.rateAfter,5);assert.equal(r.status,'improved');});
+function renderCards(trats,failOnCompare=false){
+ const c=context(),start=html.indexOf('let TRAT_ALERT_COVER_CACHE='),end=html.indexOf('function renderFicha(){',start);
+ Object.assign(c,{RECORDS:[],RECORDS_BY_DRIVER_N:{JOAO:[]},AL_TL:null,DATA_REV:1,tratList:()=>trats,auditMetrics:()=>({byDay}),pdfEsc:s=>String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;'),brDate:s=>s});
+ vm.runInContext(html.slice(start,end),c);if(failOnCompare)c.tratEvolution=()=>{throw Error('Feedback positivo não deve ser comparado');};return c.fichaEvolTratativas('JOAO');
+}
+test('feedback positivo preserva observação, data e gestor sem executar comparação',()=>{
+ const out=renderCards([{...t,tipo:' Feedback positivo ',gestor:'GESTOR TESTE',obs:'Ótima evolução no uso de celular <texto>'}],true);
+ assert.match(out,/evt-positive/);assert.match(out,/2026-10-19/);assert.match(out,/GESTOR TESTE/);assert.match(out,/Ótima evolução no uso de celular &lt;texto&gt;/);assert.doesNotMatch(out,/evt-table-wrap|<details class="evt-card evt-collapse"|Melhorou|Piorou/);
+});
+test('tratativa de orientação inicia recolhida com seta nativa e mantém evolução ao expandir',()=>{
+ const out=renderCards([{...t,tipo:'Conversa de orientação'}]);
+ assert.match(out,/<details class="evt-card evt-collapse"><summary class="evt-toggle">/);
+ assert.match(out,/Ver evolução/);assert.match(out,/Tema tratado<\/th>/);assert.doesNotMatch(out,/<details[^>]*\bopen\b/);
+});
