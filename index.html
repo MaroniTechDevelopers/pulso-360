@@ -3460,7 +3460,11 @@ function openFicha(nome){
     catch(err){
       console.error('[Pulso360] Erro ao carregar ficha do motorista',err);
       const box=$('#fichaBox');
-      if(box) box.innerHTML=`<div class="card" style="padding:22px;border-left:4px solid var(--critical)"><b>Não foi possível concluir o carregamento da ficha.</b><div style="margin-top:6px;color:var(--muted)">O painel continua disponível. Volte ao resumo e tente abrir novamente.</div><button type="button" onclick="voltarResumo()" style="margin-top:12px">← Voltar ao resumo</button></div>`;
+      if(box){
+        const detalhe=String((err&&err.stack)||(err&&err.message)||err||'Erro não identificado');
+        const safe=detalhe.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        box.innerHTML=`<div class="card" style="padding:22px;border-left:4px solid var(--critical)"><b>Não foi possível concluir o carregamento da ficha.</b><div style="margin-top:6px;color:var(--muted)">O painel continua disponível. Volte ao resumo e tente abrir novamente.</div><details style="margin-top:12px"><summary style="cursor:pointer">Detalhes técnicos do erro</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin-top:8px">${safe}</pre></details><button type="button" onclick="voltarResumo()" style="margin-top:12px">← Voltar ao resumo</button></div>`;
+      }
       toast('Erro ao carregar a ficha do motorista');
     }
   });
