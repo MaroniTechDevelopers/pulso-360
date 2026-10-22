@@ -4196,11 +4196,11 @@ function renderMotoristas(){
     // Mesmo cadastro pode vir duplicado em arquivos TMS; preservar CPFs distintos.
     const unique=[],seenCpf=new Set(),seenNames=new Map();
     for(const r of rows){
-      const cpf=String(r.cpf||'').replace(/\\D/g,'');
+      const cpf=String(r.cpf||'').replace(/\D/g,'');
       const nn=norm(r.nome||'');
       if(cpf&&seenCpf.has(cpf))continue;
       if(nn&&seenNames.has(nn)){
-        const previous=seenNames.get(nn),prevCpf=String(previous.cpf||'').replace(/\\D/g,'');
+        const previous=seenNames.get(nn),prevCpf=String(previous.cpf||'').replace(/\D/g,'');
         if(!cpf||!prevCpf){ if(cpf&&!prevCpf){const idx=unique.indexOf(previous);if(idx>=0)unique[idx]=r;seenNames.set(nn,r);}continue; }
         if(cpf===prevCpf)continue;
       }
