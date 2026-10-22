@@ -1297,8 +1297,8 @@
         <div class="status-line" id="stAlertas">nenhum arquivo</div>
       </div>
       <div class="drop" id="drop-tms">
-        <h3><span class="num">4</span> TMS — Veículos <span style="font-size:11px;color:var(--muted);font-weight:400">opcional</span></h3>
-        <p>Cadastro de veículos. Colunas: <code>Placa</code>, <code>Centro Resultado</code> (operação), e opcional <code>Tipo de Rodado</code>, <code>Carroceria</code>, <code>Propriedade</code>, <code>UF</code>. <b>A operação já vem da UO da Trimble (Alertas)</b> — o TMS aqui é opcional (refina/confere no batimento).</p>
+        <h3><span class="num">4</span> TMS — Veículos <span style="font-size:11px;color:var(--muted);font-weight:400">fonte oficial da operação</span></h3>
+        <p>Cadastro de veículos. Colunas: <code>Placa</code>, <code>Centro Resultado</code> (operação), e opcional <code>Tipo de Rodado</code>, <code>Carroceria</code>, <code>Propriedade</code>, <code>UF</code>. <b>A operação é definida pelo Centro Resultado do relatório TMS — Veículos, vinculado pela placa.</b> A UO da Trimble não define a operação; placas sem correspondência no TMS ficam sem operação identificada.</p>
         <input type="file" id="fileTms" accept=".csv,.xlsx,.xls,.txt" multiple hidden>
         <button class="btn solid" onclick="document.getElementById('fileTms').click()">Selecionar arquivos</button>
         <div class="status-line" id="stTms">nenhum arquivo</div>
@@ -1923,7 +1923,7 @@ function analyze(rec){
   // Com veículo, usa o cadastro TMS da placa. Sem veículo, usa o Centro de Resultado do motorista no TMS.
   const placasR = (rec.placas&&rec.placas.length)?rec.placas:(rec.placa?[rec.placa]:[]);
   let opPlaca=''; for(const p of placasR){ opPlaca=operacaoDaPlaca(p); if(opPlaca) break; }
-  const operacao = opPlaca || operacaoTmsMotorista(rec.motoristaEscala) || '—';
+  const operacao = opPlaca || '—';
   // --- ponto: preserva a ORDEM das batidas; ao virar 23:xx → 00:xx, continua no dia seguinte ---
   // Não ordenar aqui: ordenar quebrava jornadas noturnas e fazia aparecer marcações em horários errados.
   const rawP=(rec.ponto||[]).map(toMin).filter(v=>v!=null);
@@ -2202,12 +2202,7 @@ function build(forceAnalyze=false){
     if(RAW&&RAW._dedupeDone)CALC_DUPLICATES=0;
   }else{
     RECORDS = dedupeCalcRecords(base.map(analyze));
-    // operação = do VEÍCULO (UO/placa). Só dias SEM veículo (só ponto) herdam a operação predominante
-    // do condutor — assim NÃO empurramos veículos para a operação do motorista (contagem por operação fica certa).
-    const byDrv={};
-    RECORDS.forEach(r=>{ if(r.operacao && r.operacao!=='—'){ const k=norm(r.motoristaEscala); const g=(byDrv[k]=byDrv[k]||{}); g[r.operacao]=(g[r.operacao]||0)+(r.horasMov||1); } });
-    const drvOp={}; for(const k in byDrv){ let best='',bv=-1; for(const op in byDrv[k]){ if(byDrv[k][op]>bv){bv=byDrv[k][op];best=op;} } if(best)drvOp[k]=best; }
-    RECORDS.forEach(r=>{ const semVeic=!((r.placas&&r.placas.length)||r.placa); if((!r.operacao||r.operacao==='—') && semVeic && drvOp[norm(r.motoristaEscala)]) r.operacao=drvOp[norm(r.motoristaEscala)]; });
+    // Operação definida exclusivamente pelo relatório TMS — Veículos, sem inferência por condutor ou UO Trimble.
     // INTERJORNADA (CLT 11h): descanso entre o fim de uma jornada e o início da próxima (por motorista, dias trabalhados consecutivos)
     const jrn={}; RECORDS.forEach(r=>{ if(r.punches&&r.punches.length){ (jrn[r.motoristaEscala]=jrn[r.motoristaEscala]||[]).push(r); } });
     for(const nm in jrn){ const L=jrn[nm].sort((a,b)=> a.data<b.data?-1:a.data>b.data?1:0);
