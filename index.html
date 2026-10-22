@@ -554,9 +554,18 @@
   .multalist .mplate{font-weight:750;color:var(--ink)}
   .multalist .maudit{font-weight:700}.multalist .maudit.ok{color:var(--good-ink)}.multalist .maudit.bad{color:var(--critical)}.multalist .maudit.muted{color:var(--muted)}
   @media(max-width:980px){.multalist li{grid-template-columns:1fr 1fr}.multalist li>span:last-child{grid-column:1/-1}}
-  .ficha-sticky{position:sticky;top:146px;z-index:24;margin-bottom:14px;box-shadow:0 8px 24px rgba(15,23,42,.10)}
-  .ficha-sticky .ficha-hero{background:var(--surface)}
-  @media(max-width:980px){.ficha-sticky{top:138px}}
+  .ficha-fixbar{
+    position:sticky;top:146px;z-index:26;margin:0 0 10px;padding:9px 14px;
+    border:1px solid var(--border);border-left:4px solid var(--gold-2);border-radius:10px;
+    background:color-mix(in srgb,var(--surface) 96%,transparent);
+    box-shadow:0 6px 20px rgba(15,23,42,.10);backdrop-filter:blur(8px);
+    display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap
+  }
+  .ficha-fixbar .ff-nome{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;color:var(--muted)}
+  .ficha-fixbar .ff-nome b{color:var(--ink);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:620px}
+  .ficha-fixbar .ff-periodo{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);white-space:nowrap}
+  .ficha-fixbar .ff-periodo b{color:var(--ink);font-size:13px}
+  @media(max-width:980px){.ficha-fixbar{top:138px}.ficha-fixbar .ff-nome b{max-width:58vw}}
   .ficha-hero{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
   .ficha-hero .avatar{width:60px;height:60px;border-radius:14px;font-size:20px}
   .ficha-hero h2{font-size:20px}
@@ -3684,7 +3693,12 @@ function renderFicha(){
 
   const _notaScore=notaDe(nome), _notaCor=notaCor(_notaScore);   // cor da ficha = NOTA (mesma régua da capinha)
   $('#fichaBox').innerHTML = `
-    <div class="card ficha-sticky">
+    <div class="ficha-fixbar">
+      <div class="ff-nome"><span>Condutor</span><b>${nome}</b></div>
+      <div class="ff-periodo"><span>Período</span><b>${periodoFicha}</b></div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
       <div class="ficha-hero">
         <span class="avatar" title="Nota ${_notaScore!=null?Math.round(_notaScore)+'/100':'—'}${fichaRisco.reasons.length?' · sinais: '+fichaRisco.reasons.join(' · '):''}" style="background:${_notaCor}">${iniciais(nome)}</span>
         <div style="flex:1;min-width:180px">
@@ -3692,10 +3706,6 @@ function renderFicha(){
           <div class="sub">${op||'—'}${placasDetalhadasHtml?' · '+placasDetalhadasHtml:''} · <b>${tempo}</b> de casa · admissão ${adm?brDate(adm):'—'}</div>
         </div>
         <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;justify-content:flex-end">
-          <div class="ficha-periodo-destaque" style="min-width:250px;padding:12px 16px;border:2px solid var(--gold-2);border-radius:14px;background:color-mix(in srgb,var(--gold-2) 7%,var(--surface));display:flex;flex-direction:column;justify-content:center">
-            <span style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Período selecionado</span>
-            <b style="font-size:17px;line-height:1.2;color:var(--ink);margin-top:3px">${periodoFicha}</b>
-          </div>
           <div class="reco ${reco.cls}"><b>${reco.tit}</b>${reco.txt}</div>
         </div>
       </div>
