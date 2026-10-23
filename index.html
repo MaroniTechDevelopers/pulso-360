@@ -2637,7 +2637,7 @@ function velocidadeKmh(v){
 function colunaVelocidade(head){
   const clean=(head||[]).map(h=>norm(h).replace(/[_\-]+/g,' '));
   const candidates=clean.map((h,i)=>({h,i})).filter(x=>/VELOCIDADE|\bSPEED\b/.test(x.h)&&!/LIMITE|PERMITID|VIA|MEDIA|CONFIG|TOLERANC/.test(x.h));
-  const max=candidates.find(x=>/MAX|PICO|REGISTRAD|ATINGID|EVENTO|\bSPEED\b/.test(x.h));return max?max.i:candidates.length?candidates[0].i:-1;
+  const max=candidates.find(x=>/MAX|PICO|REGISTRAD|ATINGID|EVENTO|\bSPEED\b/.test(x.h));return max?max.i:candidates.length?candidates[0].i:clean.findIndex(h=>h==='EXCESSO');
 }
 function descontoVelocidade(kmh){
   const v=velocidadeKmh(kmh);return v==null?null:v>98?15:v>90?10:v>=86?5:0;
@@ -5637,7 +5637,7 @@ function aggAlertas(text, keep, seen, diag){
     if(d && (!keep || keep.has(nn))){
       let tmin = iHora>=0 ? toMin(c[iHora]) : null;
       if(tmin==null){ const dt=splitDT(c[iData]); if(dt.time) tmin=toMin(dt.time); }
-      if(tmin!=null){ const arr=(tl[nn]=tl[nn]||[]); arr.push([d,tmin,(nivel[0]||''),tipo,{key:rowSigCells(c),placa:iPlaca>=0?placaKey(c[iPlaca]):'',hora:iHora>=0?String(c[iHora]):String(c[iData]),velocidadeKmh:iVelocidade>=0?velocidadeKmh(c[iVelocidade]):null}]); }
+      if(tmin!=null){ const arr=(tl[nn]=tl[nn]||[]); arr.push([d,tmin,(nivel[0]||''),tipo,{key:rowSigCells(c),placa:iPlaca>=0?placaKey(c[iPlaca]):'',hora:iHora>=0?String(c[iHora]):String(c[iData]),velocidadeKmh:iVelocidade>=0?velocidadeKmh(c[iVelocidade]):null,velocidadeFonte:iVelocidade>=0?String(head[iVelocidade]):''}]); }
     }
     n++;
   }
@@ -5668,7 +5668,7 @@ async function aggAlertasAsync(text, keep, seen, diag){
     if(tipoPareceCpf(tipo))continue;
     const a=(A[nn]=A[nn]||{nome,total:0,niveis:{},tipos:{},semanas:{}});a.total++;a.tipos[tipo]=(a.tipos[tipo]||0)+1;if(nivel)a.niveis[nivel]=(a.niveis[nivel]||0)+1;
     let d=null;if(iData>=0){d=isoDate(splitDT(c[iData]).date||c[iData]);if(d){const wk=weekInfo(d).key;if(wk)a.semanas[wk]=(a.semanas[wk]||0)+1;}}
-    if(d&&(!keep||keep.has(nn))){let tmin=iHora>=0?toMin(c[iHora]):null;if(tmin==null){const dt=splitDT(c[iData]);if(dt.time)tmin=toMin(dt.time);}if(tmin!=null){const arr=(tl[nn]=tl[nn]||[]);arr.push([d,tmin,(nivel[0]||''),tipo,{key:rowSigCells(c),placa:iPlaca>=0?placaKey(c[iPlaca]):'',hora:iHora>=0?String(c[iHora]):String(c[iData]),velocidadeKmh:iVelocidade>=0?velocidadeKmh(c[iVelocidade]):null}]);}}
+    if(d&&(!keep||keep.has(nn))){let tmin=iHora>=0?toMin(c[iHora]):null;if(tmin==null){const dt=splitDT(c[iData]);if(dt.time)tmin=toMin(dt.time);}if(tmin!=null){const arr=(tl[nn]=tl[nn]||[]);arr.push([d,tmin,(nivel[0]||''),tipo,{key:rowSigCells(c),placa:iPlaca>=0?placaKey(c[iPlaca]):'',hora:iHora>=0?String(c[iHora]):String(c[iData]),velocidadeKmh:iVelocidade>=0?velocidadeKmh(c[iVelocidade]):null,velocidadeFonte:iVelocidade>=0?String(head[iVelocidade]):''}]);}}
     n++; rows++; if(rows%2500===0)await uiYield();
   }
   const placaUO={};for(const pl in puo){let best=-1,uo='';for(const u in puo[pl])if(puo[pl][u]>best){best=puo[pl][u];uo=u;}placaUO[pl]={uo,uoCurta:uoCurta(uo),n:best};}
