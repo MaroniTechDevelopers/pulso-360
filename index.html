@@ -2627,15 +2627,63 @@ function rankLowerPercentile(values,v){
   let lo=0,eq=0; for(const x of a){if(x<v)lo++;else if(x===v)eq++;}
   const avg=lo+Math.max(0,eq-1)/2; return rankClamp(100*(1-avg/(a.length-1)));
 }
+// BEGIN SPEED SCORE HELPERS
+function velocidadeKmh(v){
+  if(v==null||v==='')return null;
+  const raw=String(v).trim().replace(/\s*km\s*\/?\s*h\s*$/i,'').trim();
+  if(!/^\d+(?:[.,]\d+)?$/.test(raw))return null;
+  const n=Number(raw.replace(',','.'));return Number.isFinite(n)&&n>=0&&n<=300?n:null;
+}
+function colunaVelocidade(head){
+  const clean=(head||[]).map(h=>norm(h).replace(/[_\-]+/g,' '));
+  const candidates=clean.map((h,i)=>({h,i})).filter(x=>/VELOCIDADE|\bSPEED\b/.test(x.h)&&!/LIMITE|PERMITID|VIA|MEDIA|CONFIG|TOLERANC/.test(x.h));
+  const max=candidates.find(x=>/MAX|PICO|REGISTRAD|ATINGID|EVENTO|\bSPEED\b/.test(x.h));return max?max.i:candidates.length?candidates[0].i:clean.findIndex(h=>h==='EXCESSO');
+}
+function descontoVelocidade(kmh){
+  const v=velocidadeKmh(kmh);return v==null?null:v>98?15:v>90?10:v>=86?5:0;
+}
+function descontoReincidencia(graveCount){ return graveCount>=4?50:graveCount>=3?30:0; }
+function rankSpeedSummary(nome,recs){
+  const days=new Set((recs||[]).filter(r=>r&&r.data&&((r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.horasMov||0)>0)).map(r=>r.data));
+  const evs=AL_TL&&(AL_TL[norm(nome)]||[]),seen=new Set();let total=0,known=0,unknown=0,graveCount=0,max=null;
+  for(const [i,e] of (evs||[]).entries()){
+    if(!days.has(e[0])||!alertaEhVelocidade(e[3]))continue;
+    const meta=e[4]||{},key=meta.key||'legacy:'+i;if(seen.has(key))continue;seen.add(key);total++;
+    const kmh=velocidadeKmh(meta.velocidadeKmh);
+    if(kmh==null){unknown++;continue;}known++;if(kmh>=100)graveCount++;max=max==null?kmh:Math.max(max,kmh);
+  }
+  // Aggregate-only legacy sources cannot establish a numerical speed tier.
+  if(!AL_TL&&days.size){const dm=BOL_DAY&&BOL_DAY[norm(nome)];
+    if(dm){for(const d of days)for(const [type,n] of Object.entries(dm[d]&&dm[d].tipos||{}))if(alertaEhVelocidade(type))unknown+=Math.max(0,+n||0);}
+    else{const v=alertasResumo(nome,{de:[...days].sort()[0],ate:[...days].sort().slice(-1)[0]});for(const [type,n] of Object.entries(v&&v.tipos||{}))if(alertaEhVelocidade(type))unknown+=Math.max(0,+n||0);}
+    total=unknown;
+  }
+  return {total,known,unknown,graveCount,recurrencePct:descontoReincidencia(graveCount),maxKmh:max,penaltyPct:max==null?0:descontoVelocidade(max),pending:unknown>0};
+}
+function rankWithoutSpeed(summary){
+  const tipos={},v=summary||{};let speed=0;for(const [type,n] of Object.entries(v.tipos||{})){if(alertaEhVelocidade(type))speed+=+n||0;else tipos[type]=n;}
+  // Severity totals mixing speed and other alerts cannot be safely split.
+  return {...v,total:Math.max(0,(+v.total||0)-speed),tipos,niveis:speed?{}:{...(v.niveis||{})}};
+}
+function speedBaseText(p){
+  const v=p&&p.velocidade;if(!v)return '';
+  const band=v.penaltyPct?`Maior velocidade: ${String(v.maxKmh).replace('.',',')} km/h · desconto único de ${v.penaltyPct}% na nota`:'Sem desconto de velocidade nas ocorrências com km/h disponível';
+  return band+(v.pending?` · classificação pendente: ${v.unknown} alerta(s) sem km/h`:'');
+}
+function speedScoreText(p){
+  const v=p&&p.velocidade;if(!v)return '';
+  return speedBaseText(p)+` · graves (≥100 km/h): ${v.graveCount||0}`+(descontoReincidencia(v.graveCount||0)?` · reincidência: desconto adicional de ${descontoReincidencia(v.graveCount||0)}% ao final`:'');
+}
+// END SPEED SCORE HELPERS
 function rankAlertSummary(nome,recs){
   const nn=norm(nome), dias=new Set((recs||[]).filter(r=>r&&r.data&&((r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.horasMov||0)>0)).map(r=>r.data));
   if(!dias.size)return {total:0,niveis:{},tipos:{},real:true,badges:[]};
-  if(AL_TL){let total=0;const tipos={},niveis={};for(const e of (AL_TL[nn]||[])){if(!dias.has(e[0]))continue;total++;const tp=e[3]||'ALERTA';tipos[tp]=(tipos[tp]||0)+1;const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':'';if(nv)niveis[nv]=(niveis[nv]||0)+1;}return {total,niveis,tipos,real:true,badges:[]};}
-  if(BOL_DAY){let total=0;const tipos={};const dm=BOL_DAY[nn]||{};for(const d of dias){const x=dm[d];if(!x)continue;total+=x.t||0;for(const k in (x.tipos||{}))tipos[k]=(tipos[k]||0)+(x.tipos[k]||0);}return {total,niveis:{},tipos,real:true,badges:[]};}
-  return alertasResumo(nome,activeRange());
+  if(AL_TL){let total=0;const tipos={},niveis={};for(const e of (AL_TL[nn]||[])){if(!dias.has(e[0])||alertaEhVelocidade(e[3]))continue;total++;const tp=e[3]||'ALERTA';tipos[tp]=(tipos[tp]||0)+1;const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':'';if(nv)niveis[nv]=(niveis[nv]||0)+1;}return {total,niveis,tipos,real:true,badges:[]};}
+  if(BOL_DAY){let total=0;const tipos={};const dm=BOL_DAY[nn]||{};for(const d of dias){const x=dm[d];if(!x)continue;total+=x.t||0;for(const k in (x.tipos||{}))tipos[k]=(tipos[k]||0)+(x.tipos[k]||0);}return rankWithoutSpeed({total,niveis:{},tipos,real:true,badges:[]});}
+  const dates=[...dias].sort();return rankWithoutSpeed(alertasResumo(nome,{de:dates[0],ate:dates[dates.length-1]}));
 }
 function rankProfile(nome,recs){
-  const audit=auditMetrics(recs), alR=rankAlertSummary(nome,recs), movDays=audit.diasMov||0, pontoDays=audit.diasPonto||0, hCond=audit.hCond||0, hPonto=audit.hPonto||0;
+  const audit=auditMetrics(recs), alR=rankAlertSummary(nome,recs), velocidade=rankSpeedSummary(nome,recs), movDays=audit.diasMov||0, pontoDays=audit.diasPonto||0, hCond=audit.hCond||0, hPonto=audit.hPonto||0;
   const identCam=aderRecs(recs), identMot=aderMotoristaRecs(recs), aj=aderJornada(recs);
   const pointCoverage=movDays?rankClamp(pontoDays/movDays*100):null;
   // Unificado (08/10/2026): "Aderência de jornada e ponto" = jornada (60%) + cobertura de ponto (40%),
@@ -2670,7 +2718,7 @@ function rankProfile(nome,recs){
   // (vira "sem dado", não penaliza com 0). Veículos com sensor ok seguem normais.
   const mediaScore=(!MEDIA_OFF&&mediaPlausivel(media)&&meta>0)?rankClamp(media/meta*100):null;
   const pend=(recs||[]).filter(r=>r.sev==='pendente').length, idDiv=(recs||[]).filter(r=>r.idDivergente||r.condutorDivergente).length;
-  return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,km:audit.km||0,identCam,identMot,aj,pointCoverage,ajPonto,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
+  return {nome,recs,audit,movDays,pontoDays,hCond,hPonto,velocidade,km:audit.km||0,identCam,identMot,aj,pointCoverage,ajPonto,interjDays,interjScore,extraScore,alR,alertRisk,alertRate,multaTot,multaRate,media,meta,mediaScore,pend,idDiv};
 }
 let RANKPROFILE_CACHE={key:'',rows:null,profiles:null};
 function _rankSig(){ return (typeof DATA_REV!=='undefined'?DATA_REV:0)+'|M'+(typeof MULTAS_REV!=='undefined'?MULTAS_REV:0)+'|'+(MEDIA_OFF?1:0)+'|'+(($('#fOp')&&$('#fOp').value)||''); }
@@ -2698,7 +2746,7 @@ function _rankScoreProfiles(profiles){
     add('identMot','Identificação motorista',10,p.identMot,true);
     add('identCam','Cobertura câmera',5,p.identCam,true);
     add('jornada','Aderência de jornada e ponto',20,p.ajPonto,!!(BASES&&BASES.ponto));
-    add('alertas','Alertas/severidade',15,rankClamp(100*(1-Math.min(1,(p.alertRate||0)/ALERT_CAP))),hasAlerts);
+    add('alertas','Outros alertas (sem velocidade)',15,rankClamp(100*(1-Math.min(1,(p.alertRate||0)/ALERT_CAP))),hasAlerts);
     add('multas','Multas conduta',10,rankClamp(100*(1-Math.min(1,(p.multaRate||0)/MULTA_CAP))),hasMultas);
     add('interj','Interjornada',10,p.interjScore,!!(BASES&&BASES.ponto));
     add('extra','Hora extra',15,p.extraScore,!!(BASES&&BASES.ponto));
@@ -2707,9 +2755,23 @@ function _rankScoreProfiles(profiles){
     // Divergência explícita de condutor é uma falha independente e não pode sumir dentro de uma média.
     if(p.idDiv>0)score-=Math.min(12,p.idDiv*2);
     // Teto de segurança: alerta em excesso trava a nota máxima (prioriza segurança sobre os demais quesitos).
-    if(hasAlerts && (p.alertRate||0) > ALERT_TETO_TAXA && score > ALERT_TETO_NOTA){ score=ALERT_TETO_NOTA; p.alertTeto=true; }
+    p.alertTeto=false;p.alertCapPoints=0;
+    if(hasAlerts && (p.alertRate||0) > ALERT_TETO_TAXA && score > ALERT_TETO_NOTA){ p.alertCapPoints=score-ALERT_TETO_NOTA;score=ALERT_TETO_NOTA; p.alertTeto=true; }
+    // Speed is a single multiplicative deduction from the driver's resulting
+    // grade, based on the highest measured tier in this same scope.
+    p.scoreBeforeSpeed=rankClamp(score);
+    p.speedPenaltyPct=p.velocidade&&p.velocidade.penaltyPct||0;
+    p.speedPenaltyPoints=p.scoreBeforeSpeed*p.speedPenaltyPct/100;
+    p.speedPending=!!(p.velocidade&&p.velocidade.pending);
+    score=p.scoreBeforeSpeed-p.speedPenaltyPoints;
+    // Three distinct measured events >=100 km/h deduct 30%; four or more
+    // deduct 50% instead, on the grade remaining after the normal deduction.
+    p.scoreBeforeRecurrence=rankClamp(score);
+    p.speedRecurrencePct=descontoReincidencia(p.velocidade&&p.velocidade.graveCount||0);
+    p.speedRecurrencePoints=p.scoreBeforeRecurrence*p.speedRecurrencePct/100;
+    score=p.scoreBeforeRecurrence-p.speedRecurrencePoints;
     p.score=rankClamp(score); p.scoreDisplay=Math.round(p.score); p.components=comps;
-    p.scoreTitle=comps.map(c=>c.lab+': '+Math.round(c.v)+'%').join(' · ')+(p.idDiv?' · divergências de condutor: '+p.idDiv:'');
+    p.scoreTitle=comps.map(c=>c.lab+': '+Math.round(c.v)+'%').join(' · ')+(p.idDiv?' · divergências de condutor: '+p.idDiv:'')+(p.velocidade?' · '+speedScoreText(p):'');
   }
 }
 function _rankCacheSet(sig,rows,profiles){ RANKPROFILE_CACHE={key:sig,rows:rows,profiles:profiles}; RANK_SCORES={}; for(const k in profiles){ const p=profiles[k]; RANK_SCORES[k]=(p&&!p._rankError&&Number.isFinite(p.score))?p.score:null; } }
@@ -3885,6 +3947,7 @@ function renderFicha(){
     : ALERTA_DEF.map(a=>{ const n=(d.alertas&&d.alertas[a.k])||0; return `<div class="alert-tile ${n>=5?'hot':''}"><div class="n">${a.ic} ${n}</div><div class="l">${a.lab}</div>${_multaSub(a.lab)}</div>`; }).join('');
 
 
+  const _notaProfile=scoreProfileMotorista(nome,filtered());
   const _notaScore=notaDe(nome), _notaCor=notaCor(_notaScore);   // score interno 0–100; nota exibida = score / 10
   const _faixaNota=(_notaScore==null||!Number.isFinite(Number(_notaScore)))?'score-none':(_notaScore>=80?'score-good':_notaScore>=60?'score-warn':'score-bad');
   $('#fichaBox').innerHTML = `
@@ -3912,6 +3975,7 @@ function renderFicha(){
       ? '<ul class="tratlist">'+trats.map(t=>`<li data-trat-uid="${encodeURIComponent(tratUid(t))}"><div class="tt-h"><span class="tt-tipo">${pdfEsc(t.tipo||'—')}</span><b>${brDate(t.data)}</b>${t.gestor?' · <span class="tt-g">'+pdfEsc(t.gestor)+'</span>':''}${isAdmin()?`<button class="trat-del" type="button" data-uid="${encodeURIComponent(tratUid(t))}" title="Excluir esta tratativa do histórico compartilhado">🗑️ Excluir</button>`:''}</div>${t.obs?'<div class="tt-o">'+pdfEsc(t.obs)+'</div>':''}${t.sinais?'<div class="tt-s">sinais na época: '+pdfEsc(t.sinais)+'</div>':''}</li>`).join('')+'</ul>'
       : '<div class="empty" style="padding:22px">Nenhuma tratativa registrada ainda. Use o botão <b>🗣️ Registrar tratativa</b> (acima) para iniciar o acompanhamento com o motorista.</div>' }</div>
 
+    ${_notaProfile&&_notaProfile.velocidade?`<div class="card" style="padding:12px 16px;margin-bottom:12px"><b>Velocidade na nota:</b> ${pdfEsc(speedScoreText(_notaProfile))}. Outros alertas continuam no componente de alertas.</div>`:''}
     ${fichaEvolTratativas(nome)}
 
     <div class="sec-title" id="fichaPontosInicio"><h2>Pontos de atenção × pontos fortes</h2><span>${periodoLabel()} · resumo executivo (o mesmo do PDF)</span></div>
@@ -4540,7 +4604,7 @@ const SC_EXPL={
   identCam:'% do movimento do veículo em que a câmera conseguiu identificar algum condutor (saúde do equipamento).',
   jornada:'junta dois pontos: conduzir DENTRO do horário do ponto (60%) e ter o ponto registrado nos dias que moveu (40%). 100 = tudo em dia.',
   ponto:'% dos dias em que você moveu o veículo e tem o ponto registrado.',
-  alertas:'nota relativa à frota pela quantidade/gravidade de alertas por hora (celular, velocidade, fadiga…). 100 = entre os melhores (menos alertas).',
+  alertas:'Quantidade e gravidade dos outros alertas por hora (celular, fadiga, distração…). Velocidade é excluída deste componente e tem desconto separado de 5%, 10% ou 15% pela maior faixa registrada.',
   multas:'nota relativa à frota por multas de conduta por hora dirigida. 100 = sem multas / entre os melhores.',
   interj:'% dos dias respeitando as 11h de descanso entre jornadas (interjornada CLT).',
   extra:'penaliza a média diária de hora extra acima de 2h/dia. 100 = sem excesso; cai conforme a média passa de 2h extra por dia (≈4h extra/dia = 0).',
@@ -4551,7 +4615,7 @@ const SC_FRIENDLY={
   identMot:{ic:'📷',area:'Identificação',pos:'Sempre reconhecido',posd:'A câmera te identificou ao volante quase sempre.',tip:'Mantenha o rosto visível para a câmera.'},
   identCam:{ic:'🎥',area:'Câmera do veículo',pos:'Câmera em dia',posd:'Boa cobertura de identificação no veículo.',tip:'Se a câmera falhar, avise a manutenção.'},
   jornada:{ic:'⏱️',area:'Jornada e ponto',pos:'Jornada em dia',posd:'Conduziu dentro do horário do ponto.',tip:'Dirigir dentro do horário do ponto e bater o ponto.'},
-  alertas:{ic:'🚨',area:'Direção segura',pos:'Direção segura',posd:'Poucos alertas no período. Mandou bem!',tip:'Menos celular e velocidade = mais pontos.'},
+  alertas:{ic:'🚨',area:'Direção segura',pos:'Direção segura',posd:'Poucos alertas no período. Mandou bem!',tip:'Menos celular, fadiga e distração = mais pontos.'},
   multas:{ic:'🚦',area:'Multas',pos:'Sem multas',posd:'Nenhuma multa de conduta no período.',tip:'Evitar multas de conduta (celular, velocidade).'},
   interj:{ic:'🛌',area:'Descanso (11h)',pos:'Descanso certo',posd:'Respeitou as 11h de descanso entre jornadas.',tip:'Respeitar as 11h de descanso entre jornadas.'},
   extra:{ic:'➕',area:'Hora extra',pos:'Hora certa',posd:'Sem excesso de hora extra.',tip:'Evitar passar de 2h extras por dia.'},
@@ -4587,7 +4651,7 @@ function scoreMensalMotorista(nome, rows){
     if(!p||p._rankError){ out.push({key:mz.key,label:mz.label,score:null,comps:{}}); continue; }
     const cm=Object.create(null); (p.components||[]).forEach(c=>cm[c.k]=c.v);
     const elig=(p.movDays>0&&p.hCond>0);
-    out.push({key:mz.key,label:mz.label,score:elig?p.score:null,comps:cm,movDays:p.movDays});
+    out.push({key:mz.key,label:mz.label,score:elig?p.score:null,comps:cm,movDays:p.movDays,velocidade:p.velocidade,scoreBeforeSpeed:p.scoreBeforeSpeed,speedPenaltyPct:p.speedPenaltyPct,speedPending:p.speedPending,scoreBeforeRecurrence:p.scoreBeforeRecurrence,speedRecurrencePct:p.speedRecurrencePct,speedRecurrencePoints:p.speedRecurrencePoints});
   }
   return out;
 }
@@ -4707,7 +4771,7 @@ function renderScorecard(nome){
   }).join('');
   const somaContrib=comps.reduce((s,c)=>s+(c.w*c.v/100)/totW*10,0);
   const penal10=(p.idDiv>0?Math.min(12,p.idDiv*2):0)/10;
-  const totalHtml=`<div class="sc-total"><div class="row"><span>Soma das contribuições</span><b>${scFmt(somaContrib)}/10</b></div>${penal10>0?`<div class="row pen"><span>− Divergências de condutor (${p.idDiv})</span><b>−${scFmt(penal10)}</b></div>`:''}<div class="row fin"><span>Nota final</span><b style="color:${notaCor(p.score)}">${scFmt(n10)}/10</b></div></div>`;
+  const totalHtml=`<div class="sc-total"><div class="row"><span>Soma das contribuições</span><b>${scFmt(somaContrib)}/10</b></div>${penal10>0?`<div class="row pen"><span>− Divergências de condutor (${p.idDiv})</span><b>−${scFmt(penal10)}</b></div>`:''}${p.alertCapPoints>0?`<div class="row pen"><span>− Limite de segurança dos demais alertas</span><b>−${scFmt(p.alertCapPoints/10)}</b></div>`:''}${p.velocidade?`<div class="row ${p.speedPenaltyPct?'pen':''}"><span>${scEsc(speedBaseText(p))}</span><b>${p.speedPenaltyPoints?'−'+scFmt(p.speedPenaltyPoints/10)+' pts':'—'}</b></div>`:''}${p.speedRecurrencePct?`<div class="row pen"><span>− Reincidência grave: ${p.velocidade.graveCount} ocorrências ≥100 km/h<br><small>${p.speedRecurrencePct}% sobre a nota restante de ${scFmt(p.scoreBeforeRecurrence/10)}/10</small></span><b>−${scFmt(p.speedRecurrencePoints/10)} pts</b></div>`:''}<div class="row fin"><span>Nota final</span><b style="color:${notaCor(p.score)}">${scFmt(n10)}/10</b></div></div>`;
   // tratativas (antigo -> novo) com a nota do mês e a variação de uma p/ a outra
   const trats=tratList(nome).slice().sort((a,b)=>(+a.ts||0)-(+b.ts||0)||String(a.data||'').localeCompare(String(b.data||'')));
   const scoreByMes={}; mensal.forEach(m=>{ if(m.score!=null)scoreByMes[m.key]=m.score; });
@@ -5551,7 +5615,7 @@ function aggAlertas(text, keep, seen, diag){
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
   const head=splitCSVLine(first,delim); const H={}; head.forEach((h,i)=>H[norm(h)]=i);
   const find=(...ns)=>{ for(const n of ns){ for(const k in H){ if(k.indexOf(n)>=0) return H[k]; } } return -1; };
-  const iMot=find('MOTORISTA'), iTipo=find('TIPO'), iNivel=find('NIVEL'), iData=find('DATA'), iHora=find('HORA'), iDesc=find('DESCONSIDERADO'), iUO=find('UO'), iPlaca=find('PLACA','VEICULO');
+  const iMot=find('MOTORISTA'), iTipo=find('TIPO'), iNivel=find('NIVEL'), iData=find('DATA'), iHora=find('HORA'), iDesc=find('DESCONSIDERADO'), iUO=find('UO'), iPlaca=find('PLACA','VEICULO'), iVelocidade=colunaVelocidade(head);
   const A={}; const puo={}; const tl={}; let n=0, start=nl+1;   // tl: motorista(norm) → [ [dataISO, minutos, nivelChar, tipo] ] p/ a linha do tempo
   while(start<text.length){
     let end=text.indexOf('\n',start); if(end<0) end=text.length;
@@ -5573,7 +5637,7 @@ function aggAlertas(text, keep, seen, diag){
     if(d && (!keep || keep.has(nn))){
       let tmin = iHora>=0 ? toMin(c[iHora]) : null;
       if(tmin==null){ const dt=splitDT(c[iData]); if(dt.time) tmin=toMin(dt.time); }
-      if(tmin!=null){ const arr=(tl[nn]=tl[nn]||[]); if(arr.length<5000) arr.push([d,tmin,(nivel[0]||''),tipo,{key:rowSigCells(c),placa:iPlaca>=0?placaKey(c[iPlaca]):'',hora:iHora>=0?String(c[iHora]):String(c[iData])}]); }
+      if(tmin!=null){ const arr=(tl[nn]=tl[nn]||[]); arr.push([d,tmin,(nivel[0]||''),tipo,{key:rowSigCells(c),placa:iPlaca>=0?placaKey(c[iPlaca]):'',hora:iHora>=0?String(c[iHora]):String(c[iData]),velocidadeKmh:iVelocidade>=0?velocidadeKmh(c[iVelocidade]):null,velocidadeFonte:iVelocidade>=0?String(head[iVelocidade]):''}]); }
     }
     n++;
   }
@@ -5590,7 +5654,7 @@ async function aggAlertasAsync(text, keep, seen, diag){
   const delim=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
   const head=splitCSVLine(first,delim); const H={}; head.forEach((h,i)=>H[norm(h)]=i);
   const find=(...ns)=>{ for(const n of ns){ for(const k in H){ if(k.indexOf(n)>=0) return H[k]; } } return -1; };
-  const iMot=find('MOTORISTA'), iTipo=find('TIPO'), iNivel=find('NIVEL'), iData=find('DATA'), iHora=find('HORA'), iDesc=find('DESCONSIDERADO'), iUO=find('UO'), iPlaca=find('PLACA','VEICULO');
+  const iMot=find('MOTORISTA'), iTipo=find('TIPO'), iNivel=find('NIVEL'), iData=find('DATA'), iHora=find('HORA'), iDesc=find('DESCONSIDERADO'), iUO=find('UO'), iPlaca=find('PLACA','VEICULO'), iVelocidade=colunaVelocidade(head);
   const A={},puo={},tl={}; let n=0,start=nl+1,rows=0;
   while(start<text.length){
     let end=text.indexOf('\n',start); if(end<0)end=text.length;
@@ -5604,7 +5668,7 @@ async function aggAlertasAsync(text, keep, seen, diag){
     if(tipoPareceCpf(tipo))continue;
     const a=(A[nn]=A[nn]||{nome,total:0,niveis:{},tipos:{},semanas:{}});a.total++;a.tipos[tipo]=(a.tipos[tipo]||0)+1;if(nivel)a.niveis[nivel]=(a.niveis[nivel]||0)+1;
     let d=null;if(iData>=0){d=isoDate(splitDT(c[iData]).date||c[iData]);if(d){const wk=weekInfo(d).key;if(wk)a.semanas[wk]=(a.semanas[wk]||0)+1;}}
-    if(d&&(!keep||keep.has(nn))){let tmin=iHora>=0?toMin(c[iHora]):null;if(tmin==null){const dt=splitDT(c[iData]);if(dt.time)tmin=toMin(dt.time);}if(tmin!=null){const arr=(tl[nn]=tl[nn]||[]);if(arr.length<5000)arr.push([d,tmin,(nivel[0]||''),tipo,{key:rowSigCells(c),placa:iPlaca>=0?placaKey(c[iPlaca]):'',hora:iHora>=0?String(c[iHora]):String(c[iData])}]);}}
+    if(d&&(!keep||keep.has(nn))){let tmin=iHora>=0?toMin(c[iHora]):null;if(tmin==null){const dt=splitDT(c[iData]);if(dt.time)tmin=toMin(dt.time);}if(tmin!=null){const arr=(tl[nn]=tl[nn]||[]);arr.push([d,tmin,(nivel[0]||''),tipo,{key:rowSigCells(c),placa:iPlaca>=0?placaKey(c[iPlaca]):'',hora:iHora>=0?String(c[iHora]):String(c[iData]),velocidadeKmh:iVelocidade>=0?velocidadeKmh(c[iVelocidade]):null,velocidadeFonte:iVelocidade>=0?String(head[iVelocidade]):''}]);}}
     n++; rows++; if(rows%2500===0)await uiYield();
   }
   const placaUO={};for(const pl in puo){let best=-1,uo='';for(const u in puo[pl])if(puo[pl][u]>best){best=puo[pl][u];uo=u;}placaUO[pl]={uo,uoCurta:uoCurta(uo),n:best};}
@@ -6158,7 +6222,7 @@ function mergeAlertas(dst, src){ dst.n=(dst.n||0)+(src.n||0);
   for(const nn in src.A){ const s=src.A[nn]; const d=(dst.A[nn]=dst.A[nn]||{nome:s.nome,total:0,niveis:{},tipos:{},semanas:{}});
     d.total+=s.total; for(const k in s.niveis)d.niveis[k]=(d.niveis[k]||0)+s.niveis[k]; for(const k in s.tipos)d.tipos[k]=(d.tipos[k]||0)+s.tipos[k]; for(const k in s.semanas)d.semanas[k]=(d.semanas[k]||0)+s.semanas[k]; }
   dst.placaUO=dst.placaUO||{}; const sp=src.placaUO||{}; for(const pk in sp){ const cur=dst.placaUO[pk]; if(!cur||(sp[pk].n||0)>(cur.n||0)) dst.placaUO[pk]=sp[pk]; }
-  dst.tl=dst.tl||{}; const st=src.tl||{}; for(const nn in st){ const arr=(dst.tl[nn]=dst.tl[nn]||[]); for(const e of st[nn]){ if(arr.length<5000) arr.push(e); } } }
+  dst.tl=dst.tl||{}; const st=src.tl||{}; for(const nn in st){ const arr=(dst.tl[nn]=dst.tl[nn]||[]); for(const e of st[nn]){ arr.push(e); } } }
 // MOVIMENTAÇÃO local (vários csv/zip) — streaming (1 arquivo por vez), soma os dias
 async function loadMovLocais(files){
   if(!(pending.ponto&&pending.ponto.length)){ toast('Carregue primeiro a jornada (ponto)'); return; }
