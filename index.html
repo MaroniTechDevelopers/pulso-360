@@ -235,6 +235,8 @@
   .driver-state.divergencia{color:var(--crit-ink);background:var(--crit-bg);border:1px solid color-mix(in srgb,var(--critical) 35%,var(--border))}
   .driver-state.unico{color:var(--good-ink);background:var(--good-bg);border:1px solid color-mix(in srgb,var(--good) 30%,var(--border))}
   .seg.fora{outline:2px dashed var(--serious);outline-offset:-2px}
+  .seg.driving24-window{background:rgba(239,68,68,.15);color:var(--crit-ink);border:2px dashed var(--critical);font-weight:800;z-index:2}
+  .driving24-focus{outline:3px solid var(--critical);outline-offset:3px}
   /* marcador de interjornada (descanso < 11h) na trilha do Ponto — estilo dos alertas */
   .lane.lane-pt{overflow:visible}
   .lane .imark{position:absolute;top:2px;bottom:2px;width:2px;transform:translateX(-1px);background:var(--critical);border-radius:1px;cursor:help;z-index:4}
@@ -1209,6 +1211,7 @@
         <span class="lg"><span class="sw" style="background:var(--track-ponto)"></span> Ponto (jornada)</span>
         <span class="lg"><span class="sw" style="background:var(--track-mov)"></span> Direção do veículo (com placa)</span>
         <span class="lg"><span class="sw" style="background:transparent;outline:2px dashed var(--serious);outline-offset:-2px"></span> fora da jornada</span>
+        <span class="lg" style="color:var(--critical)">⚠ Direção 24h: janela com mais de 18h de condução acumulada</span>
         <span class="lg">🛌 <b style="color:var(--critical)">descanso &lt; 11h</b> entre jornadas (interjornada · CLT) — no início do dia que não cumpriu</span>
         <span class="lg">alertas no horário: 📱 celular · ⏱️ velocidade · 😴 fadiga · 👁️ distração · 🔒 cinto — haste por severidade <b style="color:var(--critical)">alto</b>/<b style="color:var(--warning)">médio</b>/<b style="color:var(--s2)">baixo</b></span>
         <span class="lg"><span class="sw" style="background:var(--track-id-ok)"></span> identificado &nbsp;<span class="sw" style="background:var(--serious);outline:2px solid var(--crit-ink);outline-offset:-2px"></span> câmera reconheceu OUTRO &nbsp;<span class="sw" style="background:var(--track-id-bad)"></span> sem identificação</span>
@@ -2340,8 +2343,8 @@ function recordDriverKey(r){
   const cpf=cpfKey(r.cpf||cpfDeNome(name));
   return cpf?'C:'+cpf:'N:'+norm(name);
 }
-function driving24hDriverKeys(rows,minMinutes,range){
-  const groups=new Map(),qualified=new Set();
+function driving24hScan(rows,minMinutes,range,collect){
+  const groups=new Map(),qualified=new Map();
   const lo=range&&range.de?Date.parse(range.de)/60000:-Infinity;
   const hi=range&&range.ate?(Date.parse(range.ate)/60000+1440):Infinity;
   for(const r of rows||[]){
@@ -2355,25 +2358,30 @@ function driving24hDriverKeys(rows,minMinutes,range){
     }
   }
   for(const [key,intervals] of groups){
-    // Union prevents duplicate records or simultaneous vehicle assignments from
-    // counting the same minute twice for one driver.
     intervals.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const merged=[];
-    for(const [a,b] of intervals){
-      const last=merged[merged.length-1];
-      if(last&&a<=last[1])last[1]=Math.max(last[1],b);else merged.push([a,b]);
-    }
-    // A maximum of the rolling 24h sum occurs at a movement interval's end.
-    // Keep whole intervals in total, then clip the first to the window boundary.
-    let left=0,total=0;
+    for(const [a,b] of intervals){const last=merged[merged.length-1];if(last&&a<=last[1])last[1]=Math.max(last[1],b);else merged.push([a,b]);}
+    // O mesmo cálculo alimenta filtro e evidência. Preserva o caminho rápido do filtro.
+    let left=0,total=0;const perDay=new Map();
     for(let right=0;right<merged.length;right++){
-      const [a,b]=merged[right],cutoff=b-1440;total+=b-a;
-      while(left<=right&&merged[left][1]<=cutoff){total-=merged[left][1]-merged[left][0];left++;}
-      const minutes=total-(left<=right?Math.max(0,cutoff-merged[left][0]):0);
-      if(minutes>minMinutes){qualified.add(key);break;}
+      const [a,b]=merged[right];total+=b-a;
+      const ends=[];if(collect)for(let t=(Math.floor(a/1440)+1)*1440;t<b;t+=1440)ends.push(t);ends.push(b);
+      for(const end of ends){
+        const cutoff=end-1440;
+        while(left<=right&&merged[left][1]<=cutoff){total-=merged[left][1]-merged[left][0];left++;}
+        const minutes=total-(b-end)-(left<=right?Math.max(0,cutoff-merged[left][0]):0);
+        if(minutes<=minMinutes)continue;
+        if(!collect){qualified.set(key,true);break;}
+        const date=new Date((end-1/60)*60000).toISOString().slice(0,10),old=perDay.get(date);
+        if(!old||minutes>old.minutes)perDay.set(date,{key,a:Math.max(cutoff,lo),b:end,minutes,date});
+      }
+      if(!collect&&qualified.has(key))break;
     }
+    if(collect&&perDay.size)qualified.set(key,[...perDay.values()].map(w=>({...w,segments:merged.filter(x=>x[0]<w.b&&x[1]>w.a).map(x=>[Math.max(w.a,x[0]),Math.min(w.b,x[1])])})));
   }
   return qualified;
 }
+function driving24hDriverKeys(rows,minMinutes,range){return new Set(driving24hScan(rows,minMinutes,range,false).keys());}
+function driving24hEvidence(rows,minMinutes,range){return driving24hScan(rows,minMinutes,range,true);}
 function filterDriving24hDrivers(rows,minMinutes,range){
   const keys=driving24hDriverKeys(rows,minMinutes,range);
   return rows.filter(r=>keys.has(recordDriverKey(r)));
@@ -3161,6 +3169,7 @@ function driverLegendHtml(names,kind,colorOf){
 }
 function buildWeekCards(rows, prefix, cap, showNome, mode){
   mode=mode||'week';
+  const drivingEvidence=driving24hEvidence(rows,1080,activeRange());
   for(const k in ZTL) if(k.indexOf(prefix)===0) delete ZTL[k];
   const grp={};
   rows.forEach(r=>{
@@ -3206,7 +3215,9 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
     const checkedAlerts=validateTimelineAlerts(uniqueAlerts,mov); alertas.splice(0,alertas.length,...checkedAlerts);
     const alertasSemMov=alertas.filter(a=>!a.movimentoConfirmado).length;
     const identPct = aderTrilhaIdent(ident);   // % realmente verde na trilha; vermelho reduz o indicador
-    ZTL[id]={weekStart:g.start, ponto, mov, alertas, multas, ident, interj, dayStats, ferias:feriasDays, motorista:g.nome, t0:0, t1:g.total, total:g.total};
+    const dw=[...new Set(g.recs.map(recordDriverKey))].flatMap(k=>drivingEvidence.get(k)||[]);
+    const driving24=driving24hTimelineMarks(dw,g.start,g.total);
+    ZTL[id]={driving24,weekStart:g.start, ponto, mov, alertas, multas, ident, interj, dayStats, ferias:feriasDays, motorista:g.nome, t0:0, t1:g.total, total:g.total};
     const opsArr=[...ops]; const opTxt=opsArr.join(', ')||'—';
     const meta=`<div class="meta">
       <div class="m"><span>Operação${opsArr.length>1?' ⚠':''}</span><b style="color:${opsArr.length>1?'var(--serious)':'inherit'}" title="${opsArr.length>1?'rodou em '+opsArr.length+' operações no período':''}">${opTxt}</b></div>
@@ -3231,6 +3242,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
           ${feriasDays.length?`<div class="vac-ribbon" title="Motorista com férias no período"><span>FÉRIAS</span></div>`:''}
           <div class="track"><span class="tlab">Ponto</span><div class="lane lane-pt" data-k="ponto"></div></div>
           <div class="track"><span class="tlab">Direção</span><div class="lane" data-k="mov"></div></div>
+          ${driving24.length?`<div class="track"><span class="tlab" style="color:var(--critical)">⚠ Direção 24h</span><div class="lane" data-k="driving24"></div></div>`:''}
           ${(ident.length||feriasDays.length)?`<div class="track"><span class="tlab">Identificação</span><div class="lane" data-k="ident"></div></div>`:''}
           ${(alertas.length||feriasDays.length)?`<div class="track"><span class="tlab">Alertas</span><div class="lane lane-al" data-k="alertas"></div></div>`:''}
         </div>
@@ -3507,6 +3519,8 @@ function renderZoom(id){
     }
     laneM.innerHTML=vacationBg+gl+segsHtml+marks+identBands;
   }
+  const lane24=el.querySelector('.lane[data-k="driving24"]');
+  if(lane24)lane24.innerHTML=gl+(st.driving24||[]).map(w=>seg('driving24-window',w.a,w.b,'⚠ '+hDec(w.minutes)+' / 24h','',w.label+' · janela de análise, com pausas')).join('');
   const laneAl=el.querySelector('.lane[data-k="alertas"]');
   if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const cls=al.niv==='A'?'alto':al.niv==='M'?'medio':'baixo'; return `<span class="amark ${cls}" style="left:${p}%" title="${hm(al.t%1440)} · ${tipoLabel(al.tipo)} · ${nivName(al.niv)} · ${al.movimentoConfirmado?'Com movimento no horário':'Sem movimento correspondente — validar na fonte (o evento pode ocorrer com veículo parado)'}"><i>${al.movimentoConfirmado?'':'⚠'}${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
   const laneMulta=el.querySelector('.lane[data-k="multas"]');
@@ -3770,6 +3784,69 @@ function fichaMetrics(nome){
   const out={nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,placasDetalhadas,placasDetalhadasHtml,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaTrimble,mediaRawTrimble,mediaInconsistente,mediaCoverage:audit.mediaCoverage||0,metaFicha,medaOk,reco,risco,condDiv,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF,audit}; FICHA_METRICS_CACHE.set(cacheKey,out); return out;
 }
 // pontos críticos e positivos p/ o relatório executivo
+// DSR: evidência operacional, sem transformar ausência de registro em folga.
+// Referências: CLT arts. 66/67 e 235-D, ADI 5322; OJ 410/TST.
+function dsrMetrics(rows,range,days,ferias){
+  const DAY=1440, REST=2100, valid=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')&&Number.isFinite(Date.parse(d));
+  const iso=m=>new Date(m*60000).toISOString().slice(0,10), base=d=>Date.parse(d)/60000;
+  const meta=days||{}, leave=ferias||{}, dates=[...(rows||[]).map(r=>r.data),...Object.keys(meta)].filter(valid).sort();
+  if(!dates.length)return {count:0,registered:0,inferred:0,status:'insufficient',rests:[],runs:[],conflicts:[],unverified:[],missing:0,reason:'Sem histórico do condutor.'};
+  const de=range&&valid(range.de)&&!range.de.startsWith('0000-')?range.de:dates[0],ate=range&&valid(range.ate)&&!range.ate.startsWith('9999-')?range.ate:dates[dates.length-1],lo=base(de),hi=base(ate)+DAY;
+  if(hi<=lo)return {count:0,registered:0,inferred:0,status:'insufficient',rests:[],runs:[],conflicts:[],unverified:[],missing:0,reason:'Período inválido.'};
+  const point=[],movement=[],workDays=new Set(),invalid=new Set();
+  for(const r of rows||[]){
+    if(!valid(r.data))continue;const b=base(r.data),raw=(r.seqP&&r.seqP.length?r.seqP:r.punches)||[];
+    const ns=[];let offset=0,previous=null;
+    for(const x of raw){const n=typeof x==='number'?x:toMin(x);if(!Number.isFinite(n)){invalid.add(r.data);continue;}let v=n+offset;if(previous!=null&&v<previous){offset+=DAY;v=n+offset;}ns.push(v);previous=v;}
+    if(ns.length){workDays.add(r.data);if(ns.length%2||ns.length<2||ns[ns.length-1]<=ns[0]||ns[ns.length-1]-ns[0]>DAY)invalid.add(r.data);else point.push([b+ns[0],b+ns[ns.length-1]]);}
+    for(const x of r.mov||[]){const a=+x.ini,z=+x.fim;if(Number.isFinite(a)&&Number.isFinite(z)&&z>a&&z-a<=DAY)movement.push([b+a,b+z]);}
+  }
+  const pm=_auditMergeIntervals(point);
+  for(const m of movement){if(pm.some(p=>p[0]<=m[0]&&p[1]>=m[1]))continue;for(let d=Math.floor(m[0]/DAY)*DAY;d<m[1];d+=DAY)workDays.add(iso(d));}
+  const work=_auditMergeIntervals([...point,...movement]),rests=[],conflicts=[],unverified=[],shortRests=[];
+  let missing=0;for(let d=lo;d<hi;d+=DAY)if(!meta[iso(d)])missing++;
+  const excluded=(a,b)=>{for(let d=Math.floor(a/DAY)*DAY;d<b;d+=DAY){const k=iso(d);if(leave[k]||(meta[k]&4)||invalid.has(k))return true;}return false;};
+  const gaps=[];for(let i=1;i<work.length;i++)gaps.push([work[i-1][1],work[i][0]]);
+  // Uma pausa no fim só é observável até o último dia efetivamente presente no espelho.
+  const md=Object.keys(meta).filter(valid).sort();if(work.length&&md.length){const end=Math.min(hi,base(md[md.length-1])+DAY);if(end>work[work.length-1][1])gaps.push([work[work.length-1][1],end]);}
+  for(const g of gaps){
+    const completed=g[0]+REST;if(g[1]-g[0]<REST||completed<lo||completed>=hi||excluded(g[0],g[1]))continue;
+    const labels=Object.keys(meta).filter(d=>valid(d)&&(meta[d]&2)&&base(d)<g[1]&&base(d)+DAY>g[0]);
+    const covered=(()=>{for(let d=Math.floor(g[0]/DAY)*DAY;d<g[1];d+=DAY)if(!meta[iso(d)])return false;return true;})();
+    rests.push({a:g[0],b:g[1],minutes:g[1]-g[0],date:iso(completed),registered:covered&&labels.length>0,labels});
+  }
+  for(const d of Object.keys(meta).filter(d=>valid(d)&&d>=de&&d<=ate&&(meta[d]&2))){
+    const a=base(d),b=a+DAY;
+    if(work.some(x=>x[0]<b&&x[1]>a))conflicts.push(d);
+    else if(!rests.some(r=>r.labels.includes(d))){
+      const g=gaps.find(g=>g[0]<b&&g[1]>a&&g[1]-g[0]<REST&&work.some(w=>w[0]===g[1]));
+      let covered=!!g;if(g)for(let t=Math.floor(g[0]/DAY)*DAY;t<g[1];t+=DAY)if(!meta[iso(t)])covered=false;
+      if(g&&covered&&!excluded(g[0],g[1]))shortRests.push({date:d,minutes:g[1]-g[0]});else unverified.push(d);
+    }
+  }
+  const sorted=[...workDays].sort(),runs=[];let run=[];
+  const endRun=()=>{if(run.length>=7&&run.some(d=>d>=de&&d<=ate))runs.push({de:run[0],ate:run[run.length-1],days:run.length});};
+  for(const d of sorted){if(run.length&&(base(d)-base(run[run.length-1])!==DAY||gaps.some(g=>g[1]-g[0]>=REST&&g[0]>=base(run[run.length-1])&&g[1]<base(d)+DAY))){endRun();run=[];}run.push(d);}endRun();
+  // Registros antigos sem espelho diário não permitem certificar os dias ausentes.
+  const registered=rests.filter(r=>r.registered).length,contextMissing=!meta[iso(lo-6*DAY)],bad=conflicts.length||runs.length||shortRests.length;
+  const insufficient=missing>0||contextMissing||invalid.size>0||unverified.length>0||!work.length;
+  return {de,ate,count:rests.length,registered,inferred:rests.length-registered,status:bad?'attention':insufficient?'insufficient':'observed',rests,runs,conflicts,unverified,shortRests,missing,contextMissing,invalid:invalid.size,
+    reason:bad?'Há ocorrências para revisar.':insufficient?'Cobertura insuficiente para concluir o cumprimento.':'Sem alertas identificados nos registros disponíveis.'};
+}
+function dsrForDriver(nome,range){
+  const nn=norm(nome),rows=(RECORDS_BY_DRIVER_N&&RECORDS_BY_DRIVER_N[nn])||[],days=(RAW&&RAW.dsrDays&&RAW.dsrDays[nn])||{},leave={};
+  for(const k of Object.keys(JORNADA_FERIAS||{}))if(k.startsWith(nn+'|'))leave[k.slice(nn.length+1)]=true;
+  return dsrMetrics(rows,range,days,leave);
+}
+function dsrCard(v){
+  const color=v.status==='attention'?'var(--critical)':v.status==='observed'?'var(--good)':'var(--warning)';
+  const state=v.status==='attention'?'⚠ Revisar DSR':v.status==='observed'?'Sem alertas nos registros':'Dados insuficientes';
+  const fmt=m=>new Date(m*60000).toISOString().slice(0,16).replace('T',' ');
+  const restRows=v.rests.map(r=>`<tr><td>${brDate(r.date)}</td><td>${fmt(r.a)} → ${fmt(r.b)}</td><td>${hDec(r.minutes)}</td><td>${r.registered?'DSR registrado + pausa compatível':'Pausa compatível · confirmar no ponto'}</td></tr>`).join('');
+  const issues=[...(v.shortRests||[]).map(r=>`${brDate(r.date)}: DSR marcado com apenas ${hDec(r.minutes)} entre atividades (referência 35h).`),...v.runs.map(r=>`${brDate(r.de)} a ${brDate(r.ate)}: ${r.days} dias consecutivos com trabalho registrado.`),...v.conflicts.map(d=>`${brDate(d)}: DSR marcado no ponto com trabalho ou movimento registrado.`),...v.unverified.map(d=>`${brDate(d)}: DSR marcado sem pausa de 35h verificável no período.`)];
+  return `<div class="card kpi" id="fichaDsr"><div class="accent" style="background:${color}"></div><div class="lab">DSR — descanso semanal</div><div class="val tnum">${v.rests.length?v.count:(v.status==='insufficient'?'—':0)}</div><div class="sub">${state}<br>${v.registered} registrado(s) · ${v.inferred} indicado(s) por pausa ≥35h</div><details style="margin-top:8px;font-size:12px"><summary>Ver datas e conferência</summary><p>${scEsc(v.reason)}</p>${issues.map(t=>'<p>'+scEsc(t)+'</p>').join('')}<p>Critério: 35h contínuas (24h de DSR + 11h entre jornadas). Pausas não são somadas ou divididas em vários DSRs. Férias e afastamentos identificados ficam fora da contagem.</p>${restRows?`<div style="overflow:auto"><table><thead><tr><th>Conclusão de 35h</th><th>Pausa entre atividades</th><th>Duração</th><th>Evidência</th></tr></thead><tbody>${restRows}</tbody></table></div>`:''}<p>${v.missing||0} dia(s) sem espelho diário no período${v.contextMissing?' · histórico anterior incompleto':''}. Sem ponto ou movimento não significa DSR realizado. A conferência usa todo o histórico do condutor para preservar descansos que atravessam o filtro. Não certifica pagamento ou cumprimento integral sem validar o espelho.</p></details></div>`;
+}
+
 function fichaPontos(M){
   const crit=[], pos=[], nf=v=>v==null?'—':v.toFixed(2).replace('.',',');
   if(M.semel!=null){
@@ -3918,12 +3995,32 @@ function fichaEvolTratativas(nome){
     return `<details class="evt-card evt-collapse"><summary class="evt-toggle">${header}<span class="evt-sub">Ver evolução</span></summary>${e.reason||!e.topics.length?`<div class="evt-note">${esc(t.obs||'Sem observação registrada.')}</div>`:''}${detail}</details>`;
   }).join('');return head+intro+cards;
 }
+function driving24hLabel(w){
+  const fmt=m=>{const t=new Date(m*60000).toISOString();return brDate(t.slice(0,10))+' '+t.slice(11,16);};
+  return `${fmt(w.a)} → ${fmt(w.b)} · ${hDec(w.minutes)} de direção`;
+}
+function driving24hSummary(windows,filterActive){
+  if(!windows.length)return filterActive?'<div class="card" style="padding:14px;margin-bottom:14px">Nenhuma janela com mais de 18h de direção neste recorte da ficha. Confira os filtros de período e situação.</div>':'';
+  return `<div class="card driving24-summary" style="border-left:5px solid var(--critical);padding:14px 18px;margin-bottom:14px"><b style="color:var(--crit-ink)">⚠ Mais de 18h de direção em 24h</b><p style="margin:6px 0">${windows.length} dia(s) com janela acima de 18h no período. Maior acumulado: <b>${hDec(Math.max(...windows.map(w=>w.minutes)))}</b>. Pausas não zeram o acumulado; apenas o tempo efetivamente dirigido é somado.</p>${windows.slice().sort((a,b)=>b.b-a.b).map(w=>`<div style="padding:8px 0;border-top:1px solid var(--border)"><b>${driving24hLabel(w)}</b> <button type="button" class="btn" data-drive-a="${w.a}" data-drive-b="${w.b}">Ver na linha do tempo ↓</button></div>`).join('')}<small>Uma janela representativa com o maior acumulado por dia de término. Janelas sobrepostas não são contadas como infrações independentes.</small></div>`;
+}
+function driving24hTimelineMarks(windows,start,total){
+  const base=Date.parse(start)/60000;
+  return (windows||[]).filter(w=>w.a<base+total&&w.b>base).map(w=>({a:w.a-base,b:w.b-base,minutes:w.minutes,label:driving24hLabel(w)}));
+}
+function focusDriving24h(a,b){
+  let best=null,size=0;
+  for(const id of Object.keys(ZTL).filter(k=>k.startsWith('fztl'))){const st=ZTL[id],base=Date.parse(st.weekStart)/60000,n=Math.max(0,Math.min(b,base+st.total)-Math.max(a,base));if(n>size){size=n;best={id,st,base};}}
+  if(!best)return;const {id,st,base}=best;st.t0=Math.max(0,a-base-60);st.t1=Math.min(st.total,b-base+60);renderZoom(id);
+  const el=document.getElementById(id),card=el&&el.closest('.wtl-card');if(card){card.classList.add('driving24-focus');card.scrollIntoView({behavior:'smooth',block:'center'});}
+}
 function renderFicha(){
   const nome=fichaAtual; if(!nome){ $('#fichaBox').innerHTML=''; return; }
   const M=fichaMetrics(nome);
   const {recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,placasDetalhadas,placasDetalhadasHtml,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaInconsistente,mediaRawTrimble,mediaCoverage,metaFicha,medaOk,reco,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF}=M;
   const horasTrabalhadas=(M.audit&&M.audit.hPonto)||0;
   const periodoFicha=periodoLabel();
+  const dsr=dsrForDriver(nome,activeRange());
+  const driveWindows=[...driving24hEvidence(recs,1080,activeRange()).values()].flat();
   const alertasPorMilKm=(kmR>0)?(totAl/(kmR/1000)):null;
   const alertaKmMeta=75;
   const alertaKmCrit=alertasPorMilKm!=null&&alertasPorMilKm>alertaKmMeta;
@@ -3989,6 +4086,7 @@ function renderFicha(){
       </div>
     </div>
     ${noteOps}
+    ${driving24hSummary(driveWindows,!!$('#fDirecao').value)}
 
     <div class="sec-title"><h2>Tratativas com o motorista</h2><span>${trats.length} registro(s) · ${TRAT_CACHE?'histórico compartilhado sincronizado':'histórico local · sincronize para ver nas outras máquinas'}</span></div>
     <div class="card">${ trats.length
@@ -4028,6 +4126,7 @@ function renderFicha(){
         <div class="lab">Dias com movimentação</div><div class="val tnum">${(diasComMov||0).toLocaleString('pt-BR')}</div><div class="sub">${hDec(hCondAudit||0)} de condução no período</div></div>
       <div class="card kpi"><div class="accent" style="background:${restMinF!=null&&restMinF<CFG.interjornadaMin?'var(--critical)':(restMinF!=null?'var(--good)':'var(--muted)')}"></div>
         <div class="lab">Descanso entre jornadas</div><div class="val tnum">${restMinF==null?'—':hDec(restMinF)}</div><div class="sub">${interjViol>0?('⚠ '+interjViol+' dia(s) < 11h'):(restMinF!=null?'menor descanso · mín 11h ✓':'sem dados')}</div></div>
+      ${dsrCard(dsr)}
       <div class="card kpi"><div class="accent" style="background:${(velR.alto)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
         <div class="lab">Alertas (total)</div><div class="val tnum">${totAl.toLocaleString('pt-BR')}</div><div class="sub">todos os tipos${velR.alto?' · '+velR.alto+' veloc. em nível alto':''}</div></div>
       <div class="card kpi"><div class="accent" style="background:${alertaKmCrit?'var(--critical)':'var(--good)'}"></div>
@@ -4047,6 +4146,7 @@ function renderFicha(){
   `;
   // A ficha fica utilizável imediatamente; a timeline (parte mais pesada) entra no ciclo seguinte.
   const _runEvid=()=>{ if(evidJob!==FICHA_EVID_JOB||fichaAtual!==nome)return; const wk=buildWeekCards(_recsEvid,'fztl',60,false,_dayF?'dia':'week'); const eb=$('#fichaEvidBox'); if(!eb)return; eb.innerHTML=wk.html||'<div class="empty">Sem dias.</div>'; setupZoomLazy(wk.ids); };
+  $$('#fichaBox [data-drive-a]').forEach(btn=>{btn.onclick=()=>{if(!$('#fichaEvidBox .wtl'))_runEvid();focusDriving24h(Number(btn.dataset.driveA),Number(btn.dataset.driveB));};});
   if('requestIdleCallback' in window)requestIdleCallback(_runEvid,{timeout:220});else setTimeout(_runEvid,0);
   const verTodas=$('#fichaVerTodas'); if(verTodas) verTodas.onclick=(ev)=>{ ev.preventDefault(); $('#fOp').value=''; renderAll(); };
   $$('.trat-del').forEach(btn=>{ btn.onclick=async()=>{ const uid=decodeURIComponent(btn.dataset.uid||''); if(uid) await excluirTratativa(nome,uid); }; });
@@ -5852,7 +5952,7 @@ function ajColor(v){ return v==null?'var(--muted)':(v>=90?'var(--good)':(v>=70?'
 // JORNADA (ponto): batidas em colunas Entrada N / Saída N, por (motoristaNorm|dia)
 // Já deduplica espelhos idênticos e versões parciais/completas sobrepostas do mesmo motorista-dia.
 function parseJornada(P){
-  const ponto={}, roster=new Set(), opBy={}, shifts=[], seen=new Set(), ferias={};
+  const ponto={}, roster=new Set(), opBy={}, shifts=[], seen=new Set(), ferias={}, dsrDays={};
   (P||[]).forEach((row,rowIdx)=>{
     const cN=col(row,['nome do funcionario','funcionario','colaborador','motorista','nome']);
     const cDep=col(row,['departamento','operacao','setor','filial']);
@@ -5864,6 +5964,10 @@ function parseJornada(P){
     // Procura o marcador na linha inteira para não depender de um cabeçalho específico.
     const rowTxt=norm(Object.values(row||{}).map(v=>String(v==null?'':v)).join(' '));
     if(/(^|\s)FERIAS(\s|$)/.test(rowTxt)) ferias[nn+'|'+data]=1;
+    const status=Object.values(row||{}).map(v=>norm(String(v==null?'':v)).trim());
+    const isDsr=status.some(t=>/^(?:DSR|D\.?S\.?R\.?|DESCANSO SEMANAL(?: REMUNERADO)?|REPOUSO SEMANAL(?: REMUNERADO)?)$/.test(t));
+    const excluded=status.some(t=>/^(?:FERIAS|AFASTAMENTO|AFASTADO|LICENCA)(?:\s|$)/.test(t));
+    const daily=dsrDays[nn]||(dsrDays[nn]={});daily[data]=(daily[data]||0)|1|(isDsr?2:0)|(excluded?4:0);
     const hs=[];
     for(let n=1;n<=8;n++){
       const ce=col(row,['entrada '+n]); if(ce){ const t=String(row[ce]).match(/(\d{1,2}:\d{2})/); if(t) hs.push(t[1]); }
@@ -5908,7 +6012,7 @@ function parseJornada(P){
     shiftsOk.push(...keep);
   });
   const pontoOk={}; shiftsOk.forEach(sh=>{ const k=sh.nn+'|'+sh.data; if(!pontoOk[k]) pontoOk[k]={nome:sh.nome,data:sh.data,punches:sh.punches.slice(),seq:sh.seq.slice(),shiftId:sh.shiftId}; });
-  return {ponto:pontoOk, roster, opBy, shifts:shiftsOk, ferias};
+  return {ponto:pontoOk, roster, opBy, shifts:shiftsOk, ferias, dsrDays};
 }
 // MOVIMENTAÇÃO: acumula eventos "Movimento" (dos motoristas da jornada) em movRaw — reutilizável (single ou zip)
 function accMov(rows, movRaw, roster, seen, diag){
@@ -6118,7 +6222,7 @@ function finalizeRecords(jor, movRaw, movRows, pontoRows){
   MOV_UNSEG_STORE={}; let unTot=0;
   // Tambem preserva lacunas reais nos trechos sem identificacao; so consolida sobreposicao/continuidade exata.
   for(const k in MOV_UNSEG){ if(unTot>25000) break; const arr=MOV_UNSEG[k].slice().sort((a,b)=>a[0]-b[0]); const m=[]; arr.forEach(s=>{ const last=m[m.length-1]; if(last && s[0]<=last[1]) last[1]=Math.max(last[1],s[1]); else { m.push([s[0],s[1]]); unTot++; } }); if(m.length) MOV_UNSEG_STORE[k]=m; }
-  RAW={ schema:3, records, bases:{ponto:!!pontoRows,mov:!!movRows,trim:false}, counts:{ponto:pontoRows,mov:movRows,alertas:ALERTS_N}, ferias:Object.assign({},JORNADA_FERIAS), sourceCoverage:JSON.parse(JSON.stringify(SOURCE_COVERAGE)) };
+  RAW={ schema:3, records, bases:{ponto:!!pontoRows,mov:!!movRows,trim:false}, counts:{ponto:pontoRows,mov:movRows,alertas:ALERTS_N}, ferias:Object.assign({},JORNADA_FERIAS), dsrDays:jor.dsrDays||{}, sourceCoverage:JSON.parse(JSON.stringify(SOURCE_COVERAGE)) };
   if(ALERTS) RAW.alertas=ALERTS; if(PLACA_UO) RAW.placaUO=PLACA_UO; if(PLACA_MOV) RAW.placaId=PLACA_MOV; if(MOV_UNSEG_STORE) RAW.movUnseg=MOV_UNSEG_STORE;
   REAL=true;
   // A análise completa é adiada enquanto a aba Dados estiver aberta.
