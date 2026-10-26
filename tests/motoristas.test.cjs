@@ -69,6 +69,25 @@ test('janela móvel confere com referência minuto a minuto em cenários determi
   assert.equal(c.filterDriving24hDrivers(records,max-1).length,3,'máximo encontrado '+trial);
  }
 });
+test('filtro de 24 horas mostra novos limites e trata 24h como janela completa',()=>{
+ const i=html.indexOf('<select id="fDirecao"'),j=html.indexOf('</select>',i);
+ assert.ok(i>=0&&j>i,'filtro existe');
+ const options=html.slice(i,j);
+ for(const h of [14,16,18,20,22,24])assert.ok(options.includes('<option value="'+h+'">'),'opcao '+h+'h');
+ assert.ok(options.includes('24h completas de direção em 24h'));
+ const c=context();
+ for(const h of [14,16,18,20,22]){
+   const n=h*60;
+   assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:n}]})],n).length,0,'limite estrito '+h);
+   assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:n+1}]})],n).length,1,'acima '+h);
+ }
+ assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:1439}]})],1440).length,0);
+ assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:1440}]})],1440).length,1);
+ vm.runInContext(source('driving24hSelectedHours'),c);
+ c.$=()=>({value:'22'});assert.equal(c.driving24hSelectedHours(),22);
+ c.$=()=>({value:'24'});assert.equal(c.driving24hSelectedHours(),24);
+ c.$=()=>({value:''});assert.equal(c.driving24hSelectedHours(),14);
+});
 test('filtro explica soma com pausas em 24h e remove texto de direção sem parada',()=>{
  assert.match(html,/Mais de 14h de direção em 24h/);
  assert.match(html,/Pausas e interjornada não zeram a soma; tempo parado não conta/);
