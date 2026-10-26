@@ -1,4 +1,4 @@
-# Regressão — Motoristas, direção contínua e alertas
+# Regressão — Motoristas, direção em 24h e alertas
 
 Execute na raiz, com Node.js 22 ou superior:
 
@@ -13,7 +13,7 @@ Os testes usam as funções do próprio `index.html`, sem dependências externas
 - Tabela, `Exibindo`, indicadores da aba Motoristas e CSV usam o conjunto filtrado e deduplicado. A tabela carrega em blocos e informa quantas linhas já foram carregadas; o CSV inclui todo o conjunto. A exportação fica bloqueada durante novo processamento.
 - CPF com pontuação e CPF numérico com zero inicial são normalizados. CPFs diferentes não são unidos por homonímia. Um cadastro sem CPF só é unido a um com CPF quando o nome tem uma única correspondência.
 - O filtro de operação na aba Motoristas exige Centro de Resultado do cadastro TMS. Cadastros só no Ponto, sem centro, de outras operações ou com centros conflitantes entre duplicatas ficam fora desse recorte. Sem filtro, continuam acessíveis. Conflitos não são resolvidos por ordem arbitrária de arquivo.
-- `Direção contínua ≥ 18h` exige união ininterrupta de intervalos de movimentação no período ativo. Uma lacuna de qualquer duração interrompe a contagem; sobreposições e repetições não somam tempo. A continuidade pode atravessar meia-noite. Depois de identificar o motorista, mantém seus registros dentro do recorte, inclusive os dias sem movimento. Cada aba mantém seu filtro independente.
+- `Mais de 14h de direção em 24h` exige mais de 840 minutos dirigidos em uma janela móvel de 24 horas. Pausas e interjornada não zeram a soma; tempo parado não conta. Sobreposições e repetições contam uma vez. A janela pode atravessar meia-noite. Depois de identificar o motorista, mantém seus registros dentro do recorte, inclusive os dias sem movimento. Cada aba mantém seu filtro independente.
 - Alertas não provam movimento: eventos são preservados e a linha do tempo sinaliza os que não coincidem com os intervalos canônicos da faixa Direção. Eventos com veículo parado podem ser legítimos; dados de movimentação também podem faltar. A conferência é temporal por condutor, não validação de placa quando o snapshot antigo não a contém.
 - O mesmo evento da fonte é desenhado uma única vez no grupo da linha do tempo, mesmo que entre em jornadas sobrepostas. Dois eventos de mesma classificação/minuto são preservados se tiverem identidades diferentes. Novas importações retêm a assinatura da linha original, placa e horário, incluindo segundos do CSV.
 - Em Dados, a auditoria distingue identidades repetidas e coincidências de minuto/tipo. É limitada aos eventos com horário existentes em `AL_TL` (limite preexistente: 5.000 por motorista). Totais do Boletim e eventos do relatório de Alertas vêm de fontes e granularidades diferentes; não são apresentados como uma reconciliação integral da base.
@@ -29,7 +29,7 @@ Não houve validação visual da alteração no GitHub Pages. A conferência dos
 ## Conferência na versão publicada após integração
 
 1. Abrir com a base real e selecionar Bitrem. Conferir nomes, Centro de Resultado, indicadores e total do CSV. Rolar a tabela para carregar os demais blocos.
-2. Ativar `Direção contínua ≥ 18h`. Conferir trechos de 17h59, 18h e 18h01, virada de dia e intervalos com parada. Trocar período/operação e limpar filtros.
+2. Ativar `Mais de 14h de direção em 24h`. Conferir trechos de 13h59, 14h e 14h01, virada de dia e intervalos com parada. Trocar período/operação e limpar filtros.
 3. Abrir o condutor da imagem e conferir os alertas de 25/09/2026 por ID, data/hora com segundos, placa e tipo no relatório original da Trimble. Comparar as faixas de movimento no mesmo fuso horário.
 4. Conferir o diagnóstico em Dados e os avisos `sem movimento correspondente` na linha do tempo. Não tratar uma coincidência de minuto como duplicata confirmada nem um alerta sem movimento como evento necessariamente inválido.
 

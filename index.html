@@ -1067,8 +1067,8 @@
       <option value="pendente">A conferir</option>
       <option value="conforme">Tudo certo</option>
     </select></div>
-    <div class="f"><label for="fDirecao">Direção em 24 horas</label><select id="fDirecao" title="Mais de 18 horas de direção acumulada em qualquer janela de 24 horas dentro do período selecionado. Pausas e interjornada não zeram a soma; tempo parado não conta.">
-      <option value="">Todos</option><option value="18">Mais de 18h de direção em 24h</option>
+    <div class="f"><label for="fDirecao">Direção em 24 horas</label><select id="fDirecao" title="Mais de 14 horas de direção acumulada em qualquer janela de 24 horas dentro do período selecionado. Pausas e interjornada não zeram a soma; tempo parado não conta.">
+      <option value="">Todos</option><option value="14">Mais de 14h de direção em 24h</option>
     </select></div>
     <div class="f" style="flex:1;min-width:170px"><label>Busca (nome / placa)</label><input type="text" id="fBusca" placeholder="Filtrar…"></div>
     <button class="btn" id="clearFilters" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Limpar</button>
@@ -1212,7 +1212,7 @@
         <span class="lg"><span class="sw" style="background:var(--track-ponto)"></span> Ponto (jornada)</span>
         <span class="lg"><span class="sw" style="background:var(--track-mov)"></span> Direção do veículo (com placa)</span>
         <span class="lg"><span class="sw" style="background:transparent;outline:2px dashed var(--serious);outline-offset:-2px"></span> fora da jornada</span>
-        <span class="lg" style="color:var(--critical)">⚠ Direção 24h: trechos dirigidos que compõem uma janela acima de 18h</span>
+        <span class="lg" style="color:var(--critical)">⚠ Direção 24h: trechos dirigidos que compõem uma janela acima de 14h</span>
         <span class="lg">🛌 <b style="color:var(--critical)">descanso &lt; 11h</b> entre jornadas (interjornada · CLT) — no início do dia que não cumpriu</span>
         <span class="lg">alertas no horário: 📱 celular · ⏱️ velocidade · 😴 fadiga · 👁️ distração · 🔒 cinto — haste por severidade <b style="color:var(--critical)">alto</b>/<b style="color:var(--warning)">médio</b>/<b style="color:var(--s2)">baixo</b></span>
         <span class="lg"><span class="sw" style="background:var(--track-id-ok)"></span> identificado &nbsp;<span class="sw" style="background:var(--serious);outline:2px solid var(--crit-ink);outline-offset:-2px"></span> câmera reconheceu OUTRO &nbsp;<span class="sw" style="background:var(--track-id-bad)"></span> sem identificação</span>
@@ -3268,7 +3268,7 @@ function driverLegendHtml(names,kind,colorOf){
 }
 function buildWeekCards(rows, prefix, cap, showNome, mode){
   mode=mode||'week';
-  const drivingEvidence=driving24hEvidence(rows,1080,activeRange());
+  const drivingEvidence=driving24hEvidence(rows,840,activeRange());
   for(const k in ZTL) if(k.indexOf(prefix)===0) delete ZTL[k];
   const grp={};
   rows.forEach(r=>{
@@ -4091,8 +4091,8 @@ function driving24hLabel(w){
   return `${fmt(w.a)} → ${fmt(w.b)} · ${hDec(w.minutes)} de direção`;
 }
 function driving24hSummary(windows,filterActive){
-  if(!windows.length)return filterActive?'<div class="card" style="padding:14px;margin-bottom:14px">Nenhuma janela com mais de 18h de direção neste recorte da ficha. Confira os filtros de período e situação.</div>':'';
-  return `<div class="card driving24-summary" style="border-left:5px solid var(--critical);padding:14px 18px;margin-bottom:14px"><b style="color:var(--crit-ink)">⚠ Mais de 18h de direção em 24h</b><p style="margin:6px 0">${windows.length} dia(s) com janela acima de 18h no período. Maior acumulado: <b>${hDec(Math.max(...windows.map(w=>w.minutes)))}</b>. Pausas não zeram o acumulado; apenas o tempo efetivamente dirigido é somado.</p>${windows.slice().sort((a,b)=>b.b-a.b).map(w=>`<div style="padding:8px 0;border-top:1px solid var(--border)"><b>${driving24hLabel(w)}</b> <button type="button" class="btn" data-drive-a="${w.a}" data-drive-b="${w.b}">Ver na linha do tempo ↓</button></div>`).join('')}<small>Uma janela representativa com o maior acumulado por dia de término. Janelas sobrepostas não são contadas como infrações independentes.</small></div>`;
+  if(!windows.length)return filterActive?'<div class="card" style="padding:14px;margin-bottom:14px">Nenhuma janela com mais de 14h de direção neste recorte da ficha. Confira os filtros de período e situação.</div>':'';
+  return `<div class="card driving24-summary" style="border-left:5px solid var(--critical);padding:14px 18px;margin-bottom:14px"><b style="color:var(--crit-ink)">⚠ Mais de 14h de direção em 24h</b><p style="margin:6px 0">${windows.length} dia(s) com janela acima de 14h no período. Maior acumulado: <b>${hDec(Math.max(...windows.map(w=>w.minutes)))}</b>. Pausas não zeram o acumulado; apenas o tempo efetivamente dirigido é somado.</p>${windows.slice().sort((a,b)=>b.b-a.b).map(w=>`<div style="padding:8px 0;border-top:1px solid var(--border)"><b>${driving24hLabel(w)}</b> <button type="button" class="btn" data-drive-a="${w.a}" data-drive-b="${w.b}">Ver na linha do tempo ↓</button></div>`).join('')}<small>Uma janela representativa com o maior acumulado por dia de término. Janelas sobrepostas não são contadas como infrações independentes.</small></div>`;
 }
 function driving24hVisibleSegments(w,movement,lo,hi){
   const xs=[];
@@ -4123,7 +4123,7 @@ function renderFicha(){
   const horasTrabalhadas=(M.audit&&M.audit.hPonto)||0;
   const periodoFicha=periodoLabel();
   const dsr=dsrForDriver(nome,activeRange());
-  const driveWindows=[...driving24hEvidence(recs,1080,activeRange()).values()].flat();
+  const driveWindows=[...driving24hEvidence(recs,840,activeRange()).values()].flat();
   const alertasPorMilKm=(kmR>0)?(totAl/(kmR/1000)):null;
   const alertaKmMeta=75;
   const alertaKmCrit=alertasPorMilKm!=null&&alertasPorMilKm>alertaKmMeta;
