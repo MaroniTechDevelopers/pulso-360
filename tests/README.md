@@ -32,3 +32,12 @@ Não houve validação visual da alteração no GitHub Pages. A conferência dos
 2. Ativar `Direção contínua ≥ 18h`. Conferir trechos de 17h59, 18h e 18h01, virada de dia e intervalos com parada. Trocar período/operação e limpar filtros.
 3. Abrir o condutor da imagem e conferir os alertas de 25/09/2026 por ID, data/hora com segundos, placa e tipo no relatório original da Trimble. Comparar as faixas de movimento no mesmo fuso horário.
 4. Conferir o diagnóstico em Dados e os avisos `sem movimento correspondente` na linha do tempo. Não tratar uma coincidência de minuto como duplicata confirmada nem um alerta sem movimento como evento necessariamente inválido.
+
+## DSR e evidência de direção em 24h — 26/10/2026
+
+- A ficha acrescenta DSR ao lado da interjornada, com quantidade, origem e datas. Pausas contínuas de pelo menos 35h são indícios operacionais, sem somar intervalos separados ou multiplicar pausas longas. Ponto e movimentação interrompem a pausa. Férias, afastamentos e batidas incompletas identificados ficam fora dos candidatos.
+- Novas importações de Jornada preservam os dias do espelho, incluindo linhas de DSR sem batida, em RAW.dsrDays. Um descanso marcado requer pausa compatível e cobertura diária para aparecer como registrado e conferido. Bases antigas sem esses metadados permanecem inconclusivas, mesmo quando exibem pausas indicativas. A análise não certifica remuneração ou conformidade integral.
+- Sinaliza DSR marcado com trabalho/movimentação e sequências de sete ou mais dias com trabalho registrado. Usa todo o histórico do condutor para preservar contexto antes do filtro e descarta dias de férias conhecidos. Sem registros não significa descanso. Não muda os pesos ou descontos da nota.
+- O filtro de direção e sua evidência agora usam a mesma rotina. A ficha mostra uma janela representativa com maior acumulado por dia de término, com início, fim, minutos efetivamente dirigidos e botão para localizar a ocorrência. Janelas sobrepostas não são contadas como infrações independentes.
+- A faixa vermelha Direção 24h representa a janela de análise, incluindo as pausas; a faixa Direção original continua representando apenas movimento. Ambas acompanham zoom e recorte. Janelas que atravessam uma semana aparecem nas duas partes pertinentes.
+- Referências de critério consultadas: CLT arts. 66/67 e 235-D; ADI 5322/STF; OJ 410/TST. O indicador oferece conferência operacional, sem presumir aplicação de convenção coletiva específica ou cálculo de valores devidos.
