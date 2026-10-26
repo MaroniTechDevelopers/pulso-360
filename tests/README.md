@@ -64,3 +64,10 @@ Não houve validação visual da alteração no GitHub Pages. A conferência dos
 - Registros com várias placas são repartidos por centro para que os movimentos e fora da jornada pertençam à categoria correta. Hora extra é informação do ponto do motorista e pode se repetir entre centros quando há troca de veículo; a interface explicita isso na dica.
 - Os cards expandem as próprias placas localmente e cada placa leva à sua linha do tempo, evitando abrir um resumo agregado da família ao selecionar um centro específico.
 - Base real conferida: 146 centros, incluindo 25 categorias de Mercado Livre; 2.338 veículos com movimento preservados, iguais ao total da fonte.
+
+## Ficha única de aderência por centro
+
+- Cada card possui Abrir ficha para o gestor. O diálogo reúne nome completo do centro, contexto dos filtros, KPIs, jornada e tabela de placas, mantendo o cabeçalho e as ações visíveis na mesma janela.
+- A lista prioriza placas para ação, preserva as sem apuração e todas as demais placas do centro. Cada placa abre sua linha do tempo.
+- Baixar imagem produz um PNG único com todas as placas e amplia a altura conforme o tamanho da relação. Não captura apenas as linhas visíveis na área de rolagem. A imagem informa o escopo do consolidado importado e do filtro de jornada.
+- Escape, fechamento por fundo e navegação por teclado restauram o foco e a rolagem anterior. Abrir o detalhe usa os grupos já calculados, sem recalcular a frota.
