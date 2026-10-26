@@ -50,8 +50,8 @@ test('importação síncrona e assíncrona deduplicam arquivos sobrepostos e pre
  for(const parse of [c.aggAlertas,c.aggAlertasAsync]){const seen=new Set(),diag={};const a=await parse(head+event+event+later+other,null,seen,diag),b=await parse(head+event,null,seen,diag);assert.equal(a.n,3);assert.equal(a.A['JOAO SILVA'].total,3);assert.equal(a.tl['JOAO SILVA'].length,3);assert.equal(b.n,0);assert.equal(diag.dup,2);assert.notEqual(a.tl['JOAO SILVA'][0][4].key,a.tl['JOAO SILVA'][1][4].key);}
 });
 test('filtro global inclui direção em 24h no cache e devolve todos os registros do motorista elegível',()=>{
- const c=context(),els=Object.fromEntries(['fFecha','fOp','fDia','fDe','fAte','fMot','fStatus','fBusca','fDirecao'].map(k=>['#'+k,{value:''}]));els['#fDirecao'].value='18';
- const rows=[rec({mov:[{ini:0,fim:1081}]}),rec({data:'2026-10-21',mov:[]}),rec({motoristaEscala:'OUTRO',cpf:'99988877766',mov:[{ini:0,fim:1079}]})];Object.assign(c,{$:s=>els[s],DATA_REV:1,FILTER_CACHE_KEY:'',FILTER_CACHE_ROWS:null,FILTER_CACHE_DIV_COUNT:0,GLOBAL_DIV_COUNT:0,RECORDS:rows,activeRange:()=>null});
+ const c=context(),els=Object.fromEntries(['fFecha','fOp','fDia','fDe','fAte','fMot','fStatus','fBusca','fDirecao'].map(k=>['#'+k,{value:''}]));els['#fDirecao'].value='14';
+ const rows=[rec({mov:[{ini:0,fim:841}]}),rec({data:'2026-10-21',mov:[]}),rec({motoristaEscala:'OUTRO',cpf:'99988877766',mov:[{ini:0,fim:839}]})];Object.assign(c,{$:s=>els[s],DATA_REV:1,FILTER_CACHE_KEY:'',FILTER_CACHE_ROWS:null,FILTER_CACHE_DIV_COUNT:0,GLOBAL_DIV_COUNT:0,RECORDS:rows,activeRange:()=>null});
  for(const name of ['filterStateKey','_smallestPool','filtered'])vm.runInContext(source(name),c);
  assert.equal(c.filtered().length,2);assert.equal(c.filtered(),c.FILTER_CACHE_ROWS);els['#fDirecao'].value='';assert.equal(c.filtered().length,3);
 });
@@ -70,7 +70,7 @@ test('janela móvel confere com referência minuto a minuto em cenários determi
  }
 });
 test('filtro explica soma com pausas em 24h e remove texto de direção sem parada',()=>{
- assert.match(html,/Mais de 18h de direção em 24h/);
+ assert.match(html,/Mais de 14h de direção em 24h/);
  assert.match(html,/Pausas e interjornada não zeram a soma; tempo parado não conta/);
  assert.doesNotMatch(html,/≥ 18 horas sem parada|Direção contínua<\/label>/);
 });
