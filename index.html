@@ -2030,10 +2030,10 @@ function alertaDicaTimeline(al){
 }
 function alertaAttr(str){return String(str==null?'':str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
-// Rotulo permanente junto ao icone, somente para excesso de velocidade alto ou medio.
+// Rotulo permanente junto ao icone, somente para excesso de velocidade alto.
 // O valor e o pico do evento, nunca o pico de toda a viagem.
 function alertaVelocidadeRotulo(al,classe){
-  if(!alertaEhVelocidade(al.tipo)||(classe!=='alto'&&classe!=='medio'))return '';
+  if(!alertaEhVelocidade(al.tipo)||classe!=='alto')return '';
   const kmh=velocidadeKmh(al.velocidadeKmh);
   if(kmh==null)return '';
   return String(Math.round(kmh*10)/10).replace('.',',')+' km/h';
