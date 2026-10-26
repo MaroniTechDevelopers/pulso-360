@@ -50,3 +50,10 @@ Não houve validação visual da alteração no GitHub Pages. A conferência dos
 - O caso real JONATHAN/JONATAHN SILVA SANTOS teve CPF igual confirmado: 103 registros reunidos no nome TMS; 45 dos 52 registros com movimento recuperaram o ponto da data; preservados 51 dias de ponto, a quantidade de registros e os eventos de alertas. Dias sem ponto correspondente continuam pendentes.
 - Metadados de CPF/alias ficam no snapshot para as próximas aberturas. Se uma base antiga não reteve CPF ou alias comprovado, a vinculação exige reimportar a fonte com o documento; o nome não é corrigido por similaridade.
 - O valor principal do KPI DSR passa a mostrar dias sem marcação para conferência (dias do período menos dias com ponto e férias/afastamentos identificados). Exemplo: 24/30 dias com ponto apresenta 6, separando os DSRs informados no espelho dos dias a confirmar. Sem fonte de ponto, mantém indisponível.
+
+## Carga da publicação acima de 1 GB — 26/10/2026
+
+- O parser incremental lê todos os campos, além de RAW.records. Os containers externos são montados em fluxo e somente blocos internos passam por JSON.parse. Não concatena um JSON restante global acima do limite de string do V8.
+- Cache compacto também passa pelo leitor incremental, descompactando em fluxo. O cache estruturado continua sendo a primeira opção.
+- Validação real: as quatro partes publicadas (133.321.433 bytes gzip, 1.128.869.579 bytes descompactados) reproduziram Invalid string length no carregador anterior. O novo leitor concluiu a leitura com 162.119 registros e todos os campos externos.
+- Testes cobrem UTF-8/acentos entre blocos, escapes, números, containers vazios, campos especiais, mudança de ordem, JSON truncado e rejeição de vírgulas ou texto inválido.
