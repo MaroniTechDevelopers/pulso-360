@@ -1212,7 +1212,7 @@
         <span class="lg"><span class="sw" style="background:var(--track-ponto)"></span> Ponto (jornada)</span>
         <span class="lg"><span class="sw" style="background:var(--track-mov)"></span> Direção do veículo (com placa)</span>
         <span class="lg"><span class="sw" style="background:transparent;outline:2px dashed var(--serious);outline-offset:-2px"></span> fora da jornada</span>
-        <span class="lg" style="color:var(--critical)">⚠ Direção 24h: janela com mais de 18h de condução acumulada</span>
+        <span class="lg" style="color:var(--critical)">⚠ Direção 24h: trechos dirigidos que compõem uma janela acima de 18h</span>
         <span class="lg">🛌 <b style="color:var(--critical)">descanso &lt; 11h</b> entre jornadas (interjornada · CLT) — no início do dia que não cumpriu</span>
         <span class="lg">alertas no horário: 📱 celular · ⏱️ velocidade · 😴 fadiga · 👁️ distração · 🔒 cinto — haste por severidade <b style="color:var(--critical)">alto</b>/<b style="color:var(--warning)">médio</b>/<b style="color:var(--s2)">baixo</b></span>
         <span class="lg"><span class="sw" style="background:var(--track-id-ok)"></span> identificado &nbsp;<span class="sw" style="background:var(--serious);outline:2px solid var(--crit-ink);outline-offset:-2px"></span> câmera reconheceu OUTRO &nbsp;<span class="sw" style="background:var(--track-id-bad)"></span> sem identificação</span>
@@ -3217,7 +3217,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
     const alertasSemMov=alertas.filter(a=>!a.movimentoConfirmado).length;
     const identPct = aderTrilhaIdent(ident);   // % realmente verde na trilha; vermelho reduz o indicador
     const dw=[...new Set(g.recs.map(recordDriverKey))].flatMap(k=>drivingEvidence.get(k)||[]);
-    const driving24=driving24hTimelineMarks(dw,g.start,g.total);
+    const driving24=driving24hTimelineMarks(dw,g.start,g.total,mov);
     ZTL[id]={driving24,weekStart:g.start, ponto, mov, alertas, multas, ident, interj, dayStats, ferias:feriasDays, motorista:g.nome, t0:0, t1:g.total, total:g.total};
     const opsArr=[...ops]; const opTxt=opsArr.join(', ')||'—';
     const meta=`<div class="meta">
@@ -3521,7 +3521,11 @@ function renderZoom(id){
     laneM.innerHTML=vacationBg+gl+segsHtml+marks+identBands;
   }
   const lane24=el.querySelector('.lane[data-k="driving24"]');
-  if(lane24)lane24.innerHTML=gl+(st.driving24||[]).map(w=>seg('driving24-window',w.a,w.b,'⚠ '+hDec(w.minutes)+' / 24h','',w.label+' · janela de análise, com pausas')).join('');
+  if(lane24)lane24.innerHTML=gl+(st.driving24||[]).map(w=>{
+    const visible=driving24hVisibleSegments(w,st.mov,st.t0,st.t1);
+    let longest=-1;visible.forEach((s,i)=>{if(longest<0||s.b-s.a>visible[longest].b-visible[longest].a)longest=i;});
+    return visible.map((s,i)=>seg('driving24-window',s.a,s.b,i===longest?'⚠ Σ '+hDec(w.minutes)+' / 24h':'','',w.label+' · total acumulado da janela; destaque apenas sobre direção comprovada')).join('');
+  }).join('');
   const laneAl=el.querySelector('.lane[data-k="alertas"]');
   if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const cls=al.niv==='A'?'alto':al.niv==='M'?'medio':'baixo'; return `<span class="amark ${cls}" style="left:${p}%" title="${hm(al.t%1440)} · ${tipoLabel(al.tipo)} · ${nivName(al.niv)} · ${al.movimentoConfirmado?'Com movimento no horário':'Sem movimento correspondente — validar na fonte (o evento pode ocorrer com veículo parado)'}"><i>${al.movimentoConfirmado?'':'⚠'}${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
   const laneMulta=el.querySelector('.lane[data-k="multas"]');
@@ -3992,13 +3996,25 @@ function driving24hSummary(windows,filterActive){
   if(!windows.length)return filterActive?'<div class="card" style="padding:14px;margin-bottom:14px">Nenhuma janela com mais de 18h de direção neste recorte da ficha. Confira os filtros de período e situação.</div>':'';
   return `<div class="card driving24-summary" style="border-left:5px solid var(--critical);padding:14px 18px;margin-bottom:14px"><b style="color:var(--crit-ink)">⚠ Mais de 18h de direção em 24h</b><p style="margin:6px 0">${windows.length} dia(s) com janela acima de 18h no período. Maior acumulado: <b>${hDec(Math.max(...windows.map(w=>w.minutes)))}</b>. Pausas não zeram o acumulado; apenas o tempo efetivamente dirigido é somado.</p>${windows.slice().sort((a,b)=>b.b-a.b).map(w=>`<div style="padding:8px 0;border-top:1px solid var(--border)"><b>${driving24hLabel(w)}</b> <button type="button" class="btn" data-drive-a="${w.a}" data-drive-b="${w.b}">Ver na linha do tempo ↓</button></div>`).join('')}<small>Uma janela representativa com o maior acumulado por dia de término. Janelas sobrepostas não são contadas como infrações independentes.</small></div>`;
 }
-function driving24hTimelineMarks(windows,start,total){
+function driving24hVisibleSegments(w,movement,lo,hi){
+  const xs=[];
+  for(const s of w.segments||[])for(const m of movement||[]){
+    if(!Number.isFinite(m.a)||!Number.isFinite(m.b)||m.b-m.a<=1)continue;
+    const a=Math.max(s.a,m.a,w.a,lo),b=Math.min(s.b,m.b,w.b,hi);
+    if(b-a>1)xs.push([a,b]);
+  }
+  return _auditMergeIntervals(xs).map(([a,b])=>({a,b}));
+}
+function driving24hTimelineMarks(windows,start,total,movement){
   const base=Date.parse(start)/60000;
-  return (windows||[]).filter(w=>w.a<base+total&&w.b>base).map(w=>({a:w.a-base,b:w.b-base,minutes:w.minutes,label:driving24hLabel(w)}));
+  return (windows||[]).filter(w=>w.a<base+total&&w.b>base).map(w=>{
+    const mark={a:w.a-base,b:w.b-base,minutes:w.minutes,label:driving24hLabel(w),segments:(w.segments||[]).map(x=>({a:x[0]-base,b:x[1]-base}))};
+    mark.segments=driving24hVisibleSegments(mark,movement,0,total);return mark;
+  }).filter(w=>w.segments.length);
 }
 function focusDriving24h(a,b){
   let best=null,size=0;
-  for(const id of Object.keys(ZTL).filter(k=>k.startsWith('fztl'))){const st=ZTL[id],base=Date.parse(st.weekStart)/60000,n=Math.max(0,Math.min(b,base+st.total)-Math.max(a,base));if(n>size){size=n;best={id,st,base};}}
+  for(const id of Object.keys(ZTL).filter(k=>k.startsWith('fztl'))){const st=ZTL[id],base=Date.parse(st.weekStart)/60000,n=_auditMergeIntervals((st.mov||[]).map(m=>[Math.max(a,base+m.a),Math.min(b,base+m.b)])).reduce((sum,x)=>sum+x[1]-x[0],0);if(n>size){size=n;best={id,st,base};}}
   if(!best)return;const {id,st,base}=best;st.t0=Math.max(0,a-base-60);st.t1=Math.min(st.total,b-base+60);renderZoom(id);
   const el=document.getElementById(id),card=el&&el.closest('.wtl-card');if(card){card.classList.add('driving24-focus');card.scrollIntoView({behavior:'smooth',block:'center'});}
 }
