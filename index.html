@@ -1992,14 +1992,14 @@ function namesOfInterest(){ return RECORD_DRIVER_NAMES_N&&RECORD_DRIVER_NAMES_N.
 function alertsForRec(r){
   if(r.alertasTimed && r.alertasTimed.length)return r.alertasTimed.map(a=>({
     t:toMin(a.hora),niv:(a.niv||'').toUpperCase()[0]||'',tipo:a.tipo||'ALERTA',
-    placa:placaBR(a.placa||''),velocidadeKmh:velocidadeKmh(a.velocidadeKmh),velocidadeFonte:a.velocidadeFonte||''
+    placa:String(a.placa||''),velocidadeKmh:a.velocidadeKmh==null?null:a.velocidadeKmh,velocidadeFonte:a.velocidadeFonte||''
   })).filter(a=>a.t!=null);
   if(AL_TL){const arr=AL_TL[norm(r.motoristaEscala)];if(arr){
     const base=Date.parse(r.data),lo=(r.scopeIni!=null?r.scopeIni:(r.entradaU!=null?r.entradaU:0)),hi=(r.scopeFim!=null?r.scopeFim:(r.saidaU!=null?r.saidaU:1439));
     return arr.map((e,index)=>{
       const meta=e[4]||{};
       return {eventKey:meta.key||norm(r.motoristaEscala)+'|AL_TL|'+index,rel:Math.round((Date.parse(e[0])-base)/60000)+e[1],
-        niv:e[2],tipo:e[3],placa:placaBR(meta.placa||''),velocidadeKmh:velocidadeKmh(meta.velocidadeKmh),
+        niv:e[2],tipo:e[3],placa:String(meta.placa||''),velocidadeKmh:meta.velocidadeKmh==null?null:meta.velocidadeKmh,
         velocidadeFonte:meta.velocidadeFonte||''};
     }).filter(e=>e.rel>=lo&&e.rel<=hi&&!tipoPareceCpf(e.tipo))
       .map(e=>({eventKey:e.eventKey,t:e.rel,niv:e.niv,tipo:e.tipo,placa:e.placa,velocidadeKmh:e.velocidadeKmh,velocidadeFonte:e.velocidadeFonte}));
