@@ -3803,7 +3803,7 @@ function dsrMetrics(rows,range,days,ferias){
   }
   const pm=_auditMergeIntervals(point);
   for(const m of movement){if(pm.some(p=>p[0]<=m[0]&&p[1]>=m[1]))continue;for(let d=Math.floor(m[0]/DAY)*DAY;d<m[1];d+=DAY)workDays.add(iso(d));}
-  const work=_auditMergeIntervals([...point,...movement]),rests=[],conflicts=[],unverified=[];
+  const work=_auditMergeIntervals([...point,...movement]),rests=[],conflicts=[],unverified=[],shortRests=[];
   let missing=0;for(let d=lo;d<hi;d+=DAY)if(!meta[iso(d)])missing++;
   const excluded=(a,b)=>{for(let d=Math.floor(a/DAY)*DAY;d<b;d+=DAY){const k=iso(d);if(leave[k]||(meta[k]&4)||invalid.has(k))return true;}return false;};
   const gaps=[];for(let i=1;i<work.length;i++)gaps.push([work[i-1][1],work[i][0]]);
@@ -3818,15 +3818,19 @@ function dsrMetrics(rows,range,days,ferias){
   for(const d of Object.keys(meta).filter(d=>valid(d)&&d>=de&&d<=ate&&(meta[d]&2))){
     const a=base(d),b=a+DAY;
     if(work.some(x=>x[0]<b&&x[1]>a))conflicts.push(d);
-    else if(!rests.some(r=>r.labels.includes(d)))unverified.push(d);
+    else if(!rests.some(r=>r.labels.includes(d))){
+      const g=gaps.find(g=>g[0]<b&&g[1]>a&&g[1]-g[0]<REST&&work.some(w=>w[0]===g[1]));
+      let covered=!!g;if(g)for(let t=Math.floor(g[0]/DAY)*DAY;t<g[1];t+=DAY)if(!meta[iso(t)])covered=false;
+      if(g&&covered&&!excluded(g[0],g[1]))shortRests.push({date:d,minutes:g[1]-g[0]});else unverified.push(d);
+    }
   }
   const sorted=[...workDays].sort(),runs=[];let run=[];
   const endRun=()=>{if(run.length>=7&&run.some(d=>d>=de&&d<=ate))runs.push({de:run[0],ate:run[run.length-1],days:run.length});};
   for(const d of sorted){if(run.length&&(base(d)-base(run[run.length-1])!==DAY||gaps.some(g=>g[1]-g[0]>=REST&&g[0]>=base(run[run.length-1])&&g[1]<base(d)+DAY))){endRun();run=[];}run.push(d);}endRun();
   // Registros antigos sem espelho diário não permitem certificar os dias ausentes.
-  const registered=rests.filter(r=>r.registered).length,contextMissing=!meta[iso(lo-6*DAY)],bad=conflicts.length||runs.length;
+  const registered=rests.filter(r=>r.registered).length,contextMissing=!meta[iso(lo-6*DAY)],bad=conflicts.length||runs.length||shortRests.length;
   const insufficient=missing>0||contextMissing||invalid.size>0||unverified.length>0||!work.length;
-  return {de,ate,count:rests.length,registered,inferred:rests.length-registered,status:bad?'attention':insufficient?'insufficient':'observed',rests,runs,conflicts,unverified,missing,contextMissing,invalid:invalid.size,
+  return {de,ate,count:rests.length,registered,inferred:rests.length-registered,status:bad?'attention':insufficient?'insufficient':'observed',rests,runs,conflicts,unverified,shortRests,missing,contextMissing,invalid:invalid.size,
     reason:bad?'Há ocorrências para revisar.':insufficient?'Cobertura insuficiente para concluir o cumprimento.':'Sem alertas identificados nos registros disponíveis.'};
 }
 function dsrForDriver(nome,range){
@@ -3839,7 +3843,7 @@ function dsrCard(v){
   const state=v.status==='attention'?'⚠ Revisar DSR':v.status==='observed'?'Sem alertas nos registros':'Dados insuficientes';
   const fmt=m=>new Date(m*60000).toISOString().slice(0,16).replace('T',' ');
   const restRows=v.rests.map(r=>`<tr><td>${brDate(r.date)}</td><td>${fmt(r.a)} → ${fmt(r.b)}</td><td>${hDec(r.minutes)}</td><td>${r.registered?'DSR registrado + pausa compatível':'Pausa compatível · confirmar no ponto'}</td></tr>`).join('');
-  const issues=[...v.runs.map(r=>`${brDate(r.de)} a ${brDate(r.ate)}: ${r.days} dias consecutivos com trabalho registrado.`),...v.conflicts.map(d=>`${brDate(d)}: DSR marcado no ponto com trabalho ou movimento registrado.`),...v.unverified.map(d=>`${brDate(d)}: DSR marcado sem pausa de 35h verificável no período.`)];
+  const issues=[...(v.shortRests||[]).map(r=>`${brDate(r.date)}: DSR marcado com apenas ${hDec(r.minutes)} entre atividades (referência 35h).`),...v.runs.map(r=>`${brDate(r.de)} a ${brDate(r.ate)}: ${r.days} dias consecutivos com trabalho registrado.`),...v.conflicts.map(d=>`${brDate(d)}: DSR marcado no ponto com trabalho ou movimento registrado.`),...v.unverified.map(d=>`${brDate(d)}: DSR marcado sem pausa de 35h verificável no período.`)];
   return `<div class="card kpi" id="fichaDsr"><div class="accent" style="background:${color}"></div><div class="lab">DSR — descanso semanal</div><div class="val tnum">${v.rests.length?v.count:(v.status==='insufficient'?'—':0)}</div><div class="sub">${state}<br>${v.registered} registrado(s) · ${v.inferred} indicado(s) por pausa ≥35h</div><details style="margin-top:8px;font-size:12px"><summary>Ver datas e conferência</summary><p>${scEsc(v.reason)}</p>${issues.map(t=>'<p>'+scEsc(t)+'</p>').join('')}<p>Critério: 35h contínuas (24h de DSR + 11h entre jornadas). Pausas não são somadas ou divididas em vários DSRs. Férias e afastamentos identificados ficam fora da contagem.</p>${restRows?`<div style="overflow:auto"><table><thead><tr><th>Conclusão de 35h</th><th>Pausa entre atividades</th><th>Duração</th><th>Evidência</th></tr></thead><tbody>${restRows}</tbody></table></div>`:''}<p>${v.missing||0} dia(s) sem espelho diário no período${v.contextMissing?' · histórico anterior incompleto':''}. Sem ponto ou movimento não significa DSR realizado. A conferência usa todo o histórico do condutor para preservar descansos que atravessam o filtro. Não certifica pagamento ou cumprimento integral sem validar o espelho.</p></details></div>`;
 }
 
