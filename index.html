@@ -269,12 +269,17 @@
   .wtl .lane .gl.day{background:var(--baseline);width:2px}
   /* marcadores de alerta no horário exato (linha do tempo) — ícone por tipo + haste por severidade */
   .lane.lane-al{height:24px;background:var(--surface-2);overflow:visible}
-  .lane .amark{position:absolute;top:13px;bottom:0;width:2px;transform:translateX(-1px);cursor:help;border-radius:1px}
-  .amark.alto{background:var(--critical)}
-  .amark.medio{background:var(--warning)}
-  .amark.baixo{background:var(--s2)}
-  .amark i{position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:12px;font-style:normal;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+  .lane .amark{position:absolute;top:0;bottom:0;width:20px;transform:translateX(-50%);cursor:help;border-radius:1px;z-index:5;--alert-line:var(--pend)}
+  .lane .amark::before{content:'';position:absolute;top:13px;bottom:0;left:9px;width:2px;background:var(--alert-line)}
+  .amark.alto{--alert-line:var(--critical)}
+  .amark.medio{--alert-line:var(--warning)}
+  .amark.baixo{--alert-line:var(--s2)}
+  .amark.pendente{--alert-line:var(--pend)}
+  .amark i{position:absolute;top:0;left:50%;transform:translateX(-50%);font-size:12px;font-style:normal;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
   .amark.alto i{filter:drop-shadow(0 0 3px var(--critical))}
+  .lane .amark[data-tip]::after{content:attr(data-tip);display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);width:min(275px,76vw);padding:9px 12px;border-radius:9px;background:var(--navy-2);color:#fff;border:1px solid rgba(255,255,255,.24);box-shadow:0 8px 24px rgba(0,0,0,.32);font-size:11px;line-height:1.6;white-space:pre-line;overflow-wrap:anywhere;text-align:left;pointer-events:none;font-weight:500}
+  .lane .amark[data-tip]:hover,.lane .amark[data-tip]:focus{z-index:70}
+  .lane .amark[data-tip]:hover::after,.lane .amark[data-tip]:focus::after{display:block}
   .lane.lane-multa{height:24px;background:var(--surface-2);overflow:visible}
   .lane .mmark{position:absolute;top:13px;bottom:0;width:2px;transform:translateX(-1px);background:color-mix(in srgb,var(--warning) 82%,#8a5a2b 18%);border-radius:1px;cursor:help;z-index:5}
   .lane .mmark i{position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:12px;font-style:normal;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.25))}
@@ -1969,15 +1974,46 @@ function canonicalizeDriverSources(){
 function namesOfInterest(){ return RECORD_DRIVER_NAMES_N&&RECORD_DRIVER_NAMES_N.size?new Set(RECORD_DRIVER_NAMES_N):null; }
 // alertas com horário de um registro motorista-dia (demo usa r.alertasTimed; real usa AL_TL)
 function alertsForRec(r){
-  if(r.alertasTimed && r.alertasTimed.length) return r.alertasTimed.map(a=>({t:toMin(a.hora),niv:(a.niv||'').toUpperCase()[0]||'',tipo:a.tipo||'ALERTA'})).filter(a=>a.t!=null);
-  if(AL_TL){ const arr=AL_TL[norm(r.motoristaEscala)]; if(arr){
-    const base=Date.parse(r.data), lo=(r.scopeIni!=null?r.scopeIni:(r.entradaU!=null?r.entradaU:0)), hi=(r.scopeFim!=null?r.scopeFim:(r.saidaU!=null?r.saidaU:1439));
-    return arr.map((e,index)=>({eventKey:e[4]&&e[4].key||norm(r.motoristaEscala)+'|AL_TL|'+index,rel:Math.round((Date.parse(e[0])-base)/60000)+e[1],niv:e[2],tipo:e[3]}))
-      .filter(e=>e.rel>=lo && e.rel<=hi && !tipoPareceCpf(e.tipo)).map(e=>({eventKey:e.eventKey,t:e.rel,niv:e.niv,tipo:e.tipo}));
-  } }
+  if(r.alertasTimed && r.alertasTimed.length)return r.alertasTimed.map(a=>({
+    t:toMin(a.hora),niv:(a.niv||'').toUpperCase()[0]||'',tipo:a.tipo||'ALERTA',
+    placa:placaBR(a.placa||''),velocidadeKmh:velocidadeKmh(a.velocidadeKmh),velocidadeFonte:a.velocidadeFonte||''
+  })).filter(a=>a.t!=null);
+  if(AL_TL){const arr=AL_TL[norm(r.motoristaEscala)];if(arr){
+    const base=Date.parse(r.data),lo=(r.scopeIni!=null?r.scopeIni:(r.entradaU!=null?r.entradaU:0)),hi=(r.scopeFim!=null?r.scopeFim:(r.saidaU!=null?r.saidaU:1439));
+    return arr.map((e,index)=>{
+      const meta=e[4]||{};
+      return {eventKey:meta.key||norm(r.motoristaEscala)+'|AL_TL|'+index,rel:Math.round((Date.parse(e[0])-base)/60000)+e[1],
+        niv:e[2],tipo:e[3],placa:placaBR(meta.placa||''),velocidadeKmh:velocidadeKmh(meta.velocidadeKmh),
+        velocidadeFonte:meta.velocidadeFonte||''};
+    }).filter(e=>e.rel>=lo&&e.rel<=hi&&!tipoPareceCpf(e.tipo))
+      .map(e=>({eventKey:e.eventKey,t:e.rel,niv:e.niv,tipo:e.tipo,placa:e.placa,velocidadeKmh:e.velocidadeKmh,velocidadeFonte:e.velocidadeFonte}));
+  }}
   return [];
 }
 function nivName(c){ return c==='A'?'Alto':c==='M'?'Médio':c==='B'?'Baixo':'—'; }
+
+function alertaDicaTimeline(al){
+  const ehVelocidade=alertaEhVelocidade(al.tipo),v=ehVelocidade?velocidadeKmh(al.velocidadeKmh):null;
+  let cls=al.niv==='A'?'alto':al.niv==='M'?'medio':'baixo',faixa='';
+  if(ehVelocidade){
+    if(v==null){cls='pendente';faixa='Pendente: velocidade não informada';}
+    else if(v>98){cls='alto';faixa='Alto (>98 km/h)';}
+    else if(v>90){cls='medio';faixa='Médio (>90 até 98 km/h)';}
+    else if(v>=86){cls='baixo';faixa='Leve (86 até 90 km/h)';}
+    else{cls='pendente';faixa='Sem desconto (<86 km/h)';}
+  }
+  const lines=[hm(al.t%1440)+' · '+tipoLabel(al.tipo)];
+  if(ehVelocidade){
+    lines.push(v==null?'Pico: não informado na Trimble':'Pico de velocidade: '+String(v).replace('.',',')+' km/h');
+    lines.push('Faixa da nota: '+faixa);
+    if(al.velocidadeFonte)lines.push('Coluna de origem: '+al.velocidadeFonte);
+  }else lines.push('Nível Trimble: '+nivName(al.niv));
+  if(al.placa)lines.push('Placa: '+al.placa);
+  lines.push(al.movimentoConfirmado?'Movimento correspondente encontrado':'Sem movimento correspondente — validar na origem');
+  return {classe:cls,descricao:lines.join('\n')};
+}
+function alertaAttr(str){return String(str==null?'':str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
 function tipoPareceCpf(v){ const s=String(v||'').trim(), d=s.replace(/\D/g,''); return d.length===11 && /^[\d.\-\s]+$/.test(s); }
 // ícone por tipo de alerta (câmera/telemetria) — casa pelo nome do tipo (norm, por substring)
 function alertaIcon(tipo){ const t=norm(tipo);
@@ -3309,7 +3345,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
       if(camSegs.length){ camSegs.forEach(s=>{cameraDrivers.add(s.motorista); ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:s.motorista,color:driverColor(s.motorista),div:norm(s.motorista)!==norm(r.motoristaEscala),who:s.motorista});}); }
       else r.mov.forEach(s=>ident.push({a:off+s.ini,b:off+s.fim,ok:true,drv:r.trimbleMot||r.motoristaEscala,color:driverColor(r.trimbleMot||r.motoristaEscala),div:idDiv,who:idWho||r.trimbleMot||r.motoristaEscala}));
       (r.movUnid||[]).forEach(s=> ident.push({a:off+s.ini,b:off+s.fim,ok:false}));
-      alertsForRec(r).forEach(al=>{ alertas.push({eventKey:al.eventKey,t:off+al.t,niv:al.niv,tipo:al.tipo}); });
+      alertsForRec(r).forEach(al=>{ alertas.push({eventKey:al.eventKey,t:off+al.t,niv:al.niv,tipo:al.tipo,placa:al.placa||'',velocidadeKmh:al.velocidadeKmh,velocidadeFonte:al.velocidadeFonte||''}); });
       dd+=r.horasDedoDuro||0;
       // dayStats é reconstruído abaixo a partir do audit canônico. Não recalcular aqui:
       // além de duplicar trabalho, as variáveis antigas de jornada já não existem nesta versão otimizada.
@@ -3640,7 +3676,7 @@ function renderZoom(id){
     return visible.map((s,i)=>seg('driving24-window',s.a,s.b,i===longest?'⚠ Σ '+hDec(w.minutes)+' / 24h':'','',w.label+' · total acumulado da janela; destaque apenas sobre direção comprovada')).join('');
   }).join('');
   const laneAl=el.querySelector('.lane[data-k="alertas"]');
-  if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const cls=al.niv==='A'?'alto':al.niv==='M'?'medio':'baixo'; return `<span class="amark ${cls}" style="left:${p}%" title="${hm(al.t%1440)} · ${tipoLabel(al.tipo)} · ${nivName(al.niv)} · ${al.movimentoConfirmado?'Com movimento no horário':'Sem movimento correspondente — validar na fonte (o evento pode ocorrer com veículo parado)'}"><i>${al.movimentoConfirmado?'':'⚠'}${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
+  if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const info=alertaDicaTimeline(al),tip=alertaAttr(info.descricao); return `<span class="amark ${info.classe}" style="left:${p}%" title="${tip}" data-tip="${tip}" aria-label="${tip}" tabindex="0"><i>${al.movimentoConfirmado?'':'⚠'}${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
   const laneMulta=el.querySelector('.lane[data-k="multas"]');
   if(laneMulta){ laneMulta.innerHTML=vacationBg+gl+(st.multas||[]).map(m=>{ const p=pos(m.t); if(p<-1||p>101)return ''; const who=m.doc?(' · doc: '+firstName(m.doc)):''; const cam=m.cam?(' · câmera: '+firstName(m.cam)):''; const audit=m.audit==='DIVERGE'?' · ⚠ divergência':m.audit==='CONFERE'?' · confere':''; const ttl=(m.semHora?'hora não informada':hm(m.t%1440))+' · '+multaTimelineLabel(m.tipo)+(m.placa?' · '+m.placa:'')+(m.auto?' · auto '+m.auto:'')+who+cam+audit; return `<span class="mmark" style="left:${p}%" title="${pdfEsc(ttl)}"><i>${multaTimelineIcon(m.tipo)}</i></span>`; }).join(''); }
   const laneId=el.querySelector('.lane[data-k="ident"]');
