@@ -1102,8 +1102,14 @@
       <option value="pendente">A conferir</option>
       <option value="conforme">Tudo certo</option>
     </select></div>
-    <div class="f"><label for="fDirecao">Direção em 24 horas</label><select id="fDirecao" title="Mais de 14 horas de direção acumulada em qualquer janela de 24 horas dentro do período selecionado. Pausas e interjornada não zeram a soma; tempo parado não conta.">
-      <option value="">Todos</option><option value="14">Mais de 14h de direção em 24h</option>
+    <div class="f"><label for="fDirecao">Direção em 24 horas</label><select id="fDirecao" title="Horas de direção efetiva acumuladas em qualquer janela móvel de 24 horas. Pausas e interjornada não zeram a soma; tempo parado não conta.">
+      <option value="">Todos</option>
+      <option value="14">Mais de 14h de direção em 24h</option>
+      <option value="16">Mais de 16h de direção em 24h</option>
+      <option value="18">Mais de 18h de direção em 24h</option>
+      <option value="20">Mais de 20h de direção em 24h</option>
+      <option value="22">Mais de 22h de direção em 24h</option>
+      <option value="24">24h completas de direção em 24h</option>
     </select></div>
     <div class="f" style="flex:1;min-width:170px"><label>Busca (nome / placa)</label><input type="text" id="fBusca" placeholder="Filtrar…"></div>
     <button class="btn" id="clearFilters" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Limpar</button>
@@ -2545,7 +2551,8 @@ function driving24hScan(rows,minMinutes,range,collect){
         const cutoff=end-1440;
         while(left<=right&&merged[left][1]<=cutoff){total-=merged[left][1]-merged[left][0];left++;}
         const minutes=total-(b-end)-(left<=right?Math.max(0,cutoff-merged[left][0]):0);
-        if(minutes<=minMinutes)continue;
+        // Em 24h o limite e inclusivo: a jornada preenche a janela inteira.
+        if(minMinutes===1440 ? minutes<1440 : minutes<=minMinutes)continue;
         if(!collect){qualified.set(key,true);break;}
         const date=new Date((end-1/60)*60000).toISOString().slice(0,10),old=perDay.get(date);
         if(!old||minutes>old.minutes)perDay.set(date,{key,a:Math.max(cutoff,lo),b:end,minutes,date});
@@ -2561,6 +2568,10 @@ function driving24hEvidence(rows,minMinutes,range){return driving24hScan(rows,mi
 function filterDriving24hDrivers(rows,minMinutes,range){
   const keys=driving24hDriverKeys(rows,minMinutes,range);
   return rows.filter(r=>keys.has(recordDriverKey(r)));
+}
+function driving24hSelectedHours(){
+  const el=$('#fDirecao'),h=el?Number(el.value):NaN;
+  return [14,16,18,20,22,24].includes(h)?h:14;
 }
 function dedupeMotoristas(rows){
   const byCpf=new Map(),noCpf=new Map(),nameCpfs=new Map();
@@ -3345,7 +3356,7 @@ function driverLegendHtml(names,kind,colorOf){
 }
 function buildWeekCards(rows, prefix, cap, showNome, mode){
   mode=mode||'week';
-  const drivingEvidence=driving24hEvidence(rows,840,activeRange());
+  const drivingEvidence=driving24hEvidence(rows,driving24hSelectedHours()*60,activeRange());
   for(const k in ZTL) if(k.indexOf(prefix)===0) delete ZTL[k];
   const grp={};
   rows.forEach(r=>{
@@ -4167,9 +4178,11 @@ function driving24hLabel(w){
   const fmt=m=>{const t=new Date(m*60000).toISOString();return brDate(t.slice(0,10))+' '+t.slice(11,16);};
   return `${fmt(w.a)} → ${fmt(w.b)} · ${hDec(w.minutes)} de direção`;
 }
-function driving24hSummary(windows,filterActive){
-  if(!windows.length)return filterActive?'<div class="card" style="padding:14px;margin-bottom:14px">Nenhuma janela com mais de 14h de direção neste recorte da ficha. Confira os filtros de período e situação.</div>':'';
-  return `<div class="card driving24-summary" style="border-left:5px solid var(--critical);padding:14px 18px;margin-bottom:14px"><b style="color:var(--crit-ink)">⚠ Mais de 14h de direção em 24h</b><p style="margin:6px 0">${windows.length} dia(s) com janela acima de 14h no período. Maior acumulado: <b>${hDec(Math.max(...windows.map(w=>w.minutes)))}</b>. Pausas não zeram o acumulado; apenas o tempo efetivamente dirigido é somado.</p>${windows.slice().sort((a,b)=>b.b-a.b).map(w=>`<div style="padding:8px 0;border-top:1px solid var(--border)"><b>${driving24hLabel(w)}</b> <button type="button" class="btn" data-drive-a="${w.a}" data-drive-b="${w.b}">Ver na linha do tempo ↓</button></div>`).join('')}<small>Uma janela representativa com o maior acumulado por dia de término. Janelas sobrepostas não são contadas como infrações independentes.</small></div>`;
+function driving24hSummary(windows,filterActive,limitHours=14){
+  const title=limitHours===24?'24h completas de direção em 24h':'Mais de '+limitHours+'h de direção em 24h';
+  const desc=limitHours===24?'com 24h completas':'acima de '+limitHours+'h';
+  if(!windows.length)return filterActive?'<div class="card" style="padding:14px;margin-bottom:14px">Nenhuma janela '+(limitHours===24?'com 24h completas':'com mais de '+limitHours+'h')+' neste recorte da ficha. Confira os filtros de período e situação.</div>':'';
+  return `<div class="card driving24-summary" style="border-left:5px solid var(--critical);padding:14px 18px;margin-bottom:14px"><b style="color:var(--crit-ink)">⚠ ${title}</b><p style="margin:6px 0">${windows.length} dia(s) com janela ${desc} no período. Maior acumulado: <b>${hDec(Math.max(...windows.map(w=>w.minutes)))}</b>. Pausas não zeram o acumulado; apenas o tempo efetivamente dirigido é somado.</p>${windows.slice().sort((a,b)=>b.b-a.b).map(w=>`<div style="padding:8px 0;border-top:1px solid var(--border)"><b>${driving24hLabel(w)}</b> <button type="button" class="btn" data-drive-a="${w.a}" data-drive-b="${w.b}">Ver na linha do tempo ↓</button></div>`).join('')}<small>Uma janela representativa com o maior acumulado por dia de término. Janelas sobrepostas não são contadas como infrações independentes.</small></div>`;
 }
 function driving24hVisibleSegments(w,movement,lo,hi){
   const xs=[];
@@ -4201,7 +4214,7 @@ function renderFicha(){
   const horasTrabalhadas=(M.audit&&M.audit.hPonto)||0;
   const periodoFicha=periodoLabel();
   const dsr=dsrForDriver(nome,activeRange());
-  const driveWindows=[...driving24hEvidence(recs,840,activeRange()).values()].flat();
+  const driveWindows=[...driving24hEvidence(recs,driving24hSelectedHours()*60,activeRange()).values()].flat();
   const alertasPorMilKm=(kmR>0)?(totAl/(kmR/1000)):null;
   const alertaKmMeta=75;
   const alertaKmCrit=alertasPorMilKm!=null&&alertasPorMilKm>alertaKmMeta;
@@ -4271,7 +4284,7 @@ function renderFicha(){
     </div>
     ${noteOps}
     ${recs.some(r=>!r.cpf)?'<div class="card" style="padding:12px;margin-bottom:12px;border-left:4px solid var(--warning)"><b>Vínculo por CPF pendente.</b> Confira o CPF no relatório de Jornada e no cadastro TMS. Nomes parecidos não são usados para confirmar a identidade.</div>':''}
-    ${driving24hSummary(driveWindows,!!$('#fDirecao').value)}
+    ${driving24hSummary(driveWindows,!!$('#fDirecao').value,driving24hSelectedHours())}
 
     <div class="sec-title"><h2>Tratativas com o motorista</h2><span>${trats.length} registro(s) · ${TRAT_CACHE?'histórico compartilhado sincronizado':'histórico local · sincronize para ver nas outras máquinas'}</span></div>
     <div class="card">${ trats.length
