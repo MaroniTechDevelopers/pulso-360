@@ -3784,54 +3784,41 @@ function fichaMetrics(nome){
   const out={nome,recs,d,adm,porSemana,ddTotal,ddRealTotal,hexTotal,diasHex,semel,semelMot,aderJornadaVal,op,placas,placasDetalhadas,placasDetalhadasHtml,alR,totAl,tempo,kmR,litrosR,abF,mediaR,mediaTrimble,mediaRawTrimble,mediaInconsistente,mediaCoverage:audit.mediaCoverage||0,metaFicha,medaOk,reco,risco,condDiv,diasComPonto,diasComMov,hCondAudit,interjViol,restMinF,audit}; FICHA_METRICS_CACHE.set(cacheKey,out); return out;
 }
 // pontos críticos e positivos p/ o relatório executivo
-// DSR: evidência operacional, sem transformar ausência de registro em folga.
-// Referências: CLT arts. 66/67 e 235-D, ADI 5322; OJ 410/TST.
+// DSR: conferência dos dias da jornada de ponto, sem usar a movimentação.
 function dsrMetrics(rows,range,days,ferias){
-  const DAY=1440, REST=2100, valid=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')&&Number.isFinite(Date.parse(d));
-  const iso=m=>new Date(m*60000).toISOString().slice(0,10), base=d=>Date.parse(d)/60000;
-  const meta=days||{}, leave=ferias||{}, dates=[...(rows||[]).map(r=>r.data),...Object.keys(meta)].filter(valid).sort();
-  if(!dates.length)return {count:0,registered:0,inferred:0,status:'insufficient',rests:[],runs:[],conflicts:[],unverified:[],missing:0,reason:'Sem histórico do condutor.'};
-  const de=range&&valid(range.de)&&!range.de.startsWith('0000-')?range.de:dates[0],ate=range&&valid(range.ate)&&!range.ate.startsWith('9999-')?range.ate:dates[dates.length-1],lo=base(de),hi=base(ate)+DAY;
-  if(hi<=lo)return {count:0,registered:0,inferred:0,status:'insufficient',rests:[],runs:[],conflicts:[],unverified:[],missing:0,reason:'Período inválido.'};
-  const point=[],movement=[],workDays=new Set(),invalid=new Set();
+  const DAY=86400000,valid=d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')&&Number.isFinite(Date.parse(d));
+  const iso=t=>new Date(t).toISOString().slice(0,10),meta=days||{},leave=ferias||{};
+  const dates=[...(rows||[]).map(r=>r.data),...Object.keys(meta),...Object.keys(leave)].filter(valid).sort();
+  const empty={count:0,pointDays:0,totalDays:0,withoutPoint:0,registeredDates:[],unmarked:[],excluded:[],runs:[],conflicts:[],missing:0,status:'insufficient',reason:'Sem jornada de ponto disponível para conferência.'};
+  if(!dates.length)return empty;
+  const de=range&&valid(range.de)&&!range.de.startsWith('0000-')?range.de:dates[0],ate=range&&valid(range.ate)&&!range.ate.startsWith('9999-')?range.ate:dates[dates.length-1];
+  if(ate<de)return {...empty,reason:'Período inválido.'};
+  const point=new Set(),incomplete=new Set();
   for(const r of rows||[]){
-    if(!valid(r.data))continue;const b=base(r.data),raw=(r.seqP&&r.seqP.length?r.seqP:r.punches)||[];
-    const ns=[];let offset=0,previous=null;
-    for(const x of raw){const n=typeof x==='number'?x:toMin(x);if(!Number.isFinite(n)){invalid.add(r.data);continue;}let v=n+offset;if(previous!=null&&v<previous){offset+=DAY;v=n+offset;}ns.push(v);previous=v;}
-    if(ns.length){workDays.add(r.data);if(ns.length%2||ns.length<2||ns[ns.length-1]<=ns[0]||ns[ns.length-1]-ns[0]>DAY)invalid.add(r.data);else point.push([b+ns[0],b+ns[ns.length-1]]);}
-    for(const x of r.mov||[]){const a=+x.ini,z=+x.fim;if(Number.isFinite(a)&&Number.isFinite(z)&&z>a&&z-a<=DAY)movement.push([b+a,b+z]);}
+    if(!valid(r.data)||r.data>ate)continue;
+    const raw=(r.seqP&&r.seqP.length?r.seqP:r.punches)||[];
+    const ns=raw.map(x=>typeof x==='number'?x:toMin(x)).filter(Number.isFinite);
+    if(ns.length){point.add(r.data);if(ns.length%2)incomplete.add(r.data);}
   }
-  const pm=_auditMergeIntervals(point);
-  for(const m of movement){if(pm.some(p=>p[0]<=m[0]&&p[1]>=m[1]))continue;for(let d=Math.floor(m[0]/DAY)*DAY;d<m[1];d+=DAY)workDays.add(iso(d));}
-  const work=_auditMergeIntervals([...point,...movement]),rests=[],conflicts=[],unverified=[],shortRests=[];
-  let missing=0;for(let d=lo;d<hi;d+=DAY)if(!meta[iso(d)])missing++;
-  const excluded=(a,b)=>{for(let d=Math.floor(a/DAY)*DAY;d<b;d+=DAY){const k=iso(d);if(leave[k]||(meta[k]&4)||invalid.has(k))return true;}return false;};
-  const gaps=[];for(let i=1;i<work.length;i++)gaps.push([work[i-1][1],work[i][0]]);
-  // Uma pausa no fim só é observável até o último dia efetivamente presente no espelho.
-  const md=Object.keys(meta).filter(valid).sort();if(work.length&&md.length){const end=Math.min(hi,base(md[md.length-1])+DAY);if(end>work[work.length-1][1])gaps.push([work[work.length-1][1],end]);}
-  for(const g of gaps){
-    const completed=g[0]+REST;if(g[1]-g[0]<REST||completed<lo||completed>=hi||excluded(g[0],g[1]))continue;
-    const labels=Object.keys(meta).filter(d=>valid(d)&&(meta[d]&2)&&base(d)<g[1]&&base(d)+DAY>g[0]);
-    const covered=(()=>{for(let d=Math.floor(g[0]/DAY)*DAY;d<g[1];d+=DAY)if(!meta[iso(d)])return false;return true;})();
-    rests.push({a:g[0],b:g[1],minutes:g[1]-g[0],date:iso(completed),registered:covered&&labels.length>0,labels});
+  const registeredDates=[],unmarked=[],excluded=[],conflicts=[];let totalDays=0,pointDays=0,missing=0;
+  for(let t=Date.parse(de);t<=Date.parse(ate);t+=DAY){
+    const d=iso(t);totalDays++;if(point.has(d))pointDays++;
+    const away=!!(leave[d]||(meta[d]&4));
+    if(away)excluded.push(d);
+    if((meta[d]&2)&&point.has(d))conflicts.push(d);
+    if(!point.has(d)&&!away){if(meta[d]&2)registeredDates.push(d);else unmarked.push(d);}
+    if(!point.has(d)&&!meta[d]&&!leave[d])missing++;
   }
-  for(const d of Object.keys(meta).filter(d=>valid(d)&&d>=de&&d<=ate&&(meta[d]&2))){
-    const a=base(d),b=a+DAY;
-    if(work.some(x=>x[0]<b&&x[1]>a))conflicts.push(d);
-    else if(!rests.some(r=>r.labels.includes(d))){
-      const g=gaps.find(g=>g[0]<b&&g[1]>a&&g[1]-g[0]<REST&&work.some(w=>w[0]===g[1]));
-      let covered=!!g;if(g)for(let t=Math.floor(g[0]/DAY)*DAY;t<g[1];t+=DAY)if(!meta[iso(t)])covered=false;
-      if(g&&covered&&!excluded(g[0],g[1]))shortRests.push({date:d,minutes:g[1]-g[0]});else unverified.push(d);
-    }
-  }
-  const sorted=[...workDays].sort(),runs=[];let run=[];
-  const endRun=()=>{if(run.length>=7&&run.some(d=>d>=de&&d<=ate))runs.push({de:run[0],ate:run[run.length-1],days:run.length});};
-  for(const d of sorted){if(run.length&&(base(d)-base(run[run.length-1])!==DAY||gaps.some(g=>g[1]-g[0]>=REST&&g[0]>=base(run[run.length-1])&&g[1]<base(d)+DAY))){endRun();run=[];}run.push(d);}endRun();
-  // Registros antigos sem espelho diário não permitem certificar os dias ausentes.
-  const registered=rests.filter(r=>r.registered).length,contextMissing=!meta[iso(lo-6*DAY)],bad=conflicts.length||runs.length||shortRests.length;
-  const insufficient=missing>0||contextMissing||invalid.size>0||unverified.length>0||!work.length;
-  return {de,ate,count:rests.length,registered,inferred:rests.length-registered,status:bad?'attention':insufficient?'insufficient':'observed',rests,runs,conflicts,unverified,shortRests,missing,contextMissing,invalid:invalid.size,
-    reason:bad?'Há ocorrências para revisar.':insufficient?'Cobertura insuficiente para concluir o cumprimento.':'Sem alertas identificados nos registros disponíveis.'};
+  // O início da sequência é preservado antes do filtro; registros posteriores não entram.
+  const sorted=[...point].sort(),runs=[];let run=[];
+  const endRun=()=>{if(run.length>=7&&run[run.length-1]>=de)runs.push({de:run[0],ate:run[run.length-1],days:run.length,firstAlert:run[6],dates:run.filter(d=>d>=de&&d<=ate)});};
+  for(const d of sorted){if(run.length&&Date.parse(d)-Date.parse(run[run.length-1])!==DAY){endRun();run=[];}run.push(d);}endRun();
+  let contextMissing=false;for(let t=Date.parse(de)-6*DAY;t<Date.parse(de);t+=DAY){const d=iso(t);if(!point.has(d)&&!meta[d]&&!leave[d])contextMissing=true;}
+  const invalid=[...incomplete].filter(d=>d>=de&&d<=ate).length,bad=runs.length||conflicts.length;
+  const pending=missing>0||unmarked.length>0||contextMissing||invalid>0||!point.size&&!Object.keys(meta).length;
+  return {de,ate,count:registeredDates.length,pointDays,totalDays,withoutPoint:totalDays-pointDays,registeredDates,unmarked,excluded,runs,conflicts,missing,contextMissing,invalid,
+    status:bad?'attention':pending?'insufficient':'observed',
+    reason:bad?'Há sequência de ponto sem folga ou DSR marcado com batida para revisar.':pending?'Há dias sem marcação ou contexto incompleto; confirme as folgas no espelho de ponto.':'Sem sequência de 7 dias com ponto nos registros analisados.'};
 }
 function dsrForDriver(nome,range){
   const nn=norm(nome),rows=(RECORDS_BY_DRIVER_N&&RECORDS_BY_DRIVER_N[nn])||[],days=(RAW&&RAW.dsrDays&&RAW.dsrDays[nn])||{},leave={};
@@ -3840,11 +3827,12 @@ function dsrForDriver(nome,range){
 }
 function dsrCard(v){
   const color=v.status==='attention'?'var(--critical)':v.status==='observed'?'var(--good)':'var(--warning)';
-  const state=v.status==='attention'?'⚠ Revisar DSR':v.status==='observed'?'Sem alertas nos registros':'Dados insuficientes';
-  const fmt=m=>new Date(m*60000).toISOString().slice(0,16).replace('T',' ');
-  const restRows=v.rests.map(r=>`<tr><td>${brDate(r.date)}</td><td>${fmt(r.a)} → ${fmt(r.b)}</td><td>${hDec(r.minutes)}</td><td>${r.registered?'DSR registrado + pausa compatível':'Pausa compatível · confirmar no ponto'}</td></tr>`).join('');
-  const issues=[...(v.shortRests||[]).map(r=>`${brDate(r.date)}: DSR marcado com apenas ${hDec(r.minutes)} entre atividades (referência 35h).`),...v.runs.map(r=>`${brDate(r.de)} a ${brDate(r.ate)}: ${r.days} dias consecutivos com trabalho registrado.`),...v.conflicts.map(d=>`${brDate(d)}: DSR marcado no ponto com trabalho ou movimento registrado.`),...v.unverified.map(d=>`${brDate(d)}: DSR marcado sem pausa de 35h verificável no período.`)];
-  return `<div class="card kpi" id="fichaDsr"><div class="accent" style="background:${color}"></div><div class="lab">DSR — descanso semanal</div><div class="val tnum">${v.rests.length?v.count:(v.status==='insufficient'?'—':0)}</div><div class="sub">${state}<br>${v.registered} registrado(s) · ${v.inferred} indicado(s) por pausa ≥35h</div><details style="margin-top:8px;font-size:12px"><summary>Ver datas e conferência</summary><p>${scEsc(v.reason)}</p>${issues.map(t=>'<p>'+scEsc(t)+'</p>').join('')}<p>Critério: 35h contínuas (24h de DSR + 11h entre jornadas). Pausas não são somadas ou divididas em vários DSRs. Férias e afastamentos identificados ficam fora da contagem.</p>${restRows?`<div style="overflow:auto"><table><thead><tr><th>Conclusão de 35h</th><th>Pausa entre atividades</th><th>Duração</th><th>Evidência</th></tr></thead><tbody>${restRows}</tbody></table></div>`:''}<p>${v.missing||0} dia(s) sem espelho diário no período${v.contextMissing?' · histórico anterior incompleto':''}. Sem ponto ou movimento não significa DSR realizado. A conferência usa todo o histórico do condutor para preservar descansos que atravessam o filtro. Não certifica pagamento ou cumprimento integral sem validar o espelho.</p></details></div>`;
+  const state=v.status==='attention'?'⚠ Ponto sem folga — revisar':v.status==='observed'?'Sem sequência irregular no ponto':'Folgas a confirmar';
+  const max=v.runs.length?Math.max(...v.runs.map(r=>r.days)):0;
+  const issues=[...v.runs.map(r=>`${brDate(r.de)} a ${brDate(r.ate)}: ${r.days} dias seguidos com marcação de ponto; alerta a partir de ${brDate(r.firstAlert)}.`),...v.conflicts.map(d=>`${brDate(d)}: DSR informado no espelho, mas há batida de ponto.`)];
+  const list=ds=>ds.length?ds.map(brDate).join(' · '):'Nenhum';
+  const value=v.totalDays&&(!v.missing||v.count)?v.count:'—';
+  return `<div class="card kpi" id="fichaDsr"><div class="accent" style="background:${color}"></div><div class="lab">DSR — jornada de ponto</div><div class="val tnum">${value}</div><div class="sub">${v.pointDays} de ${v.totalDays} dias com ponto<br>${v.count} DSR(s) informado(s) · ${v.withoutPoint} dia(s) sem marcação<br><b>${state}</b>${max?'<br>'+max+' dias seguidos com ponto':''}</div><details style="margin-top:8px;font-size:12px"><summary>Ver dias de ponto e folgas</summary><p>${scEsc(v.reason)}</p>${issues.map(t=>'<p>'+scEsc(t)+'</p>').join('')}<p><b>DSR indicado no espelho:</b> ${list(v.registeredDates)}</p><p><b>Dias sem ponto, com folga a confirmar:</b> ${list(v.unmarked)}</p><p><b>Férias/afastamentos identificados:</b> ${list(v.excluded)}</p><p>A conferência considera os dias com batidas na jornada de ponto. Sete ou mais dias consecutivos com ponto geram alerta; por exemplo, 30 dias marcados em um período de 30 dias. Jornada noturna conta uma vez na data de origem. Movimento do veículo e pausas em horas não alteram este indicador.</p><p>${v.missing||0} dia(s) sem espelho diário${v.contextMissing?' · histórico anterior incompleto':''}${v.invalid?' · '+v.invalid+' dia(s) com batida incompleta':''}. Dia sem marcação não comprova DSR: confirme folga, férias ou ausência de dados no espelho. Este indicador não altera a nota.</p></details></div>`;
 }
 
 function fichaPontos(M){
