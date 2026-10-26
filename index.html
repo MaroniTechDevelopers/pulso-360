@@ -335,6 +335,15 @@
   .capinha{text-align:left;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:15px;padding:13px 14px;cursor:pointer;display:flex;flex-direction:column;gap:10px;transition:transform .12s,box-shadow .12s,border-color .12s}
   .capinha:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--gold)}
   .capinha:focus-visible{outline:2px solid var(--s2);outline-offset:2px}
+  .ac-open{margin-top:10px;width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--ink);font:inherit;cursor:pointer}
+  .ac-shell{width:min(1440px,96vw);height:min(900px,94dvh);background:var(--surface);color:var(--ink);border-radius:18px;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow)}
+  .ac-head{background:#17263e;color:white;padding:18px 24px;display:flex;align-items:start;justify-content:space-between;gap:18px;border-bottom:3px solid #f5c800;flex:none}
+  .ac-brand{color:#f5c800;font-size:12px;font-weight:700;letter-spacing:.06em}.ac-head h2{margin:7px 0;font-size:22px;color:white}.ac-head p{margin:0;color:#d0dae8;font-size:13px}.ac-close{background:transparent;border:0;color:white;font-size:30px;cursor:pointer}
+  .ac-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;padding:16px 20px 10px;flex:none}.ac-kpis>div{padding:12px;background:var(--surface-2);border-radius:10px}.ac-kpis span{display:block;font-size:11px;color:var(--muted)}.ac-kpis b{font-size:27px;display:block;margin-top:5px}
+  .ac-context{display:flex;gap:18px;flex-wrap:wrap;padding:8px 22px;font-size:12px;flex:none}.ac-note{font-size:11px;color:var(--muted);padding:0 22px;margin:4px 0 10px;flex:none}
+  .ac-list{min-height:0;overflow:auto;margin:0 20px;flex:1;border:1px solid var(--border);border-radius:9px}.ac-list table{width:100%;border-collapse:collapse;font-size:12px}.ac-list th{position:sticky;top:0;background:var(--surface-2);z-index:1;text-align:left}.ac-list th,.ac-list td{padding:9px 12px;border-bottom:1px solid var(--border)}.ac-list .ac-action{background:color-mix(in srgb,var(--critical) 7%,var(--surface))}.ac-list button,.ac-footer button{color:var(--ink);background:var(--surface-2);border:1px solid var(--border);padding:7px 10px;border-radius:7px;cursor:pointer;font:inherit}.ac-list td:nth-child(3){font-weight:700}
+  .ac-footer{padding:14px 20px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex:none;font-size:12px}.ac-footer>div{display:flex;gap:8px}
+  @media(max-width:700px){.ac-kpis{grid-template-columns:repeat(3,1fr);padding:10px}.ac-kpis>div{padding:8px}.ac-kpis b{font-size:22px}.ac-head{padding:12px}.ac-head h2{font-size:17px}.ac-context{gap:8px;padding:6px 12px}.ac-note{padding:0 12px}.ac-list{margin:0 10px}.ac-list td,.ac-list th{padding:7px}.ac-footer{padding:10px;flex-wrap:wrap}.ac-list th:nth-child(2),.ac-list td:nth-child(2){display:none}}
   details.adercard{display:block;cursor:default}
   .adercard .cap-id b{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
   .adercard summary::-webkit-details-marker{display:none}
@@ -1487,6 +1496,7 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <!-- MSAL (login Microsoft/M365) para ler os relatórios do SharePoint via Graph -->
 <script defer src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.10.0/lib/msal-browser.min.js"></script>
+<div class="modal-bg" id="aderDetailModal" style="display:none"><section id="aderDetailShell" class="ac-shell" role="dialog" aria-modal="true" aria-label="Ficha de aderência do centro de resultado"></section></div>
 <script>
 /* ============================================================
    LOGO MARONI (rinoceronte) — embutido
@@ -5298,10 +5308,64 @@ function aderenciaCentros(rows,opFiltro,allowedPlates){
     const au=auditMetrics(g.recs);return Object.assign(g,{ident:g.st.tot>0?Math.round(g.st.idn/g.st.tot*100):aderRecs(g.recs),motN:g.mot.size,placN:g.placas.size,dd:au.hForaReal||0,hex:au.hExtra||0});
   }).sort((a,b)=>(a.ident==null?9999:a.ident)-(b.ident==null?9999:b.ident)||a.op.localeCompare(b.op,'pt-BR'));
 }
+let ADER_CENTRO_GROUPS=new Map(),ADER_DETAIL=null,ADER_DETAIL_RETURN=null,ADER_DETAIL_OVERFLOW='';
+function aderenciaFichaDados(g,periodo){
+  const plates=[...g.placas].map(pk=>{
+    const st=g.plateStats.get(pk),t=TMS&&TMS[pk];
+    return {placa:placaBR(pk),ident:st?st.ident:null,acao:!!(st&&st.acao),tele:!!(st&&st.tele),modelo:t?[t.marca,t.modelo].filter(Boolean).join(' '):'',status:st?(st.tele?'Sem telemetria':st.acao?'Para ação':'OK'):'Sem apuração'};
+  }).sort((a,b)=>(a.acao?0:a.ident==null?1:2)-(b.acao?0:b.ident==null?1:2)||a.placa.localeCompare(b.placa));
+  return {centro:g.op,periodo,ident:g.ident,motoristas:g.motN,total:g.st.total,ok:g.st.ok,acao:g.st.acao,zero:g.st.zero,tele:g.st.tele,fora:g.dd,extra:g.hex,meta:CFG.sem,plates};
+}
+function aderenciaFichaHtml(d){
+  const pct=d.ident==null?'—':d.ident+'%',esc=scEsc;
+  const kpis=[['Aderência',pct],['Placas com movimento',d.total],['Placas OK',d.ok],['Placas para ação',d.acao],['Sem identificação',d.zero],['Sem telemetria',d.tele]];
+  return `<header class="ac-head"><div><div class="ac-brand">PULSO 360 · GRUPO MARONI</div><h2>${esc(d.centro)}</h2><p>${esc(d.periodo)}</p></div><button type="button" class="ac-close" data-ac-close aria-label="Fechar detalhamento">×</button></header>
+    <div class="ac-kpis">${kpis.map(([lab,val])=>`<div><span>${lab}</span><b>${val}</b></div>`).join('')}</div>
+    <div class="ac-context"><span><b>${d.motoristas}</b> motorista(s)</span><span>Fora da jornada <b>${hDec(d.fora)}</b></span><span>Hora extra dos motoristas <b>${hDec(d.extra)}</b></span><span>Meta de identificação <b>${d.meta}%</b></span></div>
+    <p class="ac-note">Identificação das placas: consolidado importado. Jornada e motoristas: filtros selecionados. Horas extras podem se repetir entre centros quando há troca de veículo.</p>
+    <div class="ac-list" role="region" aria-label="Placas do centro de resultado" tabindex="0"><table><thead><tr><th>Placa</th><th>Modelo</th><th>Aderência</th><th>Situação</th></tr></thead><tbody>${d.plates.length?d.plates.map(p=>`<tr class="${p.acao?'ac-action':''}"><td><button type="button" data-ader-placa="${esc(placaKey(p.placa))}">${esc(p.placa)} ↗</button></td><td>${esc(p.modelo||'—')}</td><td>${p.ident==null?'—':p.ident+'%'}</td><td>${esc(p.status)}</td></tr>`).join(''):'<tr><td colspan="4">Sem placas neste recorte. Centro cadastrado no TMS.</td></tr>'}</tbody></table></div>
+    <footer class="ac-footer"><span>${d.plates.length} placa(s) relacionadas · categorias completas do TMS</span><div><button type="button" data-ac-image>Baixar imagem</button><button type="button" data-ac-close>Fechar</button></div></footer>`;
+}
+function openAderenciaDetalhe(centro){
+  const g=ADER_CENTRO_GROUPS.get(norm(centro));if(!g)return;
+  ADER_DETAIL=aderenciaFichaDados(g,periodoLabel());ADER_DETAIL_RETURN=document.activeElement;
+  const modal=$('#aderDetailModal'),shell=$('#aderDetailShell');shell.innerHTML=aderenciaFichaHtml(ADER_DETAIL);
+  ADER_DETAIL_OVERFLOW=document.body.style.overflow;document.body.style.overflow='hidden';modal.style.display='flex';
+  const close=shell.querySelector('[data-ac-close]');if(close)close.focus();
+}
+function closeAderenciaDetalhe(){
+  const modal=$('#aderDetailModal');if(modal)modal.style.display='none';document.body.style.overflow=ADER_DETAIL_OVERFLOW;
+  ADER_DETAIL=null;if(ADER_DETAIL_RETURN&&ADER_DETAIL_RETURN.focus)ADER_DETAIL_RETURN.focus();ADER_DETAIL_RETURN=null;
+}
+function aderenciaFichaImagem(d){
+  // Uma única imagem reúne TODAS as placas, sem cortar a lista na altura da tela.
+  const cols=d.plates.length>30?3:2,W=1440,pad=42,gap=22,cw=(W-pad*2-gap*(cols-1))/cols,rh=36,rows=Math.max(1,Math.ceil(d.plates.length/cols));
+  const headY=332,H=Math.max(620,headY+44+rows*rh+104),canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+  const c=canvas.getContext('2d');if(!c)throw new Error('Não foi possível preparar a imagem');
+  c.fillStyle='#f3f5f8';c.fillRect(0,0,W,H);c.fillStyle='#17263e';c.fillRect(0,0,W,154);c.fillStyle='#f5c800';c.fillRect(0,154,W,4);
+  const text=(s,x,y,size=18,color='#17263e',bold=false)=>{c.fillStyle=color;c.font=(bold?'700 ':'400 ')+size+'px Arial';c.fillText(String(s),x,y);};
+  const wrap=(s,x,y,width,size,color,bold)=>{c.font=(bold?'700 ':'400 ')+size+'px Arial';let line='',n=0;for(const word of String(s).split(/\s+/)){const test=line?line+' '+word:word;if(line&&c.measureText(test).width>width){text(line,x,y+n*(size+5),size,color,bold);line=word;n++;}else line=test;}text(line,x,y+n*(size+5),size,color,bold);};
+  text('PULSO 360  |  GRUPO MARONI',pad,34,18,'#f5c800',true);wrap(d.centro,pad,76,W-pad*2,25,'#ffffff',true);text(d.periodo,pad,137,16,'#e1e7f0');
+  const metrics=[['ADERÊNCIA',d.ident==null?'—':d.ident+'%'],['PLACAS COM MOVIMENTO',d.total],['PLACAS OK',d.ok],['PARA AÇÃO',d.acao],['SEM IDENTIFICAÇÃO',d.zero],['SEM TELEMETRIA',d.tele]];
+  const mw=(W-pad*2-5*12)/6;metrics.forEach(([lab,v],i)=>{const x=pad+i*(mw+12);c.fillStyle='#ffffff';c.fillRect(x,178,mw,88);text(lab,x+12,202,12,'#52647c',true);text(v,x+12,248,32,i>=3&&+v>0?'#b42318':'#17263e',true);});
+  text(d.motoristas+' motoristas  ·  Fora da jornada '+hDec(d.fora)+'  ·  Hora extra '+hDec(d.extra)+'  ·  Meta '+d.meta+'%',pad,300,18);
+  for(let col=0;col<cols;col++){
+    const x=pad+col*(cw+gap);c.fillStyle='#17263e';c.fillRect(x,headY,cw,34);text('PLACA',x+10,headY+23,14,'#ffffff',true);text('ID',x+143,headY+23,14,'#ffffff',true);text('SITUAÇÃO',x+213,headY+23,14,'#ffffff',true);
+    const chunk=d.plates.slice(col*rows,(col+1)*rows);chunk.forEach((p,i)=>{const y=headY+34+i*rh;c.fillStyle=p.acao?'#fff0ed':i%2?'#e9eef4':'#ffffff';c.fillRect(x,y,cw,rh);text(p.placa,x+10,y+24,17,'#17263e',true);text(p.ident==null?'—':p.ident+'%',x+143,y+24,17);text(p.status,x+213,y+24,16,p.acao?'#b42318':'#17263e');});
+  }
+  text(d.plates.length+' placas relacionadas. Identificação: consolidado importado. Jornada e motoristas: filtros selecionados.',pad,H-58,15,'#52647c');
+  text('Horas extras podem se repetir entre centros. Gerado em '+new Date().toLocaleString('pt-BR'),pad,H-30,15,'#52647c');return canvas;
+}
+function baixarAderenciaImagem(){
+  if(!ADER_DETAIL)return;
+  try{const d=ADER_DETAIL,canvas=aderenciaFichaImagem(d);canvas.toBlob(blob=>{if(!blob){toast('Não foi possível gerar a imagem');return;}_baixarBlob(blob,'Pulso360_Aderencia_'+norm(d.centro).replace(/[^A-Z0-9]+/g,'_')+'.png');},'image/png');}catch(e){toast(e.message||'Erro ao gerar a imagem');}
+}
+
 function renderAderencia(rows){
   const box=$('#aderBox'),kbox=$('#aderKpis');if(!box)return;
   const allowedPlates=$('#fDirecao').value?placasNoFiltro():null;
   const list=aderenciaCentros(rows,$('#fOp').value,allowedPlates),comId=list.filter(g=>g.ident!=null).length,abaixo=list.filter(g=>g.ident!=null&&g.ident<CFG.sem).length;
+  ADER_CENTRO_GROUPS=new Map(list.map(g=>[norm(g.op),g]));
   const totals=list.reduce((s,g)=>{for(const k of ['total','acao','zero','tot','idn'])s[k]+=g.st[k];return s;},{total:0,acao:0,zero:0,tot:0,idn:0});
   const frota=totals.tot>0?Math.round(totals.idn/totals.tot*100):aderRecs(rows);
   const K=[
@@ -5315,15 +5379,14 @@ function renderAderencia(rows){
   box.innerHTML=identCoverageWarning()+list.map(g=>{
     const cor=g.ident==null?'var(--muted)':g.ident>=CFG.sem?'var(--good)':g.ident>=CFG.sem*.75?'var(--warning)':'var(--critical)';
     const plates=[...g.placas].sort();
-    return `<details class="capinha adercard" data-centro="${encodeURIComponent(g.op)}" style="align-self:start;text-align:left">
-      <summary style="cursor:pointer;list-style:none"><div class="cap-id" style="margin-bottom:4px"><b>${scEsc(g.op)}</b><small>${g.motN} motorista(s) · ${g.st.total} veículo(s) com movimento · ${g.st.ok} OK · ${g.st.acao} para ação</small></div>
+    return `<article class="capinha adercard" data-centro="${encodeURIComponent(g.op)}" style="align-self:start;text-align:left">
+      <div><div class="cap-id" style="margin-bottom:4px"><b>${scEsc(g.op)}</b><small>${g.motN} motorista(s) · ${g.st.total} veículo(s) com movimento · ${g.st.ok} OK · ${g.st.acao} para ação</small></div>
       <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:32px;font-weight:760;color:${cor}">${g.ident==null?'—':g.ident+'%'}</span><span style="font-size:11px;color:var(--muted)">aderência</span></div>
       <div style="height:8px;background:var(--surface-2);border-radius:5px;overflow:hidden;margin:8px 0"><div style="height:100%;width:${g.ident||0}%;background:${cor}"></div></div>
       <div class="cap-metrics"><div class="cm"><span>Fora da jornada</span><b>${g.dd>0?hDec(g.dd):'0h'}</b></div><div class="cm" title="Horas do ponto dos motoristas vinculados; podem aparecer em mais de um centro quando há troca de veículo"><span>Hora extra dos motoristas</span><b>${g.hex>0?hDec(g.hex):'0h'}</b></div></div>
       ${g.st.acao?`<span class="plchip hot">${g.st.acao} placa(s) para ação${g.st.tele?' · '+g.st.tele+' sem telemetria':''}</span>`:''}
-      <span class="cap-cta">▸ Ver placas deste centro (${plates.length})</span></summary>
-      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">${plates.length?plates.map(pk=>{const st=g.plateStats.get(pk);return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0"><button type="button" class="btn" data-ader-placa="${scEsc(pk)}">${scEsc(placaBR(pk))} ↗</button><span>${st?st.ident+'% · '+(st.acao?'Para ação':'OK'):'Sem apuração de identificação'}</span></div>`;}).join(''):'Sem veículos no recorte. Este centro consta no cadastro TMS.'}</div>
-    </details>`;
+      </div><button type="button" class="ac-open" data-ac-centro="${encodeURIComponent(g.op)}">Abrir ficha para o gestor ↗</button>
+    </article>`;
   }).join('');
 }
 let SEMID_ROWS=[];
@@ -8055,7 +8118,9 @@ $('#fCondTimeline').addEventListener('change',()=>{
   renderTimelines(filtered());
 });
 // Os centros abrem suas próprias placas, sem redirecionar para a família agregada.
-$('#aderBox').addEventListener('click',e=>{const p=e.target.closest('[data-ader-placa]');if(p){e.preventDefault();focusPlaca(p.dataset.aderPlaca);}});
+$('#aderBox').addEventListener('click',e=>{const ficha=e.target.closest('[data-ac-centro]');if(ficha){e.preventDefault();openAderenciaDetalhe(decodeURIComponent(ficha.dataset.acCentro));return;}const p=e.target.closest('[data-ader-placa]');if(p){e.preventDefault();focusPlaca(p.dataset.aderPlaca);}});
+$('#aderDetailModal').addEventListener('click',e=>{if(e.target===$('#aderDetailModal')||e.target.closest('[data-ac-close]')){closeAderenciaDetalhe();return;}const p=e.target.closest('[data-ader-placa]');if(p){const pl=p.dataset.aderPlaca;closeAderenciaDetalhe();focusPlaca(pl);return;}if(e.target.closest('[data-ac-image]'))baixarAderenciaImagem();});
+document.addEventListener('keydown',e=>{if(!ADER_DETAIL)return;if(e.key==='Escape'){closeAderenciaDetalhe();return;}if(e.key==='Tab'){const els=[...$('#aderDetailShell').querySelectorAll('button,[tabindex="0"]')],first=els[0],last=els[els.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
 $('#aderKpis').addEventListener('click',e=>{ if(e.target.closest('[data-goplacas-all]')){ const st=readTopFilterState(); st.fBusca=''; setTabFilterState('semid',st,true); goTab('semid'); } });
 // helper: focar uma placa na Linha do tempo (modo placa)
 function focusPlaca(placa){ const src=readTopFilterState(), st=emptyTopFilterState(); st.fOp=src.fOp||''; st.fBusca=placa||''; setTabFilterState('linha',st,true); goTab('linha'); }
