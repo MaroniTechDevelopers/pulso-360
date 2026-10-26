@@ -57,3 +57,10 @@ Não houve validação visual da alteração no GitHub Pages. A conferência dos
 - Cache compacto também passa pelo leitor incremental, descompactando em fluxo. O cache estruturado continua sendo a primeira opção.
 - Validação real: as quatro partes publicadas (133.321.433 bytes gzip, 1.128.869.579 bytes descompactados) reproduziram Invalid string length no carregador anterior. O novo leitor concluiu a leitura com 162.119 registros e todos os campos externos.
 - Testes cobrem UTF-8/acentos entre blocos, escapes, números, containers vazios, campos especiais, mudança de ordem, JSON truncado e rejeição de vírgulas ou texto inválido.
+
+## Aderência por centro de resultado completo do TMS
+
+- Cada card usa o texto completo de TMS[placa].centro, sem reduzir à família da operação. Centros cadastrados sem movimento permanecem visíveis com apuração indisponível. O filtro de família continua restringindo os respectivos centros.
+- Registros com várias placas são repartidos por centro para que os movimentos e fora da jornada pertençam à categoria correta. Hora extra é informação do ponto do motorista e pode se repetir entre centros quando há troca de veículo; a interface explicita isso na dica.
+- Os cards expandem as próprias placas localmente e cada placa leva à sua linha do tempo, evitando abrir um resumo agregado da família ao selecionar um centro específico.
+- Base real conferida: 146 centros, incluindo 25 categorias de Mercado Livre; 2.338 veículos com movimento preservados, iguais ao total da fonte.

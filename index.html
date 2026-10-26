@@ -335,6 +335,9 @@
   .capinha{text-align:left;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:15px;padding:13px 14px;cursor:pointer;display:flex;flex-direction:column;gap:10px;transition:transform .12s,box-shadow .12s,border-color .12s}
   .capinha:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--gold)}
   .capinha:focus-visible{outline:2px solid var(--s2);outline-offset:2px}
+  details.adercard{display:block;cursor:default}
+  .adercard .cap-id b{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+  .adercard summary::-webkit-details-marker{display:none}
   .cap-top{display:flex;align-items:center;gap:10px}
   .avatar{width:38px;height:38px;border-radius:10px;flex:none;display:grid;place-items:center;color:#1a1a1a;font-weight:750;font-size:13px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
   .cap-id{flex:1;min-width:0}
@@ -1179,7 +1182,7 @@
   <!-- ===== ADERÊNCIA POR OPERAÇÃO ===== -->
   <section class="view" id="view-aderencia">
     <div class="grid kpis" id="aderKpis"></div>
-    <div class="sec-title"><h2>Aderência de identificação — por operação</h2><span>operação = Centro de Resultado do TMS · % do movimento com condutor identificado</span></div>
+    <div class="sec-title"><h2>Aderência de identificação — por centro de resultado</h2><span>categorias completas do cadastro de veículos do TMS · % do movimento com condutor identificado</span></div>
     <div class="grid" id="aderBox" style="grid-template-columns:repeat(auto-fill,minmax(250px,1fr))"></div>
   </section>
 
@@ -5260,62 +5263,67 @@ function identCoverageWarning(){
   return '<div class="card" style="grid-column:1/-1;margin-bottom:12px;padding:11px 14px;font-size:12.5px;border-color:color-mix(in srgb,var(--warning) 50%,var(--border))">'+
     '<b style="color:var(--serious)">⚠ Verificar o export:</b> a movimentação carregada <b>não traz trechos de movimento SEM identificação</b> — a aderência tende a aparecer ~100% (superestimada). Para medir de verdade, peça o relatório de movimentação <b>com as linhas de Movimento mesmo sem motorista</b>'+(bolSemMot?' · alternativa: usar o <b>“Sem Motorista”</b> do Boletim (já carregado)':'')+'.</div>';
 }
+// Aderência mantém o Centro de Resultado completo do cadastro de VEÍCULOS do TMS.
+// Não usa família, nome do motorista ou UO Trimble como substituto do centro.
+function aderenciaCentroDaPlaca(placa){
+  const t=TMS&&TMS[placaKey(placa)];return t&&String(t.centro||'').trim()||'Sem centro de resultado no TMS';
+}
+function aderenciaCentros(rows,opFiltro,allowedPlates){
+  const groups=new Map(),get=centro=>{
+    const key=norm(centro);if(!groups.has(key))groups.set(key,{op:centro,recs:[],mot:new Set(),placas:new Set(),st:{total:0,ok:0,acao:0,zero:0,tele:0,tot:0,idn:0},plateStats:new Map()});return groups.get(key);
+  };
+  const pass=p=>(!allowedPlates||allowedPlates.has(placaKey(p)))&&(!opFiltro||operacaoDaPlaca(p)===opFiltro);
+  for(const pk of Object.keys(TMS||{})){if(pass(pk))get(aderenciaCentroDaPlaca(pk));}
+  for(const r of rows||[]){
+    const ps=[...new Set(((r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[])).map(placaKey).filter(pass))];
+    const by=new Map();for(const pk of ps){const centro=aderenciaCentroDaPlaca(pk),k=norm(centro);if(!by.has(k))by.set(k,{centro,plates:new Set()});by.get(k).plates.add(pk);}
+    if(!by.size&&!opFiltro&&!(allowedPlates&&allowedPlates.size))by.set('sem',{centro:'Sem centro de resultado no TMS',plates:new Set()});
+    for(const x of by.values()){
+      const g=get(x.centro),take=s=>x.plates.has(placaKey(s.placa||(ps.length===1?ps[0]:'')));
+      // Um registro com várias placas só contribui com os trechos deste centro.
+      const rr=Object.assign({},r,{placas:[...x.plates],placa:[...x.plates][0]||'',mov:(r.mov||[]).filter(take),movimento:(r.movimento||[]).filter(take)});
+      g.recs.push(rr);if(r.motoristaEscala)g.mot.add(r.motoristaEscala);for(const pk of x.plates)g.placas.add(pk);
+    }
+  }
+  for(const pk of Object.keys(PLACA_MOV||{})){
+    const x=PLACA_MOV[pk];if(!pass(pk)||!x||!x.tot)continue;
+    const g=get(aderenciaCentroDaPlaca(pk)),st=g.st;
+    const rate=x.idn/x.tot*100,ident=Math.round(rate),tele=telemetriaDaPlaca(pk).semTelemetria;
+    const acao=tele||x.idn===0||rate<CFG.sem;
+    st.total++;st.tot+=x.tot;st.idn+=x.idn||0;if(acao)st.acao++;else st.ok++;if(!x.idn)st.zero++;if(tele)st.tele++;
+    g.placas.add(placaKey(pk));g.plateStats.set(placaKey(pk),{ident,acao,tele});
+  }
+  return [...groups.values()].map(g=>{
+    const au=auditMetrics(g.recs);return Object.assign(g,{ident:g.st.tot>0?Math.round(g.st.idn/g.st.tot*100):aderRecs(g.recs),motN:g.mot.size,placN:g.placas.size,dd:au.hForaReal||0,hex:au.hExtra||0});
+  }).sort((a,b)=>(a.ident==null?9999:a.ident)-(b.ident==null?9999:b.ident)||a.op.localeCompare(b.op,'pt-BR'));
+}
 function renderAderencia(rows){
-  const box=$('#aderBox'), kbox=$('#aderKpis'); if(!box) return;
-  const ops={};
-  rows.forEach(r=>{ const o=r.operacao||'—'; const g=(ops[o]=ops[o]||{op:o,idW:0,idT:0,mot:new Set(),placas:new Set(),dd:0,hex:0,recs:[]}); g.recs.push(r);
-    const v=(r.aderencia!=null)?r.aderencia:r.semelhanca; if(v!=null){ const w=Math.max(1,auditRecordDay(r).hCond||0); g.idW+=v*w; g.idT+=w; }
-    g.mot.add(r.motoristaEscala); ((r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[])).forEach(p=>{const pl=placaBR(p);if(pl)g.placas.add(pl);}); });
-  Object.values(ops).forEach(g=>{const au=auditMetrics(g.recs);g.dd=au.hForaReal||0;g.hex=au.hExtra||0;});
-  // opStats = placas POR OPERAÇÃO na MESMA base da aba "Placas sem ID" (PLACA_MOV, atribuída pela UO/placa)
-  // — reconcilia o nº de veículos do card com o detalhamento (OK + p/ ação); carretas/placas sem câmera não entram
+  const box=$('#aderBox'),kbox=$('#aderKpis');if(!box)return;
   const allowedPlates=$('#fDirecao').value?placasNoFiltro():null;
-  let opStats=null;
-  if(typeof PLACA_MOV!=='undefined' && PLACA_MOV && Object.keys(PLACA_MOV).length){ opStats={};
-    for(const pk in PLACA_MOV){ const g=PLACA_MOV[pk]; if(allowedPlates&&!allowedPlates.has(placaKey(pk)))continue; if(!g.tot) continue; const o=operacaoDaPlaca(pk)||'—';
-      const s=(opStats[o]=opStats[o]||{total:0,ok:0,acao:0,zero:0,tele:0,tot:0,idn:0}); s.total++; s.tot+=g.tot; s.idn+=g.idn;
-      const ader=g.idn/g.tot*100, tele=(typeof telemetriaDaPlaca==='function')&&telemetriaDaPlaca(pk).semTelemetria; if(tele){ s.acao++; s.tele++; if(g.idn===0)s.zero++; } else if(g.idn===0){ s.acao++; s.zero++; } else if(ader<CFG.sem){ s.acao++; } else s.ok++; } }
-  // ident da operação: se há stats por placa (PLACA_MOV/Boletim do Veículo) usa a MESMA base do detalhe; senão, média ponderada dos registros
-  const list=Object.values(ops).map(g=>{ const st=opStats?opStats[g.op]:null;
-    const ident = (st && st.tot>0) ? Math.round(st.idn/st.tot*100) : aderRecs(g.recs);
-    return {op:g.op, ident, motN:g.mot.size, placN:g.placas.size, dd:g.dd, hex:g.hex, st}; })
-    .sort((a,b)=> (a.ident==null?9999:a.ident)-(b.ident==null?9999:b.ident) || b.motN-a.motN);
-  let frota;
-  if(opStats){ const opF=$('#fOp').value; let fi=0,ft=0; for(const o in opStats){ if(opF && o!==opF) continue; fi+=opStats[o].idn; ft+=opStats[o].tot; } frota=ft?Math.round(fi/ft*100):null; }
-  else { frota=aderRecs(rows); }
-  const abaixo=list.filter(g=>g.ident!=null && g.ident<CFG.sem).length;
-  const comId=list.filter(g=>g.ident!=null).length;
-  // placas puxando a aderência (respeita o filtro de operação) — mesma conta da aba "Placas sem ID"
-  let placAcaoTot=null, placZeroTot=0, placOkTot=0, placTot=0;
-  if(opStats){ const opF=$('#fOp').value;
-    for(const o in opStats){ if(opF && o!==opF) continue; const s=opStats[o]; placAcaoTot=(placAcaoTot||0)+s.acao; placZeroTot+=s.zero; placOkTot+=s.ok; placTot+=s.total; }
-    if(placAcaoTot==null) placAcaoTot=0; }
+  const list=aderenciaCentros(rows,$('#fOp').value,allowedPlates),comId=list.filter(g=>g.ident!=null).length,abaixo=list.filter(g=>g.ident!=null&&g.ident<CFG.sem).length;
+  const totals=list.reduce((s,g)=>{for(const k of ['total','acao','zero','tot','idn'])s[k]+=g.st[k];return s;},{total:0,acao:0,zero:0,tot:0,idn:0});
+  const frota=totals.tot>0?Math.round(totals.idn/totals.tot*100):aderRecs(rows);
   const K=[
-    {lab:'① Aderência da frota',val:(frota==null?'—':frota+'<small>%</small>'),sub:'movimento identificado ÷ total',ac:(frota==null?'var(--muted)':(frota>=CFG.sem?'var(--good)':'var(--critical)'))},
-    {lab:'Operações',val:list.length,sub:comId+' c/ identificação',ac:'var(--s2)'},
-    {lab:'Abaixo do mínimo',val:abaixo,sub:'operações < meta '+CFG.sem+'%',ac:abaixo>0?'var(--critical)':'var(--good)'},
+    {lab:'① Aderência da frota',val:frota==null?'—':frota+'<small>%</small>',sub:'movimento identificado ÷ total',ac:'var(--s2)'},
+    {lab:'Centros de resultado',val:list.length,sub:comId+' com identificação apurada',ac:'var(--s2)'},
+    {lab:'Abaixo do mínimo',val:abaixo,sub:'centros abaixo da meta de '+CFG.sem+'%',ac:abaixo?'var(--critical)':'var(--good)'},
+    {lab:'Placas puxando ↓',val:totals.acao,sub:totals.zero+' sem identificação · '+totals.total+' com movimento',ac:totals.acao?'var(--critical)':'var(--good)',goplacas:true}
   ];
-  if(placAcaoTot!=null) K.push({lab:'Placas puxando ↓',val:placAcaoTot,sub:(placZeroTot?placZeroTot+' sem NENHUMA ID · ':'')+'de '+placTot+' c/ movimento · clique',ac:placAcaoTot?'var(--critical)':'var(--good)',goplacas:true});
-  if(kbox) kbox.innerHTML=K.map(k=>`<div class="card kpi" ${k.goplacas?'data-goplacas-all="1" title="ver as placas na aba Placas sem ID"':''}><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
-  if(!list.length){ box.innerHTML='<div class="empty">Sem dados de identificação no filtro atual. Carregue o relatório de <b>Alertas</b> (UO da Trimble) e a <b>Movimentação</b>.</div>'; return; }
-  box.innerHTML=identCoverageWarning()+list.map(g=>{ const cor=g.ident==null?'var(--muted)':(g.ident>=CFG.sem?'var(--good)':(g.ident>=CFG.sem*0.75?'var(--warning)':'var(--critical)'));
-    const st=g.st, nAf=st?st.acao:0, zero=st?st.zero:0, tele=st?st.tele||0:0;
-    const vc=st?st.total:g.placN;
-    const subVeic = st ? `${g.motN} motorista(s) · ${vc} veículo(s) c/ movimento · ${st.ok} OK · ${st.acao} p/ ação` : `${g.motN} motorista(s) · ${vc} veículo(s)`;
-    const chip = nAf>0
-      ? `<span class="plchip hot" data-goplacas="${encodeURIComponent(g.op)}" title="ver essas placas na aba Placas sem ID"><span class="n">${nAf}</span> placa(s) p/ ação${tele?' · '+tele+' sem telemetria':''}${zero?' · '+zero+' sem NENHUMA ID':''}<span class="go">analisar →</span></span>`
-      : (opStats==null ? '' : `<span class="plchip okz">✓ nenhuma placa abaixo do mínimo</span>`);
-    return `<button class="capinha adercard" data-op="${encodeURIComponent(g.op)}">
-      <div class="cap-id" style="margin-bottom:4px"><b>${g.op}</b><small>${subVeic}</small></div>
-      <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:32px;font-weight:760;letter-spacing:-.02em;color:${cor}">${g.ident==null?'—':g.ident+'%'}</span><span style="font-size:11px;color:var(--muted)">aderência</span></div>
-      <div style="height:8px;background:var(--surface-2);border-radius:5px;overflow:hidden;margin:8px 0 4px"><div style="height:100%;width:${g.ident||0}%;background:${cor}"></div></div>
-      <div class="cap-metrics">
-        <div class="cm"><span>Fora da jornada</span><b class="${g.dd>0?'bad':''}">${g.dd>0?hDec(g.dd):'0h'}</b></div>
-        <div class="cm"><span>Hora extra</span><b class="${g.hex>0?'bad':''}">${g.hex>0?hDec(g.hex):'0h'}</b></div>
-      </div>
-      ${chip}
-      <span class="cap-cta">ver resumo da operação →</span>
-    </button>`; }).join('');
+  if(kbox)kbox.innerHTML=K.map(k=>`<div class="card kpi" ${k.goplacas?'data-goplacas-all="1"':''}><div class="accent" style="background:${k.ac}"></div><div class="lab">${k.lab}</div><div class="val tnum">${k.val}</div><div class="sub">${k.sub}</div></div>`).join('');
+  if(!list.length){box.innerHTML='<div class="empty">Sem centros de resultado neste filtro. Importe o cadastro de veículos do TMS e a movimentação.</div>';return;}
+  box.innerHTML=identCoverageWarning()+list.map(g=>{
+    const cor=g.ident==null?'var(--muted)':g.ident>=CFG.sem?'var(--good)':g.ident>=CFG.sem*.75?'var(--warning)':'var(--critical)';
+    const plates=[...g.placas].sort();
+    return `<details class="capinha adercard" data-centro="${encodeURIComponent(g.op)}" style="align-self:start;text-align:left">
+      <summary style="cursor:pointer;list-style:none"><div class="cap-id" style="margin-bottom:4px"><b>${scEsc(g.op)}</b><small>${g.motN} motorista(s) · ${g.st.total} veículo(s) com movimento · ${g.st.ok} OK · ${g.st.acao} para ação</small></div>
+      <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:32px;font-weight:760;color:${cor}">${g.ident==null?'—':g.ident+'%'}</span><span style="font-size:11px;color:var(--muted)">aderência</span></div>
+      <div style="height:8px;background:var(--surface-2);border-radius:5px;overflow:hidden;margin:8px 0"><div style="height:100%;width:${g.ident||0}%;background:${cor}"></div></div>
+      <div class="cap-metrics"><div class="cm"><span>Fora da jornada</span><b>${g.dd>0?hDec(g.dd):'0h'}</b></div><div class="cm" title="Horas do ponto dos motoristas vinculados; podem aparecer em mais de um centro quando há troca de veículo"><span>Hora extra dos motoristas</span><b>${g.hex>0?hDec(g.hex):'0h'}</b></div></div>
+      ${g.st.acao?`<span class="plchip hot">${g.st.acao} placa(s) para ação${g.st.tele?' · '+g.st.tele+' sem telemetria':''}</span>`:''}
+      <span class="cap-cta">▸ Ver placas deste centro (${plates.length})</span></summary>
+      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">${plates.length?plates.map(pk=>{const st=g.plateStats.get(pk);return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0"><button type="button" class="btn" data-ader-placa="${scEsc(pk)}">${scEsc(placaBR(pk))} ↗</button><span>${st?st.ident+'% · '+(st.acao?'Para ação':'OK'):'Sem apuração de identificação'}</span></div>`;}).join(''):'Sem veículos no recorte. Este centro consta no cadastro TMS.'}</div>
+    </details>`;
+  }).join('');
 }
 let SEMID_ROWS=[];
 let SAUDE_KPI_FILTER='';   // filtro rápido acionado pelos KPIs da aba Saúde da câmera
@@ -8045,10 +8053,8 @@ $('#fCondTimeline').addEventListener('change',()=>{
   VIEW_RENDER_KEYS.linha='';
   renderTimelines(filtered());
 });
-// clicar numa operação na aba Aderência → Resumo dessa operação
-$('#aderBox').addEventListener('click',e=>{
-  const gp=e.target.closest('[data-goplacas]'); if(gp){ const st=readTopFilterState(); st.fOp=decodeURIComponent(gp.dataset.goplacas); st.fBusca=''; setTabFilterState('semid',st,true); goTab('semid'); return; }
-  const c=e.target.closest('.adercard'); if(!c)return; const st=readTopFilterState(); st.fOp=decodeURIComponent(c.dataset.op); setTabFilterState('semana',st,true); goTab('semana'); });
+// Os centros abrem suas próprias placas, sem redirecionar para a família agregada.
+$('#aderBox').addEventListener('click',e=>{const p=e.target.closest('[data-ader-placa]');if(p){e.preventDefault();focusPlaca(p.dataset.aderPlaca);}});
 $('#aderKpis').addEventListener('click',e=>{ if(e.target.closest('[data-goplacas-all]')){ const st=readTopFilterState(); st.fBusca=''; setTabFilterState('semid',st,true); goTab('semid'); } });
 // helper: focar uma placa na Linha do tempo (modo placa)
 function focusPlaca(placa){ const src=readTopFilterState(), st=emptyTopFilterState(); st.fOp=src.fOp||''; st.fBusca=placa||''; setTabFilterState('linha',st,true); goTab('linha'); }
