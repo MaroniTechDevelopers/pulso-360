@@ -7660,7 +7660,11 @@ async function cacheRestaurar(){
     if(f&&(f.v===1||f.v===2)&&f.s&&await restoreState(f.s))return f.ts||1;   // lê o snapshot (compatível com caches v:1 e v:2)
   }catch(e){}
   try{
-    const c=await idbGet('estado');if(!c||!c.b)return 0;let bytes=c.b;if(c.gz)bytes=await _gunz(c.b);const S=await new Response(bytes).json();if(!(await restoreState(S)))return 0;return c.ts||1;
+    const c=await idbGet('estado');if(!c||!c.b)return 0;
+    let stream=new Response(c.b).body;
+    if(c.gz){if(typeof DecompressionStream==='undefined')return 0;stream=stream.pipeThrough(new DecompressionStream('gzip'));}
+    const S=await _parseSnapshotStreamLarge(stream,$('#bootLoadTxt'));
+    if(!(await restoreState(S)))return 0;return c.ts||1;
   }catch(e){return 0;}
 }
 function _baixarBlob(blob,nome){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
@@ -7823,110 +7827,88 @@ async function _loadPublishedWebview(manifest){
 }
 
 /* ===== PARSER DE SNAPSHOT GRANDE =====
-   Chrome/Edge (V8) não conseguem materializar uma string JSON única acima de ~512 MB.
-   A publicação atual passa desse limite descompactada. Para evitar "Invalid string length"
-   no cold start, extraímos RAW.records do fluxo e fazemos JSON.parse registro a registro.
-   O restante do snapshot fica bem abaixo do limite e é parseado normalmente. */
+   Monta os containers externos em fluxo e usa JSON.parse apenas para blocos internos
+   (registros, eventos e cadastros). Nenhum campo global precisa virar uma string gigante. */
 async function _parseSnapshotStreamLarge(readable, bt){
-  if(typeof TextDecoderStream==='undefined') return new Response(readable).json();
-  const reader=readable.pipeThrough(new TextDecoderStream()).getReader();
-  const marker='"records":[';
-  let prefix='', carry='', found=false, arrayDone=false;
-  let records=[], item='', depth=0, inStr=false, esc=false;
-  const suffix=[];
-  let parsed=0, lastPaint=0;
-
-  const parseItem=(txt)=>{
-    const t=txt.trim();
-    if(!t)return;
-    records.push(JSON.parse(t));
-    parsed++;
-    if(bt && (parsed-lastPaint)>=2500){
-      lastPaint=parsed;
-      bt.textContent='Montando base publicada · '+parsed.toLocaleString('pt-BR')+' registros…';
+  if(typeof TextDecoderStream==='undefined')throw new Error('Atualize o navegador para ler esta base grande');
+  const reader=readable.pipeThrough(new TextDecoderStream()).getReader(),stack=[];
+  let root,done=false,token=null,parsed=0;
+  const fail=()=>{throw new Error('Publicação JSON inválida ou incompleta');};
+  const accept=value=>{
+    if(!stack.length){if(done)fail();root=value;done=true;return;}
+    const p=stack[stack.length-1];
+    if(p.type==='object'){
+      if(p.phase!=='value')fail();
+      Object.defineProperty(p.value,p.key,{value,writable:true,enumerable:true,configurable:true});
+    }else{
+      if(p.phase!=='value'&&p.phase!=='valueOrEnd')fail();
+      p.value.push(value);
+      if(p.path==='RAW.records'&&++parsed%2500===0&&bt)bt.textContent='Montando base publicada · '+parsed.toLocaleString('pt-BR')+' registros…';
     }
+    p.phase='commaOrEnd';
   };
-
-  for(;;){
-    const rr=await reader.read();
-    if(rr.done)break;
-    let chunk=rr.value||'';
-
-    if(!found){
-      carry+=chunk;
-      const rawAt=carry.indexOf('"RAW":');
-      const idx=rawAt>=0 ? carry.indexOf(marker,rawAt) : -1;
-      if(idx<0){
-        // RAW.records aparece no início do snapshot. Se não aparecer em 4 MB,
-        // interrompe para não recriar uma string gigante por engano.
-        if(carry.length>4*1024*1024) throw new Error('Formato da publicação incompatível: RAW.records não encontrado');
-        continue;
-      }
-      prefix=carry.slice(0,idx+marker.length); // mantém o "["; fecharemos com "]" no suffix
-      chunk=carry.slice(idx+marker.length);
-      carry='';
-      found=true;
-    }
-
-    if(arrayDone){
-      suffix.push(chunk);
-      continue;
-    }
-
-    let start=0;
-    for(let i=0;i<chunk.length;i++){
-      const ch=chunk[i];
-
-      if(inStr){
-        if(esc) esc=false;
-        else if(ch==='\\') esc=true;
-        else if(ch==='"') inStr=false;
-        continue;
-      }
-
-      if(ch==='"'){ inStr=true; continue; }
-      if(ch==='{' || ch==='['){ depth++; continue; }
-
-      if(ch==='}'){
-        if(depth>0)depth--;
-        continue;
-      }
-
-      if(ch===']'){
-        if(depth===0){
-          item+=chunk.slice(start,i);
-          parseItem(item);
-          item='';
-          suffix.push(']');
-          if(i+1<chunk.length)suffix.push(chunk.slice(i+1));
-          arrayDone=true;
-          break;
+  const finish=()=>{
+    const t=token,value=JSON.parse(t.parts.join(''));token=null;
+    if(t.key){const p=stack[stack.length-1];p.key=value;p.phase='colon';}else accept(value);
+  };
+  try{
+    for(;;){
+      const rr=await reader.read();if(rr.done)break;
+      const chunk=rr.value||'';let start=0;
+      for(let i=0;i<chunk.length;){
+        const ch=chunk[i];
+        if(token){
+          let end=false,consume=true;
+          if(token.kind==='atom'){
+            if(ch===','||ch===']'||ch==='}'||ch===' '||ch==='\n'||ch==='\r'||ch==='\t'){end=true;consume=false;}
+          }else if(token.inStr){
+            if(token.esc)token.esc=false;
+            else if(ch==='\\')token.esc=true;
+            else if(ch==='"'){token.inStr=false;if(token.kind==='string')end=true;}
+          }else{
+            if(ch==='"')token.inStr=true;
+            else if(ch==='{'||ch==='[')token.depth++;
+            else if(ch==='}'||ch===']'){if(--token.depth===0)end=true;}
+          }
+          if(end){token.parts.push(chunk.slice(start,i+(consume?1:0)));finish();if(consume)i++;start=i;continue;}
+          i++;continue;
         }
-        depth--;
-        continue;
+        if(ch===' '||ch==='\n'||ch==='\r'||ch==='\t'){i++;continue;}
+        const p=stack[stack.length-1];
+        if(p&&p.type==='object'&&(p.phase==='keyOrEnd'||p.phase==='key')){
+          if(ch==='}'&&p.phase==='keyOrEnd'){stack.pop();i++;continue;}
+          if(ch!=='"')fail();
+          token={kind:'string',key:true,inStr:true,esc:false,parts:[]};start=i;i++;continue;
+        }
+        if(p&&p.phase==='colon'){if(ch!==':')fail();p.phase='value';i++;continue;}
+        if(p&&p.phase==='commaOrEnd'){
+          if(ch===','){p.phase=p.type==='object'?'key':'value';i++;continue;}
+          if(ch===(p.type==='object'?'}':']')){stack.pop();i++;continue;}
+          fail();
+        }
+        if(p&&p.type==='array'&&p.phase==='valueOrEnd'&&ch===']'){stack.pop();i++;continue;}
+        if(!p&&done)fail();
+        if(ch==='{'||ch==='['){
+          if(stack.length<3){
+            const value=ch==='{'?{}:[],path=p?(p.path?p.path+'.':'')+(p.type==='object'?p.key:p.value.length):'';
+            accept(value);stack.push({value,path,type:ch==='{'?'object':'array',phase:ch==='{'?'keyOrEnd':'valueOrEnd',key:null});i++;continue;
+          }
+          token={kind:'container',depth:1,inStr:false,esc:false,parts:[]};start=i;i++;continue;
+        }
+        if(ch==='"'){token={kind:'string',inStr:true,esc:false,parts:[]};start=i;i++;continue;}
+        if(ch==='-'||(ch>='0'&&ch<='9')||ch==='t'||ch==='f'||ch==='n'){
+          token={kind:'atom',parts:[]};start=i;i++;continue;
+        }
+        fail();
       }
-
-      if(ch===',' && depth===0){
-        item+=chunk.slice(start,i);
-        parseItem(item);
-        item='';
-        start=i+1;
-      }
+      if(token)token.parts.push(chunk.slice(start));
     }
-
-    if(!arrayDone)item+=chunk.slice(start);
-  }
-
-  if(!found || !arrayDone) throw new Error('Publicação incompleta ao montar RAW.records');
-  if(bt)bt.textContent='Finalizando base publicada…';
-
-  // Sem RAW.records, o JSON restante fica abaixo do limite de string do V8.
-  const skeleton=prefix+suffix.join('');
-  const S=JSON.parse(skeleton);
-  if(!S || !S.RAW) throw new Error('Snapshot publicado inválido após leitura incremental');
-  S.RAW.records=records;
-  records=null;
-  return S;
+    if(token){if(token.kind!=='atom')fail();finish();}
+    if(stack.length||!done)fail();
+    if(!root||!root.RAW||!Array.isArray(root.RAW.records))throw new Error('Snapshot publicado sem RAW.records');
+    return root;
+  }catch(e){try{await reader.cancel(e);}catch(_){}throw e;}
+  finally{reader.releaseLock();}
 }
 
 async function _lerSnapshotMultipart(prefetchedManifest){
@@ -7956,6 +7938,8 @@ async function _lerSnapshotMultipart(prefetchedManifest){
     const parsePromise=rawBytes>450*1024*1024
       ? _parseSnapshotStreamLarge(ds.readable,bt)
       : new Response(ds.readable).json();
+    // A escrita gzip pode rejeitar antes do await final do parser.
+    parsePromise.catch(()=>{});
     try{
       for(let i=0;i<M.parts.length;i++){
         const p=M.parts[i];
