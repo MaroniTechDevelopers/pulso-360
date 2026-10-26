@@ -280,6 +280,22 @@
   .lane .amark[data-tip]::after{content:attr(data-tip);display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);width:min(275px,76vw);padding:9px 12px;border-radius:9px;background:var(--navy-2);color:#fff;border:1px solid rgba(255,255,255,.24);box-shadow:0 8px 24px rgba(0,0,0,.32);font-size:11px;line-height:1.6;white-space:pre-line;overflow-wrap:anywhere;text-align:left;pointer-events:none;font-weight:500}
   .lane .amark[data-tip]:hover,.lane .amark[data-tip]:focus{z-index:70}
   .lane .amark[data-tip]:hover::after,.lane .amark[data-tip]:focus::after{display:block}
+
+  /* Pico de velocidade legivel ao lado do icone: vermelho (alto) e laranja (medio). */
+  .lane .amark .speed-inline{
+    position:absolute;top:-1px;left:calc(50% + 10px);
+    white-space:nowrap;pointer-events:none;z-index:6;
+    padding:1px 5px;border-radius:5px;line-height:15px;
+    font-size:10px;font-weight:800;font-variant-numeric:tabular-nums;
+    border:1px solid rgba(255,255,255,.25);
+    box-shadow:0 1px 4px rgba(15,23,42,.2);
+  }
+  .lane .amark.alto .speed-inline{background:#b91c1c;color:#fff;border-color:#ef4444}
+  .lane .amark.medio .speed-inline{background:#f59e0b;color:#1f2937;border-color:#d97706}
+  /* Perto da borda direita, posiciona o valor a esquerda do icone. */
+  .lane .amark .speed-inline.speed-inline-left{left:auto;right:calc(50% + 10px)}
+  .lane .amark[data-tip]:hover .speed-inline,.lane .amark[data-tip]:focus .speed-inline{filter:brightness(1.12)}
+
   .lane.lane-multa{height:24px;background:var(--surface-2);overflow:visible}
   .lane .mmark{position:absolute;top:13px;bottom:0;width:2px;transform:translateX(-1px);background:color-mix(in srgb,var(--warning) 82%,#8a5a2b 18%);border-radius:1px;cursor:help;z-index:5}
   .lane .mmark i{position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:12px;font-style:normal;line-height:1;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.25))}
@@ -2014,6 +2030,16 @@ function alertaDicaTimeline(al){
 }
 function alertaAttr(str){return String(str==null?'':str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
+// Rotulo permanente junto ao icone, somente para excesso de velocidade alto ou medio.
+// O valor e o pico do evento, nunca o pico de toda a viagem.
+function alertaVelocidadeRotulo(al,classe){
+  if(!alertaEhVelocidade(al.tipo)||(classe!=='alto'&&classe!=='medio'))return '';
+  const kmh=velocidadeKmh(al.velocidadeKmh);
+  if(kmh==null)return '';
+  return String(Math.round(kmh*10)/10).replace('.',',')+' km/h';
+}
+
+
 function tipoPareceCpf(v){ const s=String(v||'').trim(), d=s.replace(/\D/g,''); return d.length===11 && /^[\d.\-\s]+$/.test(s); }
 // ícone por tipo de alerta (câmera/telemetria) — casa pelo nome do tipo (norm, por substring)
 function alertaIcon(tipo){ const t=norm(tipo);
@@ -3676,7 +3702,7 @@ function renderZoom(id){
     return visible.map((s,i)=>seg('driving24-window',s.a,s.b,i===longest?'⚠ Σ '+hDec(w.minutes)+' / 24h':'','',w.label+' · total acumulado da janela; destaque apenas sobre direção comprovada')).join('');
   }).join('');
   const laneAl=el.querySelector('.lane[data-k="alertas"]');
-  if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const info=alertaDicaTimeline(al),tip=alertaAttr(info.descricao); return `<span class="amark ${info.classe}" style="left:${p}%" title="${tip}" data-tip="${tip}" aria-label="${tip}" tabindex="0"><i>${al.movimentoConfirmado?'':'⚠'}${alertaIcon(al.tipo)}</i></span>`; }).join(''); }
+  if(laneAl){ laneAl.innerHTML=vacationBg+gl+(st.alertas||[]).map(al=>{ const p=pos(al.t); if(p<-1||p>101) return ''; const info=alertaDicaTimeline(al),tip=alertaAttr(info.descricao); const kmh=alertaVelocidadeRotulo(al,info.classe); const speedTag=kmh?`<b class="speed-inline${p>82?' speed-inline-left':''}">${kmh}</b>`:''; return `<span class="amark ${info.classe}" style="left:${p}%" title="${tip}" data-tip="${tip}" aria-label="${tip}" tabindex="0"><i>${al.movimentoConfirmado?'':'⚠'}${alertaIcon(al.tipo)}</i>${speedTag}</span>`; }).join(''); }
   const laneMulta=el.querySelector('.lane[data-k="multas"]');
   if(laneMulta){ laneMulta.innerHTML=vacationBg+gl+(st.multas||[]).map(m=>{ const p=pos(m.t); if(p<-1||p>101)return ''; const who=m.doc?(' · doc: '+firstName(m.doc)):''; const cam=m.cam?(' · câmera: '+firstName(m.cam)):''; const audit=m.audit==='DIVERGE'?' · ⚠ divergência':m.audit==='CONFERE'?' · confere':''; const ttl=(m.semHora?'hora não informada':hm(m.t%1440))+' · '+multaTimelineLabel(m.tipo)+(m.placa?' · '+m.placa:'')+(m.auto?' · auto '+m.auto:'')+who+cam+audit; return `<span class="mmark" style="left:${p}%" title="${pdfEsc(ttl)}"><i>${multaTimelineIcon(m.tipo)}</i></span>`; }).join(''); }
   const laneId=el.querySelector('.lane[data-k="ident"]');
