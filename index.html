@@ -2658,23 +2658,42 @@ function rankSpeedSummary(nome,recs){
     else{const v=alertasResumo(nome,{de:[...days].sort()[0],ate:[...days].sort().slice(-1)[0]});for(const [type,n] of Object.entries(v&&v.tipos||{}))if(alertaEhVelocidade(type))unknown+=Math.max(0,+n||0);}
     total=unknown;
   }
-  return {total,known,unknown,graveCount,recurrencePct:descontoReincidencia(graveCount),maxKmh:max,penaltyPct:max==null?0:descontoVelocidade(max),pending:unknown>0};
+  return {available:!!(AL_TL||BOL_DAY||(typeof ALERTS!=='undefined'&&ALERTS)),total,known,unknown,graveCount,recurrencePct:descontoReincidencia(graveCount),maxKmh:max,penaltyPct:max==null?0:descontoVelocidade(max),pending:unknown>0};
 }
 function rankWithoutSpeed(summary){
   const tipos={},v=summary||{};let speed=0;for(const [type,n] of Object.entries(v.tipos||{})){if(alertaEhVelocidade(type))speed+=+n||0;else tipos[type]=n;}
   // Severity totals mixing speed and other alerts cannot be safely split.
   return {...v,total:Math.max(0,(+v.total||0)-speed),tipos,niveis:speed?{}:{...(v.niveis||{})}};
 }
+function speedIndicatorScore(v){
+  if(!v||v.available===false||(v.pending&&!(v.known>0)))return null;
+  return 100*(15-(v.penaltyPct||0))/15;
+}
 function speedBaseText(p){
-  const v=p&&p.velocidade;if(!v)return '';
-  const band=v.penaltyPct?`Maior velocidade: ${String(v.maxKmh).replace('.',',')} km/h · desconto único de ${v.penaltyPct}% na nota`:'Sem desconto de velocidade nas ocorrências com km/h disponível';
-  return band+(v.pending?` · classificação pendente: ${v.unknown} alerta(s) sem km/h`:'');
+  const v=p&&p.velocidade;if(!v)return 'Velocidade: apuração pendente';
+  const value=speedIndicatorScore(v);
+  return `Velocidade: ${value==null?'apuração pendente':String((15-(v.penaltyPct||0))/10).replace('.',',')+' de 1,5 pontos · peso 15%'}${v.maxKmh==null?'':' · maior velocidade: '+String(v.maxKmh).replace('.',',')+' km/h'}`+(v.pending?` · classificação pendente: ${v.unknown} alerta(s) sem km/h`:'');
 }
 function speedScoreText(p){
   const v=p&&p.velocidade;if(!v)return '';
   return speedBaseText(p)+` · graves (≥100 km/h): ${v.graveCount||0}`+(descontoReincidencia(v.graveCount||0)?` · reincidência: desconto adicional de ${descontoReincidencia(v.graveCount||0)}% ao final`:'');
 }
 // END SPEED SCORE HELPERS
+// Indicador de peso fixo 15%; apenas reincidência gera desconto final.
+function scSpeedCard(p){
+  const v=p&&p.velocidade, value=speedIndicatorScore(v), pending=value==null||!!(v&&v.pending), problem=!!(v&&(v.penaltyPct||v.total>0));
+  const state=problem?'Com ocorrência de velocidade':pending?'Pendente de classificação':'Sem ocorrência de velocidade';
+  const color=problem?'var(--sg-bad)':pending?'#f5c800':'var(--sg-good, #10b981)';
+  const recurrence=v?descontoReincidencia(v.graveCount||0):0;
+  const impact=value==null?'Não apurado':`+${scFmt((15-(v.penaltyPct||0))/10)} de 1,5 pts`;
+  const details=v?`${v.total||0} ocorrência(s) no período · maior velocidade: ${v.maxKmh==null?'não disponível':String(v.maxKmh).replace('.',',')+' km/h'}`:'Esta base ainda não contém o detalhamento de velocidade da nota.';
+  const repeat=v?`Graves ≥100 km/h: ${v.graveCount||0}. Desconto adicional por reincidência: ${recurrence}% sobre a nota calculada${p.speedRecurrencePoints!=null?' (−'+scFmt(p.speedRecurrencePoints/10)+' pts)':''}.`:'';
+  const warning=pending?`<div class="expl" style="color:#f5c800">Pendente de classificação${v&&v.unknown?': '+v.unknown+' alerta(s) sem km/h':''}. Importe o relatório de alertas para completar a apuração.</div>`:'';
+  return `<div class="sc-comp sc-speed" data-speed-status="${problem?'occurrence':pending?'pending':'clear'}"><span class="ic">🚚</span><div class="mid"><div class="cl"><b>Velocidade</b><span class="pts" style="color:${color}">${impact}</span></div><div style="color:${color};font-weight:700;font-size:12px;margin:4px 0">${state}</div><div class="expl">${scEsc(details)}</div>${warning}<div class="bar"><i style="width:${value==null?0:value}%;background:${color}"></i></div><div class="meta"><span>peso <b>15%</b> da nota</span><span>seu valor <b>${value==null?'—':Math.round(value)}</b>/100</span></div><div class="expl">Sem excesso: 1,5 pts · 86–90 km/h: 1,0 pt · &gt;90–98: 0,5 pt · &gt;98: 0,0 pt.</div><div class="expl">${repeat}</div><div class="meta"><span>3 graves: <b>−30%</b> · 4 ou mais: <b>−50%</b></span></div></div></div>`;
+}
+function scSpeedSnapshot(p){
+  return {velocidade:p.velocidade||null,scoreBeforeSpeed:p.scoreBeforeSpeed??null,speedPenaltyPct:p.speedPenaltyPct??null,speedPenaltyPoints:p.speedPenaltyPoints??null,scoreBeforeRecurrence:p.scoreBeforeRecurrence??null,speedRecurrencePct:p.speedRecurrencePct??null,speedRecurrencePoints:p.speedRecurrencePoints??null,alertCapPoints:p.alertCapPoints||0};
+}
 function rankAlertSummary(nome,recs){
   const nn=norm(nome), dias=new Set((recs||[]).filter(r=>r&&r.data&&((r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.horasMov||0)>0)).map(r=>r.data));
   if(!dias.size)return {total:0,niveis:{},tipos:{},real:true,badges:[]};
@@ -2751,21 +2770,22 @@ function _rankScoreProfiles(profiles){
     add('interj','Interjornada',10,p.interjScore,!!(BASES&&BASES.ponto));
     add('extra','Hora extra',15,p.extraScore,!!(BASES&&BASES.ponto));
     add('media','Média × meta',15,p.mediaScore,hasMedia);
+    const speedValue=speedIndicatorScore(p.velocidade), otherW=comps.reduce((s,c)=>s+c.w,0);
+    if(speedValue!=null){
+      for(const c of comps){c.w=otherW?c.w/otherW*85:0;c.pts=c.w*c.v/100;}
+      add('velocidade','Velocidade',15,speedValue);
+    }
     const W=comps.reduce((s,c)=>s+c.w,0), P=comps.reduce((s,c)=>s+c.pts,0); let score=W?P/W*100:0;
     // Divergência explícita de condutor é uma falha independente e não pode sumir dentro de uma média.
     if(p.idDiv>0)score-=Math.min(12,p.idDiv*2);
     // Teto de segurança: alerta em excesso trava a nota máxima (prioriza segurança sobre os demais quesitos).
     p.alertTeto=false;p.alertCapPoints=0;
     if(hasAlerts && (p.alertRate||0) > ALERT_TETO_TAXA && score > ALERT_TETO_NOTA){ p.alertCapPoints=score-ALERT_TETO_NOTA;score=ALERT_TETO_NOTA; p.alertTeto=true; }
-    // Speed is a single multiplicative deduction from the driver's resulting
-    // grade, based on the highest measured tier in this same scope.
+    // A faixa já reduziu a contribuição do indicador; não descontar novamente.
     p.scoreBeforeSpeed=rankClamp(score);
-    p.speedPenaltyPct=p.velocidade&&p.velocidade.penaltyPct||0;
-    p.speedPenaltyPoints=p.scoreBeforeSpeed*p.speedPenaltyPct/100;
-    p.speedPending=!!(p.velocidade&&p.velocidade.pending);
-    score=p.scoreBeforeSpeed-p.speedPenaltyPoints;
-    // Three distinct measured events >=100 km/h deduct 30%; four or more
-    // deduct 50% instead, on the grade remaining after the normal deduction.
+    p.speedPenaltyPct=0;p.speedPenaltyPoints=0;
+    p.speedPending=speedValue==null||!!(p.velocidade&&p.velocidade.pending);
+    // Reincidência grave é o único desconto adicional de velocidade.
     p.scoreBeforeRecurrence=rankClamp(score);
     p.speedRecurrencePct=descontoReincidencia(p.velocidade&&p.velocidade.graveCount||0);
     p.speedRecurrencePoints=p.scoreBeforeRecurrence*p.speedRecurrencePct/100;
@@ -4598,13 +4618,13 @@ function exportBonifFolha(){
    que compõem a NOTA + evolução mensal + comparação entre tratativas.
    ============================================================ */
 let SCORECARD_NOME=null;
-const SC_ICON={identMot:'📷',identCam:'🎥',jornada:'⏱️',ponto:'📋',alertas:'🚨',multas:'🚦',interj:'🛌',extra:'➕',media:'⛽'};
+const SC_ICON={identMot:'📷',identCam:'🎥',jornada:'⏱️',ponto:'📋',alertas:'🚨',multas:'🚦',interj:'🛌',extra:'➕',media:'⛽',velocidade:'🚚'};
 const SC_EXPL={
   identMot:'% do tempo de condução nos seus veículos em que a câmera reconheceu VOCÊ ao volante. 100 = sempre reconhecido.',
   identCam:'% do movimento do veículo em que a câmera conseguiu identificar algum condutor (saúde do equipamento).',
   jornada:'junta dois pontos: conduzir DENTRO do horário do ponto (60%) e ter o ponto registrado nos dias que moveu (40%). 100 = tudo em dia.',
   ponto:'% dos dias em que você moveu o veículo e tem o ponto registrado.',
-  alertas:'Quantidade e gravidade dos outros alertas por hora (celular, fadiga, distração…). Velocidade é excluída deste componente e tem desconto separado de 5%, 10% ou 15% pela maior faixa registrada.',
+  alertas:'Quantidade e gravidade dos outros alertas por hora (celular, fadiga, distração…). Velocidade tem indicador próprio com peso de 15% na composição da nota.',
   multas:'nota relativa à frota por multas de conduta por hora dirigida. 100 = sem multas / entre os melhores.',
   interj:'% dos dias respeitando as 11h de descanso entre jornadas (interjornada CLT).',
   extra:'penaliza a média diária de hora extra acima de 2h/dia. 100 = sem excesso; cai conforme a média passa de 2h extra por dia (≈4h extra/dia = 0).',
@@ -4612,6 +4632,7 @@ const SC_EXPL={
 };
 // Rótulos e dicas amigáveis p/ a tela do MOTORISTA (destaques / onde melhorar)
 const SC_FRIENDLY={
+  velocidade:{ic:'🚚',area:'Velocidade',pos:'Velocidade em dia',posd:'Sem excesso de velocidade apurado.',tip:'Respeitar os limites e evitar novas ocorrências.'},
   identMot:{ic:'📷',area:'Identificação',pos:'Sempre reconhecido',posd:'A câmera te identificou ao volante quase sempre.',tip:'Mantenha o rosto visível para a câmera.'},
   identCam:{ic:'🎥',area:'Câmera do veículo',pos:'Câmera em dia',posd:'Boa cobertura de identificação no veículo.',tip:'Se a câmera falhar, avise a manutenção.'},
   jornada:{ic:'⏱️',area:'Jornada e ponto',pos:'Jornada em dia',posd:'Conduziu dentro do horário do ponto.',tip:'Dirigir dentro do horário do ponto e bater o ponto.'},
@@ -4764,14 +4785,18 @@ function renderScorecard(nome){
   const admissao=admissaoDe(nome), op=(p.recs&&p.recs.find(r=>r.operacao&&r.operacao!=='—')||{}).operacao||'—';
   const comps=(p.components||[]).slice().sort((a,b)=>b.w-a.w);
   const totW=comps.reduce((s,c)=>s+c.w,0)||1;
-  const compHtml=comps.map(c=>{
+  const compCards=comps.map(c=>{
+    if(c.k==='velocidade')return '';
     let d=null; if(ult&&pen&&ult.comps[c.k]!=null&&pen.comps[c.k]!=null)d=ult.comps[c.k]-pen.comps[c.k];
     const relW=Math.round(c.w/totW*100), contrib=(c.w*c.v/100)/totW*10, maxC=c.w/totW*10;
     return `<div class="sc-comp"><span class="ic">${SC_ICON[c.k]||'•'}</span><div class="mid"><div class="cl"><b>${c.lab}</b><span class="pts" style="color:${notaCor(c.v)}">+${scFmt(contrib)} <small>de ${scFmt(maxC)} pts</small></span></div><div class="expl">${SC_EXPL[c.k]||''}</div><div class="bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div><div class="meta"><span>seu valor <b>${Math.round(c.v)}</b>/100</span><span>peso <b>${relW}%</b> da nota</span><span>mês a mês ${scTrendArrow(d)}</span></div></div></div>`;
-  }).join('');
+  });
+  const speedIndex=comps.findIndex(c=>c.k==='alertas');
+  compCards.splice(speedIndex<0?0:speedIndex+1,0,scSpeedCard(p));
+  const compHtml=compCards.join('');
   const somaContrib=comps.reduce((s,c)=>s+(c.w*c.v/100)/totW*10,0);
   const penal10=(p.idDiv>0?Math.min(12,p.idDiv*2):0)/10;
-  const totalHtml=`<div class="sc-total"><div class="row"><span>Soma das contribuições</span><b>${scFmt(somaContrib)}/10</b></div>${penal10>0?`<div class="row pen"><span>− Divergências de condutor (${p.idDiv})</span><b>−${scFmt(penal10)}</b></div>`:''}${p.alertCapPoints>0?`<div class="row pen"><span>− Limite de segurança dos demais alertas</span><b>−${scFmt(p.alertCapPoints/10)}</b></div>`:''}${p.velocidade?`<div class="row ${p.speedPenaltyPct?'pen':''}"><span>${scEsc(speedBaseText(p))}</span><b>${p.speedPenaltyPoints?'−'+scFmt(p.speedPenaltyPoints/10)+' pts':'—'}</b></div>`:''}${p.speedRecurrencePct?`<div class="row pen"><span>− Reincidência grave: ${p.velocidade.graveCount} ocorrências ≥100 km/h<br><small>${p.speedRecurrencePct}% sobre a nota restante de ${scFmt(p.scoreBeforeRecurrence/10)}/10</small></span><b>−${scFmt(p.speedRecurrencePoints/10)} pts</b></div>`:''}<div class="row fin"><span>Nota final</span><b style="color:${notaCor(p.score)}">${scFmt(n10)}/10</b></div></div>`;
+  const totalHtml=`<div class="sc-total"><div class="row"><span>Soma das contribuições</span><b>${scFmt(somaContrib)}/10</b></div>${penal10>0?`<div class="row pen"><span>− Divergências de condutor (${p.idDiv})</span><b>−${scFmt(penal10)}</b></div>`:''}${p.alertCapPoints>0?`<div class="row pen"><span>− Limite de segurança dos demais alertas</span><b>−${scFmt(p.alertCapPoints/10)}</b></div>`:''}${p.speedRecurrencePct?`<div class="row pen"><span>− Reincidência grave: ${p.velocidade.graveCount} ocorrências ≥100 km/h<br><small>${p.speedRecurrencePct}% sobre a nota restante de ${scFmt(p.scoreBeforeRecurrence/10)}/10</small></span><b>−${scFmt(p.speedRecurrencePoints/10)} pts</b></div>`:''}<div class="row fin"><span>Nota final</span><b style="color:${notaCor(p.score)}">${scFmt(n10)}/10</b></div></div>`;
   // tratativas (antigo -> novo) com a nota do mês e a variação de uma p/ a outra
   const trats=tratList(nome).slice().sort((a,b)=>(+a.ts||0)-(+b.ts||0)||String(a.data||'').localeCompare(String(b.data||'')));
   const scoreByMes={}; mensal.forEach(m=>{ if(m.score!=null)scoreByMes[m.key]=m.score; });
@@ -4824,7 +4849,7 @@ function renderScorecard(nome){
     <div class="sg-level"><div class="lr">${lvlLR}</div><div class="sg-bar"><i style="width:${lvlPct}%"></i></div>${track}</div>
     ${streak}
   </section>`;
-  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota (0–10) é a média ponderada dos indicadores. A contribuição de cada um = peso × o valor. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
+  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota (0–10) parte da média ponderada dos indicadores e inclui velocidade com peso de 15%. O desconto adicional de velocidade ocorre apenas por reincidência grave. A contribuição de cada um = peso × o valor. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
   const tratSec=`<div class="sc-sec"><h4>🗣️ Tratativas</h4>${tratResumo||'<p class="sc-hint" style="margin:0 0 11px">Acompanhe se cada conversa melhorou a nota no mês seguinte. Registre no resumo semanal (ficha do motorista).</p>'}${trats.length?`<div class="sc-trat">${tratHtml}</div>`:'<div class="sc-empty-trat">Nenhuma tratativa registrada ainda.</div>'}</div>`;
   const body=`<div class="sc-body">
     <div style="font-family:var(--sg-disp);font-weight:600;font-size:18px;color:var(--sg-ink2);margin:2px 2px 13px">Olá, <b style="color:var(--sg-ink)">${scEsc(firstName(nome))}</b> 👋 ${mesRef?('seu desempenho em <b style="color:var(--sg-ink)">'+mesRef+'</b>'):'este é o seu desempenho'}</div>
@@ -4847,13 +4872,17 @@ function renderScorecardLight(nome){
   const mensal=(d.mensal||[]), com=mensal.filter(m=>m.score!=null);
   const ult=com[com.length-1]||null, pen=com[com.length-2]||null, trend=(ult&&pen)?(ult.score-pen.score):null;
   const comps=(d.components||[]).slice().sort((a,b)=>b.w-a.w), totW=comps.reduce((s,c)=>s+c.w,0)||1;
-  const compHtml=comps.map(c=>{ let dd=null; const uc=ult&&ult.comps?ult.comps[c.k]:null, pc=pen&&pen.comps?pen.comps[c.k]:null; if(uc!=null&&pc!=null)dd=uc-pc;
+  const compCards=comps.map(c=>{
+    if(c.k==='velocidade')return ''; let dd=null; const uc=ult&&ult.comps?ult.comps[c.k]:null, pc=pen&&pen.comps?pen.comps[c.k]:null; if(uc!=null&&pc!=null)dd=uc-pc;
     const relW=Math.round(c.w/totW*100), contrib=(c.w*c.v/100)/totW*10, maxC=c.w/totW*10;
     return `<div class="sc-comp"><span class="ic">${SC_ICON[c.k]||'•'}</span><div class="mid"><div class="cl"><b>${c.lab}</b><span class="pts" style="color:${notaCor(c.v)}">+${scFmt(contrib)} <small>de ${scFmt(maxC)} pts</small></span></div><div class="expl">${SC_EXPL[c.k]||''}</div><div class="bar"><i style="width:${Math.max(2,Math.round(c.v))}%;background:${notaCor(c.v)}"></i></div><div class="meta"><span>seu valor <b>${Math.round(c.v)}</b>/100</span><span>peso <b>${relW}%</b> da nota</span><span>mês a mês ${scTrendArrow(dd)}</span></div></div></div>`;
-  }).join('');
+  });
+  const speedIndex=comps.findIndex(c=>c.k==='alertas');
+  compCards.splice(speedIndex<0?0:speedIndex+1,0,scSpeedCard(d));
+  const compHtml=compCards.join('');
   const somaContrib=comps.reduce((s,c)=>s+(c.w*c.v/100)/totW*10,0);
   const penal10=((d.idDiv||0)>0?Math.min(12,(d.idDiv||0)*2):0)/10;
-  const totalHtml=`<div class="sc-total"><div class="row"><span>Soma das contribuições</span><b>${scFmt(somaContrib)}/10</b></div>${penal10>0?`<div class="row pen"><span>− Divergências de condutor (${d.idDiv})</span><b>−${scFmt(penal10)}</b></div>`:''}<div class="row fin"><span>Nota final</span><b style="color:${notaCor(d.score)}">${scFmt(n10)}/10</b></div></div>`;
+  const totalHtml=`<div class="sc-total"><div class="row"><span>Soma das contribuições</span><b>${scFmt(somaContrib)}/10</b></div>${penal10>0?`<div class="row pen"><span>− Divergências de condutor (${d.idDiv})</span><b>−${scFmt(penal10)}</b></div>`:''}${d.alertCapPoints>0?`<div class="row pen"><span>− Limite de segurança dos demais alertas</span><b>−${scFmt(d.alertCapPoints/10)}</b></div>`:''}${d.speedRecurrencePct?`<div class="row pen"><span>− Reincidência grave: ${d.velocidade.graveCount} ocorrências ≥100 km/h<br><small>${d.speedRecurrencePct}% sobre a nota restante de ${scFmt(d.scoreBeforeRecurrence/10)}/10</small></span><b>−${scFmt(d.speedRecurrencePoints/10)} pts</b></div>`:''}<div class="row fin"><span>Nota final</span><b style="color:${notaCor(d.score)}">${scFmt(n10)}/10</b></div></div>`;
   const C=326.726, dash=(C*(1-Math.max(0,Math.min(10,n10))/10)).toFixed(1), medalIc=d.tier.ic, _mf=v=>(Math.round(v*100)/100).toFixed(2).replace('.',',');
   const mediaChip=(d.media!=null)?`<span class="sg-media"><span class="em">⛽</span><b style="color:${d.meta!=null?(d.media>=d.meta?'#34d399':'#f87171'):'var(--sg-ink)'}">${_mf(d.media)}</b><small>km/l${d.meta!=null?' · meta '+_mf(d.meta):''}</small></span>`:'';
   let lvlLR,lvlPct;
@@ -4882,7 +4911,7 @@ function renderScorecardLight(nome){
     <div class="sg-level"><div class="lr">${lvlLR}</div><div class="sg-bar"><i style="width:${lvlPct}%"></i></div>${track}</div>
     ${streak}
   </section>`;
-  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota (0–10) é a média ponderada dos indicadores. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
+  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota (0–10) parte da média ponderada dos indicadores e inclui velocidade com peso de 15%. O desconto adicional de velocidade ocorre apenas por reincidência grave. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
   const body=`<div class="sc-body">
     <div style="font-family:var(--sg-disp);font-weight:600;font-size:18px;color:var(--sg-ink2);margin:2px 2px 13px">Olá, <b style="color:var(--sg-ink)">${scEsc(firstName(d.nome))}</b> 👋 ${mesRef?('seu desempenho em <b style="color:var(--sg-ink)">'+mesRef+'</b>'):'este é o seu desempenho'}</div>
     ${hero}
@@ -7539,18 +7568,18 @@ async function _buildWebviewPayload(rows){
     const md=medMap[nn]||{};
     const aproveit=(media!=null&&meta)?Math.round(media/meta*100):((md.of!=null&&md.meta>0)?Math.round(md.of/md.meta*100):null);
     const placas=[...new Set((p.recs||[]).map(r=>r.placa).filter(Boolean))].slice(0,12);
-    const comps=(p.components||[]).map(x=>({k:x.k,lab:x.lab,w:x.w,v:Math.round(x.v)}));
+    const comps=(p.components||[]).map(x=>({k:x.k,lab:x.lab,w:x.w,v:x.v}));
     const admissao=m.admissao||admissaoDe(m.nome)||'';
     const mensal=(mensalAll[nn]||[]).map(z=>({key:z.key,label:z.label,score:z.score,comps:z.comps}));
     return {nn,cpf:_cpf,nome:m.nome,op:m.op||'—',placas,admissao,tempo:tempoDeCasa(admissao),
       movDays:p.movDays||0,pontoDays:p.pontoDays||0,hCond:Math.round(p.hCond||0),km:Math.round(p.km||0),
       score:Math.round(p.score!=null?p.score:(m._rankScore||0)),n10:Math.round(n10*10)/10,
       tier:{k:tier.k,lab:tier.lab,ic:tier.ic},valor:Math.round(valor*100)/100,idDiv:(p.idDiv||0),
-      components:comps,media:r2(media),meta:r2(meta),aproveit,
+      components:comps,...scSpeedSnapshot(p),media:r2(media),meta:r2(meta),aproveit,
       mediaTrimble:r2(md.t!=null?md.t:null),mediaAbast:r2(md.a!=null?md.a:null),mensal};
   }).filter(d=>d.cpf);
   try{ applyResumoRankScores(agg.data, rows); }catch(e){}
-  return {v:1,publishedAt:Date.now(),dataMin:cov.min||'',dataMax:cov.max||'',drivers};
+  return {v:1,scoreRulesVersion:2,publishedAt:Date.now(),dataMin:cov.min||'',dataMax:cov.max||'',drivers};
 }
 
 async function _loadPublishedWebview(manifest){
@@ -7560,6 +7589,7 @@ async function _loadPublishedWebview(manifest){
     const r=await fetch('dados/'+manifest.webviewFile+'?v='+ver,{cache:'force-cache'});
     if(!r.ok)return false;
     const data=await r.json();
+    if(data.scoreRulesVersion!==2)return false;
     const ck=cpfKey(E.cpf), d=((data&&data.drivers)||[]).find(x=>cpfKey(x.cpf)===ck);
     if(!d)return false;
     MOBILE_DATA={v:data.v||1,publishedAt:data.publishedAt||manifest.publishedAt||0,dataMin:data.dataMin||'',dataMax:data.dataMax||'',drivers:[d]};
