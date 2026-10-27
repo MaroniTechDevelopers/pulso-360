@@ -2515,7 +2515,7 @@ function setTabFilterState(tab,patch,replace=false){
   if(CURRENT_FILTER_TAB===tab)applyTopFilterState(tab);
 }
 function filterStateKey(){
-  return [DATA_REV,$('#fFecha').value,$('#fOp').value,$('#fDia').value,$('#fDe').value,$('#fAte').value,norm($('#fMot').value),$('#fStatus').value,$('#fDirecao').value,$('#fGrave').value,norm($('#fBusca').value)].join('\u0001');
+  return [DATA_REV,$('#fFecha').value,$('#fOp').value,$('#fDia').value,$('#fDe').value,$('#fAte').value,norm($('#fMot').value),$('#fStatus').value,$('#fDirecao').value,($('#fGrave')&&$('#fGrave').value||''),norm($('#fBusca').value)].join('\u0001');
 }
 function _unionIndexedMatches(map,q){
   if(!q)return null;
@@ -2570,7 +2570,7 @@ function driving24hScan(rows,minMinutes,range,collect){
         while(left<=right&&merged[left][1]<=cutoff){total-=merged[left][1]-merged[left][0];left++;}
         const minutes=total-(b-end)-(left<=right?Math.max(0,cutoff-merged[left][0]):0);
         // Em 24h o limite e inclusivo: a jornada preenche a janela inteira.
-        if(minMinutes===1440 ? minutes<1440 : minutes<=minMinutes)continue;
+        if(minutes<=minMinutes)continue;
         if(!collect){qualified.set(key,true);break;}
         const date=new Date((end-1/60)*60000).toISOString().slice(0,10),old=perDay.get(date);
         if(!old||minutes>old.minutes)perDay.set(date,{key,a:Math.max(cutoff,lo),b:end,minutes,date});
@@ -2700,7 +2700,7 @@ function auditAlertDuplicates(timeline){
 function filtered(){
   const key=filterStateKey(); if(FILTER_CACHE_ROWS&&key===FILTER_CACHE_KEY) return FILTER_CACHE_ROWS;
   const fe=$('#fFecha').value, op=$('#fOp').value, dia=$('#fDia').value, de=$('#fDe').value, ate=$('#fAte').value, mot=norm($('#fMot').value), st=$('#fStatus').value, q=norm($('#fBusca').value);
-  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value&&!$('#fGrave').value){ renderSpeedGraveFilterBadge(0); FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=RECORDS; FILTER_CACHE_DIV_COUNT=GLOBAL_DIV_COUNT; return RECORDS; }
+  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value&&!($('#fGrave')&&$('#fGrave').value||'')){ renderSpeedGraveFilterBadge(0); FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=RECORDS; FILTER_CACHE_DIV_COUNT=GLOBAL_DIV_COUNT; return RECORDS; }
 
   // Escolhe primeiro o menor conjunto indexado disponível. Isso evita iniciar cada filtro nos ~87 mil registros.
   const pools=[];
@@ -2713,7 +2713,7 @@ function filtered(){
   // Só materializa o intervalo por dia quando não existe outro índice mais seletivo.
   if((de||ate) && !dia && !pools.length){ const lo=de||'0000-01-01', hi=ate||'9999-12-31', arr=[]; for(let i=0;i<RECORD_DATE_KEYS.length;i++){ const d=RECORD_DATE_KEYS[i]; if(d<lo)continue; if(d>hi)break; const a=RECORDS_BY_DATE[d]; if(a)for(let j=0;j<a.length;j++)arr.push(a[j]); } pools.push(arr); }
   const src=_smallestPool(pools);
-  if(!src.length){ renderSpeedGraveFilterBadge(Number($('#fGrave').value)||0,{drivers:0,events:0}); FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=[]; FILTER_CACHE_DIV_COUNT=0; return FILTER_CACHE_ROWS; }
+  if(!src.length){ renderSpeedGraveFilterBadge(Number(($('#fGrave')&&$('#fGrave').value||''))||0,{drivers:0,events:0}); FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=[]; FILTER_CACHE_DIV_COUNT=0; return FILTER_CACHE_ROWS; }
   const out=[]; let div=0;
   for(let i=0;i<src.length;i++){
     const r=src[i];
@@ -2727,8 +2727,8 @@ function filtered(){
     if(q && !(r._nBusca||'').includes(q)) continue;
     out.push(r); if(r.sev!=='conforme') div++;
   }
-  const afterDirection=$('#fDirecao').value?filterDriving24hDrivers(out,Number($('#fDirecao').value)*60,activeRange()):out;
-  const graveMinimum=Number($('#fGrave').value)||0;
+  const afterDirection=$('#fDirecao').value?filterDriving24hDrivers(out,($('#fDirecao').value==='24'?1439:Number($('#fDirecao').value)*60),activeRange()):out;
+  const graveMinimum=Number(($('#fGrave')&&$('#fGrave').value||''))||0;
   const grave=graveMinimum?filterSpeedGraveRecurrentDrivers(afterDirection,graveMinimum):{rows:afterDirection,drivers:0,events:0};
   renderSpeedGraveFilterBadge(graveMinimum,grave);
   const result=grave.rows;
@@ -2740,7 +2740,7 @@ function filtered(){
 function placasNoFiltro(){
   if(!REAL) return null;
   const fe=$('#fFecha').value, op=$('#fOp').value, dia=$('#fDia').value, de=$('#fDe').value, ate=$('#fAte').value, mot=norm($('#fMot').value), st=$('#fStatus').value, q=norm($('#fBusca').value);
-  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value&&!$('#fGrave').value) return null;   // nada filtrado → todas as placas
+  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value&&!($('#fGrave')&&$('#fGrave').value||'')) return null;   // nada filtrado → todas as placas
   const s=new Set();
   filtered().forEach(r=>{ const arr=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]); for(const p of arr){ const k=placaKey(p); if(k)s.add(k); } });
   // Nas abas de PLACA a "Operação" exibida é a do VEÍCULO (UO Trimble/centro TMS). Ao filtrar por
@@ -3429,7 +3429,7 @@ function driverLegendHtml(names,kind,colorOf){
 }
 function buildWeekCards(rows, prefix, cap, showNome, mode){
   mode=mode||'week';
-  const drivingEvidence=driving24hEvidence(rows,driving24hSelectedHours()*60,activeRange());
+  const drivingEvidence=driving24hEvidence(rows,(driving24hSelectedHours()===24?1439:driving24hSelectedHours()*60),activeRange());
   for(const k in ZTL) if(k.indexOf(prefix)===0) delete ZTL[k];
   const grp={};
   rows.forEach(r=>{
@@ -4287,7 +4287,7 @@ function renderFicha(){
   const horasTrabalhadas=(M.audit&&M.audit.hPonto)||0;
   const periodoFicha=periodoLabel();
   const dsr=dsrForDriver(nome,activeRange());
-  const driveWindows=[...driving24hEvidence(recs,driving24hSelectedHours()*60,activeRange()).values()].flat();
+  const driveWindows=[...driving24hEvidence(recs,(driving24hSelectedHours()===24?1439:driving24hSelectedHours()*60),activeRange()).values()].flat();
   const alertasPorMilKm=(kmR>0)?(totAl/(kmR/1000)):null;
   const alertaKmMeta=75;
   const alertaKmCrit=alertasPorMilKm!=null&&alertasPorMilKm>alertaKmMeta;
@@ -4842,7 +4842,7 @@ function renderMotoristas(){
   // permite ao navegador pintar a aba antes de iniciar o cruzamento
   setTimeout(()=>motoristasComparadosAsync().then(res=>{
     if(job!==MOTOR_RENDER_JOB||activeViewName()!=='motoristas')return;
-    const qualified=($('#fDirecao').value||$('#fGrave').value)?new Set(filtered().map(recordDriverKey)):null;
+    const qualified=($('#fDirecao').value||($('#fGrave')&&$('#fGrave').value||''))?new Set(filtered().map(recordDriverKey)):null;
     const unique=selectMotoristas(res.rows||[],{op,f,q,mot:norm($('#fMot').value),search:norm($('#fBusca').value),qualified});
     const sm=motoristasSummary(unique);
     MOTORISTAS_ROWS=unique;
