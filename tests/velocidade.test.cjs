@@ -35,7 +35,7 @@ test('pesos não incluem cobertura e WebView rejeita nota antiga pré-calculada'
   assert.doesNotMatch(s,/add\('identCam'/);
   assert.match(s,/add\('identMot'/);
   assert.match(html,/scoreRulesVersion:3/);
-  assert.match(source('_loadPublishedWebview'),/v!==2&&v!==3/);
+  assert.match(source('_loadPublishedWebview'),/data.scoreRulesVersion!==2&&data.scoreRulesVersion!==3/);
   assert.match(html,/identCam=aderRecs\(recs\)/);
   assert.doesNotMatch(html,/câmera \(5%\)/);
 });
@@ -65,4 +65,4 @@ test('painel e webview inserem indicador próprio junto aos alertas e exibem des
 test('peso de velocidade fica em 15% mesmo com indicadores indisponíveis; demais pesos somam 85%',()=>{const c=scoreContext(),p=profile(5);p.identCam=null;p.mediaScore=null;c._rankScoreProfiles({JOAO:p});near(p.score,78);near(p.components.filter(x=>x.k!=='velocidade').reduce((s,x)=>s+x.w,0),85);assert.equal(p.components.find(x=>x.k==='velocidade').w,15);});
 test('sem km/h não ganha nota máxima nem zero: indicador fica pendente e fora da média',()=>{const c=scoreContext(),p=profile(0);p.velocidade={available:true,total:3,known:0,unknown:3,pending:true,graveCount:0};c._rankScoreProfiles({JOAO:p});near(p.score,80);assert.equal(p.speedPending,true);assert.ok(!p.components.some(x=>x.k==='velocidade'));assert.equal(p.speedPenaltyPoints,0);});
 test('sem excesso com fonte disponível recebe 1,5 ponto; eventos repetidos não somam perda de faixas',()=>{const c=scoreContext();c.AL_TL={JOAO:[]};const p=profile(0);p.velocidade=c.rankSpeedSummary('JOAO',recs);c._rankScoreProfiles({JOAO:p});near(p.score,83);c.AL_TL.JOAO=[ev(88),ev(88),ev(88)];p.velocidade=c.rankSpeedSummary('JOAO',recs);c._rankScoreProfiles({JOAO:p});near(p.score,78);assert.equal(p.speedRecurrencePct,0);});
-test('webview antigo nunca carrega base completa nem exibe nota antiga',()=>{const load=source('_loadPublishedWebview');assert.match(load,/MOBILE_LEGACY=v===2/);assert.match(source('_buildWebviewPayload'),/scoreRulesVersion:3/);assert.match(html,/return; \/\/ NUNCA acionar o snapshot geral em link de CPF/);assert.match(source('renderScorecardLegacy'),/Nota temporariamente indisponível/);assert.match(html,/PULSO_MAX_AUTOMATIC_RAW_BYTES/);});
+test('webview v2 preserva o scorecard original e evita carga de 1GB',()=>{const load=source('_loadPublishedWebview');assert.match(load,/MOBILE_LEGACY=data.scoreRulesVersion===2/);assert.match(source('renderScorecardLight'),/_scRecalcLegacyDriver/);assert.match(source('_scRecalcLegacyDriver'),/c.k!=='identCam'/);assert.match(html,/WebView não usa o snapshot de 1 GB/);assert.match(source('_buildWebviewPayload'),/scoreRulesVersion:3/);});
