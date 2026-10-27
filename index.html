@@ -336,6 +336,14 @@
   .op-block .op-kpi{font-size:12.5px;color:var(--muted)}
   .op-block .op-kpi span{color:var(--serious);font-weight:700;font-size:14px}
   .op-block .op-kpi b{color:var(--ink)}
+  .op-block .op-kpi .op-total-count{
+    display:inline-flex;align-items:baseline;gap:5px;
+    padding:3px 9px;margin-left:4px;border-radius:9px;
+    background:rgba(43,105,190,.10);border:1px solid rgba(43,105,190,.24);
+    color:var(--ink);font-weight:700;font-size:12px;white-space:nowrap;
+  }
+  .op-block .op-kpi .op-total-count strong{font-size:18px;line-height:1.1;font-weight:900;letter-spacing:-.025em;color:var(--ink)}
+
   .op-block .tblwrap{border:none;border-radius:0}
   .op-block table{min-width:640px}
   .farol-strip{display:inline-flex;gap:5px;align-items:center}
@@ -1042,6 +1050,15 @@
     .saude-fit-table .chip,.saude-fit-table .planotag{font-size:7.8px!important;padding:2px 4px!important}
     .saude-fit-table td:nth-child(14) div{font-size:8px!important}
   }
+
+  /* Recorrencias graves: dar destaque ao total sem congestionar a barra de filtros. */
+  #fGraveCount.grave-filter-count{
+    display:block; margin-top:6px; padding:5px 9px; border-radius:8px;
+    background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.32);
+    color:var(--crit-ink); font-weight:700; font-size:12px;
+    font-variant-numeric:tabular-nums; line-height:1.5;
+  }
+  #fGraveCount .grave-count-number{font-size:17px;font-weight:900;letter-spacing:-.03em}
 </style>
 <meta name="pulso-build" content="2026-10-21-1909">
 </head>
@@ -1084,7 +1101,7 @@
   <!-- FILTER BAR (estado independente por aba) -->
   <div class="filterbar" id="filterbar">
     <div class="f"><label>Fechamento (16→15)</label><select id="fFecha"><option value="">Todos</option></select></div>
-    <div class="f"><label>Operação</label><select id="fOp"><option value="">Todas</option></select></div>
+    <div class="f"><label>Operação</label><select id="fOp"><option value="">Todas as operações</option></select></div>
     <div class="f"><label>Dia</label><select id="fDia"><option value="">Todos</option></select></div>
     <div class="f"><label>De (data)</label><input type="date" id="fDe"></div>
     <div class="f"><label>Até (data)</label><input type="date" id="fAte"></div>
@@ -1102,9 +1119,24 @@
       <option value="pendente">A conferir</option>
       <option value="conforme">Tudo certo</option>
     </select></div>
-    <div class="f"><label for="fDirecao">Direção em 24 horas</label><select id="fDirecao" title="Mais de 14 horas de direção acumulada em qualquer janela de 24 horas dentro do período selecionado. Pausas e interjornada não zeram a soma; tempo parado não conta.">
-      <option value="">Todos</option><option value="14">Mais de 14h de direção em 24h</option>
+    <div class="f"><label for="fDirecao">Direção em 24 horas</label><select id="fDirecao" title="Horas de direção efetiva acumuladas em qualquer janela móvel de 24 horas. Pausas e interjornada não zeram a soma; tempo parado não conta.">
+      <option value="">Todos</option>
+      <option value="14">Mais de 14h de direção em 24h</option>
+      <option value="16">Mais de 16h de direção em 24h</option>
+      <option value="18">Mais de 18h de direção em 24h</option>
+      <option value="20">Mais de 20h de direção em 24h</option>
+      <option value="22">Mais de 22h de direção em 24h</option>
+      <option value="24">24h completas de direção em 24h</option>
     </select></div>
+    <div class="f"><label for="fGrave">Reincidência de velocidade grave</label>
+      <select id="fGrave" title="Apenas excessos de velocidade com pico ≥ 100 km/h, por motorista e dias com direção no período filtrado. 3 graves: desconto de 30%; 4 ou mais: desconto de 50%.">
+        <option value="">Todos</option>
+        <option value="2">2 ou mais (monitoramento)</option>
+        <option value="3">3 ou mais (reincidência)</option>
+        <option value="4">4 ou mais (crítico)</option>
+      </select>
+      <span id="fGraveCount" class="grave-filter-count" aria-live="polite" style="display:none"></span>
+    </div>
     <div class="f" style="flex:1;min-width:170px"><label>Busca (nome / placa)</label><input type="text" id="fBusca" placeholder="Filtrar…"></div>
     <button class="btn" id="clearFilters" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Limpar</button>
   </div>
@@ -2473,9 +2505,9 @@ let VIEW_RENDER_KEYS=Object.create(null), VIEW_BADGE_COUNTS=Object.create(null);
 
 // Filtros independentes por aba. O mesmo conjunto de controles do topo é
 // reutilizado visualmente, mas cada aba mantém seu próprio estado.
-const TOP_FILTER_FIELDS=['fFecha','fOp','fDia','fDe','fAte','fMot','fStatus','fDirecao','fBusca'];
+const TOP_FILTER_FIELDS=['fFecha','fOp','fDia','fDe','fAte','fMot','fStatus','fDirecao','fGrave','fBusca'];
 let TAB_FILTER_STATES=Object.create(null), CURRENT_FILTER_TAB='semana', FILTER_STATE_APPLYING=false;
-function emptyTopFilterState(){ return {fFecha:'',fOp:'',fDia:'',fDe:'',fAte:'',fMot:'',fStatus:'',fDirecao:'',fBusca:''}; }
+function emptyTopFilterState(){ return {fFecha:'',fOp:'',fDia:'',fDe:'',fAte:'',fMot:'',fStatus:'',fDirecao:'',fGrave:'',fBusca:''}; }
 function readTopFilterState(){ const s=emptyTopFilterState(); for(const id of TOP_FILTER_FIELDS){ const el=document.getElementById(id); if(el)s[id]=el.value||''; } return s; }
 function ensureTopFilterState(tab){ if(!TAB_FILTER_STATES[tab])TAB_FILTER_STATES[tab]=emptyTopFilterState(); return TAB_FILTER_STATES[tab]; }
 function saveTopFilterState(tab){ if(!tab||FILTER_STATE_APPLYING)return; TAB_FILTER_STATES[tab]=readTopFilterState(); }
@@ -2491,7 +2523,7 @@ function setTabFilterState(tab,patch,replace=false){
   if(CURRENT_FILTER_TAB===tab)applyTopFilterState(tab);
 }
 function filterStateKey(){
-  return [DATA_REV,$('#fFecha').value,$('#fOp').value,$('#fDia').value,$('#fDe').value,$('#fAte').value,norm($('#fMot').value),$('#fStatus').value,$('#fDirecao').value,norm($('#fBusca').value)].join('\u0001');
+  return [DATA_REV,$('#fFecha').value,$('#fOp').value,$('#fDia').value,$('#fDe').value,$('#fAte').value,norm($('#fMot').value),$('#fStatus').value,$('#fDirecao').value,($('#fGrave')&&$('#fGrave').value||''),norm($('#fBusca').value)].join('\u0001');
 }
 function _unionIndexedMatches(map,q){
   if(!q)return null;
@@ -2545,6 +2577,7 @@ function driving24hScan(rows,minMinutes,range,collect){
         const cutoff=end-1440;
         while(left<=right&&merged[left][1]<=cutoff){total-=merged[left][1]-merged[left][0];left++;}
         const minutes=total-(b-end)-(left<=right?Math.max(0,cutoff-merged[left][0]):0);
+        // Em 24h o limite e inclusivo: a jornada preenche a janela inteira.
         if(minutes<=minMinutes)continue;
         if(!collect){qualified.set(key,true);break;}
         const date=new Date((end-1/60)*60000).toISOString().slice(0,10),old=perDay.get(date);
@@ -2561,6 +2594,61 @@ function driving24hEvidence(rows,minMinutes,range){return driving24hScan(rows,mi
 function filterDriving24hDrivers(rows,minMinutes,range){
   const keys=driving24hDriverKeys(rows,minMinutes,range);
   return rows.filter(r=>keys.has(recordDriverKey(r)));
+}
+function driving24hSelectedHours(){
+  const el=$('#fDirecao'),h=el?Number(el.value):NaN;
+  return [14,16,18,20,22,24].includes(h)?h:14;
+}
+
+// Severe speeding recurrence is independently counted from source events (not from alert severity).
+// Same thresholds as the score: events with recorded speed >=100 km/h, 3 = -30%, 4+ = -50%.
+function speedGraveDriverCounts(rows){
+  const groups=new Map(),nameDriverKeys=new Map(),result=new Map();
+  for(const r of rows||[]){
+    const name=r.motoristaEscala||r.nome||'',nn=r._nMot||norm(name),key=recordDriverKey(r);
+    const hasMove=!!((r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.horasMov||0)>0);
+    if(!nn||!key||key==='N:'||!hasMove||!r.data)continue;
+    let group=groups.get(key);
+    if(!group){group={cpf:key.startsWith('C:')?key.slice(2):'',names:new Set(),days:new Set()};groups.set(key,group);}
+    group.names.add(nn);group.days.add(r.data);
+    if(!nameDriverKeys.has(nn))nameDriverKeys.set(nn,new Set());
+    nameDriverKeys.get(nn).add(key);
+  }
+  if(!AL_TL)return result;
+  for(const [key,g] of groups){
+    let n=0;const seen=new Set();
+    for(const nn of g.names){
+      const ambiguous=(nameDriverKeys.get(nn)||new Set()).size>1;
+      const events=AL_TL[nn]||[];
+      for(let i=0;i<events.length;i++){
+        const e=events[i];if(!g.days.has(e[0])||!alertaEhVelocidade(e[3]))continue;
+        const meta=e[4]||{},eventCpf=cpfKey(meta.cpf||meta.cpfFonte||'');
+        // When two CPFs share a name, events without CPF cannot be assigned confidently.
+        if(ambiguous && !eventCpf)continue;
+        if(g.cpf&&eventCpf&&g.cpf!==eventCpf)continue;
+        const kmh=velocidadeKmh(meta.velocidadeKmh);
+        if(kmh==null||kmh<100)continue;
+        const identity=meta.key?'SRC:'+meta.key:'LEGACY:'+nn+':'+i;
+        if(seen.has(identity))continue;seen.add(identity);n++;
+      }
+    }
+    result.set(key,n);
+  }
+  return result;
+}
+function filterSpeedGraveRecurrentDrivers(rows,minimum){
+  if(!Number.isFinite(minimum)||minimum<2)return {rows,drivers:0,events:0};
+  const counts=speedGraveDriverCounts(rows),qualified=new Set();let events=0;
+  for(const [key,n] of counts)if(n>=minimum){qualified.add(key);events+=n;}
+  return {rows:rows.filter(r=>qualified.has(recordDriverKey(r))),drivers:qualified.size,events};
+}
+function renderSpeedGraveFilterBadge(minimum,stats){
+  const el=$('#fGraveCount');if(!el)return;
+  if(!minimum){el.style.display='none';el.textContent='';return;}
+  el.style.display='block';
+  // Numbers are intentionally prominent. DOM textContent avoids HTML injection.
+  const drivers=stats&&stats.drivers||0,events=stats&&stats.events||0;
+  el.textContent=drivers.toLocaleString('pt-BR')+' motorista(s) · '+events.toLocaleString('pt-BR')+' ocorrência(s) ≥100 km/h';
 }
 function dedupeMotoristas(rows){
   const byCpf=new Map(),noCpf=new Map(),nameCpfs=new Map();
@@ -2620,7 +2708,7 @@ function auditAlertDuplicates(timeline){
 function filtered(){
   const key=filterStateKey(); if(FILTER_CACHE_ROWS&&key===FILTER_CACHE_KEY) return FILTER_CACHE_ROWS;
   const fe=$('#fFecha').value, op=$('#fOp').value, dia=$('#fDia').value, de=$('#fDe').value, ate=$('#fAte').value, mot=norm($('#fMot').value), st=$('#fStatus').value, q=norm($('#fBusca').value);
-  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value){ FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=RECORDS; FILTER_CACHE_DIV_COUNT=GLOBAL_DIV_COUNT; return RECORDS; }
+  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value&&!($('#fGrave')&&$('#fGrave').value||'')){ renderSpeedGraveFilterBadge(0); FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=RECORDS; FILTER_CACHE_DIV_COUNT=GLOBAL_DIV_COUNT; return RECORDS; }
 
   // Escolhe primeiro o menor conjunto indexado disponível. Isso evita iniciar cada filtro nos ~87 mil registros.
   const pools=[];
@@ -2633,7 +2721,7 @@ function filtered(){
   // Só materializa o intervalo por dia quando não existe outro índice mais seletivo.
   if((de||ate) && !dia && !pools.length){ const lo=de||'0000-01-01', hi=ate||'9999-12-31', arr=[]; for(let i=0;i<RECORD_DATE_KEYS.length;i++){ const d=RECORD_DATE_KEYS[i]; if(d<lo)continue; if(d>hi)break; const a=RECORDS_BY_DATE[d]; if(a)for(let j=0;j<a.length;j++)arr.push(a[j]); } pools.push(arr); }
   const src=_smallestPool(pools);
-  if(!src.length){ FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=[]; FILTER_CACHE_DIV_COUNT=0; return FILTER_CACHE_ROWS; }
+  if(!src.length){ renderSpeedGraveFilterBadge(Number(($('#fGrave')&&$('#fGrave').value||''))||0,{drivers:0,events:0}); FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=[]; FILTER_CACHE_DIV_COUNT=0; return FILTER_CACHE_ROWS; }
   const out=[]; let div=0;
   for(let i=0;i<src.length;i++){
     const r=src[i];
@@ -2647,7 +2735,11 @@ function filtered(){
     if(q && !(r._nBusca||'').includes(q)) continue;
     out.push(r); if(r.sev!=='conforme') div++;
   }
-  const result=$('#fDirecao').value?filterDriving24hDrivers(out,Number($('#fDirecao').value)*60,activeRange()):out;
+  const afterDirection=$('#fDirecao').value?filterDriving24hDrivers(out,($('#fDirecao').value==='24'?1439:Number($('#fDirecao').value)*60),activeRange()):out;
+  const graveMinimum=Number(($('#fGrave')&&$('#fGrave').value||''))||0;
+  const grave=graveMinimum?filterSpeedGraveRecurrentDrivers(afterDirection,graveMinimum):{rows:afterDirection,drivers:0,events:0};
+  renderSpeedGraveFilterBadge(graveMinimum,grave);
+  const result=grave.rows;
   FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=result; FILTER_CACHE_DIV_COUNT=result.reduce((n,r)=>n+(r.sev!=='conforme'),0); return result;
 }
 // Placas presentes no recorte de filtros atuais (null = SEM filtro → mostra tudo).
@@ -2656,7 +2748,7 @@ function filtered(){
 function placasNoFiltro(){
   if(!REAL) return null;
   const fe=$('#fFecha').value, op=$('#fOp').value, dia=$('#fDia').value, de=$('#fDe').value, ate=$('#fAte').value, mot=norm($('#fMot').value), st=$('#fStatus').value, q=norm($('#fBusca').value);
-  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value) return null;   // nada filtrado → todas as placas
+  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value&&!($('#fGrave')&&$('#fGrave').value||'')) return null;   // nada filtrado → todas as placas
   const s=new Set();
   filtered().forEach(r=>{ const arr=(r.placas&&r.placas.length)?r.placas:(r.placa?[r.placa]:[]); for(const p of arr){ const k=placaKey(p); if(k)s.add(k); } });
   // Nas abas de PLACA a "Operação" exibida é a do VEÍCULO (UO Trimble/centro TMS). Ao filtrar por
@@ -3192,7 +3284,7 @@ function renderSemana(rows){
     if(!vis.length)return; visibleTotal+=vis.length;
     const eligOp=g.list.filter(resumoRankElegivel).length;
     const note=chosen?`<span class="op-ranknote">${vis.length} selecionado(s) · ${eligOp} elegível(is) de ${g.list.length}</span>`:'';
-    const kpi=`<span style="color:${ajColor(g.aj)}">${g.aj==null?'—':g.aj+'%'}</span> aderência de jornada · ${hDec(g.dd)} fora da jornada · <b>${g.motsDedo}</b> motorista(s) · ${g.list.length} no total`;
+    const kpi=`<span style="color:${ajColor(g.aj)}">${g.aj==null?'—':g.aj+'%'}</span> aderência de jornada · ${hDec(g.dd)} fora da jornada · <b>${g.motsDedo}</b> motorista(s) · <span class="op-total-count"><strong>${g.list.length.toLocaleString('pt-BR')}</strong> no total</span>`;
     progressiveGroups.push({title:g.op+note,kpi,vis});
     if(visibleTotal<=220) html.push(`<div class="card op-block"><div class="op-head"><h3>${g.op}${note}</h3><div class="op-kpi">${kpi}</div></div><div class="capgrid">${vis.map(m=>capinha(m,weeks)).join('')}</div></div>`);
   });
@@ -3345,7 +3437,7 @@ function driverLegendHtml(names,kind,colorOf){
 }
 function buildWeekCards(rows, prefix, cap, showNome, mode){
   mode=mode||'week';
-  const drivingEvidence=driving24hEvidence(rows,840,activeRange());
+  const drivingEvidence=driving24hEvidence(rows,(driving24hSelectedHours()===24?1439:driving24hSelectedHours()*60),activeRange());
   for(const k in ZTL) if(k.indexOf(prefix)===0) delete ZTL[k];
   const grp={};
   rows.forEach(r=>{
@@ -4167,9 +4259,11 @@ function driving24hLabel(w){
   const fmt=m=>{const t=new Date(m*60000).toISOString();return brDate(t.slice(0,10))+' '+t.slice(11,16);};
   return `${fmt(w.a)} → ${fmt(w.b)} · ${hDec(w.minutes)} de direção`;
 }
-function driving24hSummary(windows,filterActive){
-  if(!windows.length)return filterActive?'<div class="card" style="padding:14px;margin-bottom:14px">Nenhuma janela com mais de 14h de direção neste recorte da ficha. Confira os filtros de período e situação.</div>':'';
-  return `<div class="card driving24-summary" style="border-left:5px solid var(--critical);padding:14px 18px;margin-bottom:14px"><b style="color:var(--crit-ink)">⚠ Mais de 14h de direção em 24h</b><p style="margin:6px 0">${windows.length} dia(s) com janela acima de 14h no período. Maior acumulado: <b>${hDec(Math.max(...windows.map(w=>w.minutes)))}</b>. Pausas não zeram o acumulado; apenas o tempo efetivamente dirigido é somado.</p>${windows.slice().sort((a,b)=>b.b-a.b).map(w=>`<div style="padding:8px 0;border-top:1px solid var(--border)"><b>${driving24hLabel(w)}</b> <button type="button" class="btn" data-drive-a="${w.a}" data-drive-b="${w.b}">Ver na linha do tempo ↓</button></div>`).join('')}<small>Uma janela representativa com o maior acumulado por dia de término. Janelas sobrepostas não são contadas como infrações independentes.</small></div>`;
+function driving24hSummary(windows,filterActive,limitHours=14){
+  const title=limitHours===24?'24h completas de direção em 24h':'Mais de '+limitHours+'h de direção em 24h';
+  const desc=limitHours===24?'com 24h completas':'acima de '+limitHours+'h';
+  if(!windows.length)return filterActive?'<div class="card" style="padding:14px;margin-bottom:14px">Nenhuma janela '+(limitHours===24?'com 24h completas':'com mais de '+limitHours+'h')+' neste recorte da ficha. Confira os filtros de período e situação.</div>':'';
+  return `<div class="card driving24-summary" style="border-left:5px solid var(--critical);padding:14px 18px;margin-bottom:14px"><b style="color:var(--crit-ink)">⚠ ${title}</b><p style="margin:6px 0">${windows.length} dia(s) com janela ${desc} no período. Maior acumulado: <b>${hDec(Math.max(...windows.map(w=>w.minutes)))}</b>. Pausas não zeram o acumulado; apenas o tempo efetivamente dirigido é somado.</p>${windows.slice().sort((a,b)=>b.b-a.b).map(w=>`<div style="padding:8px 0;border-top:1px solid var(--border)"><b>${driving24hLabel(w)}</b> <button type="button" class="btn" data-drive-a="${w.a}" data-drive-b="${w.b}">Ver na linha do tempo ↓</button></div>`).join('')}<small>Uma janela representativa com o maior acumulado por dia de término. Janelas sobrepostas não são contadas como infrações independentes.</small></div>`;
 }
 function driving24hVisibleSegments(w,movement,lo,hi){
   const xs=[];
@@ -4201,7 +4295,7 @@ function renderFicha(){
   const horasTrabalhadas=(M.audit&&M.audit.hPonto)||0;
   const periodoFicha=periodoLabel();
   const dsr=dsrForDriver(nome,activeRange());
-  const driveWindows=[...driving24hEvidence(recs,840,activeRange()).values()].flat();
+  const driveWindows=[...driving24hEvidence(recs,(driving24hSelectedHours()===24?1439:driving24hSelectedHours()*60),activeRange()).values()].flat();
   const alertasPorMilKm=(kmR>0)?(totAl/(kmR/1000)):null;
   const alertaKmMeta=75;
   const alertaKmCrit=alertasPorMilKm!=null&&alertasPorMilKm>alertaKmMeta;
@@ -4271,7 +4365,7 @@ function renderFicha(){
     </div>
     ${noteOps}
     ${recs.some(r=>!r.cpf)?'<div class="card" style="padding:12px;margin-bottom:12px;border-left:4px solid var(--warning)"><b>Vínculo por CPF pendente.</b> Confira o CPF no relatório de Jornada e no cadastro TMS. Nomes parecidos não são usados para confirmar a identidade.</div>':''}
-    ${driving24hSummary(driveWindows,!!$('#fDirecao').value)}
+    ${driving24hSummary(driveWindows,!!$('#fDirecao').value,driving24hSelectedHours())}
 
     <div class="sec-title"><h2>Tratativas com o motorista</h2><span>${trats.length} registro(s) · ${TRAT_CACHE?'histórico compartilhado sincronizado':'histórico local · sincronize para ver nas outras máquinas'}</span></div>
     <div class="card">${ trats.length
@@ -4756,7 +4850,7 @@ function renderMotoristas(){
   // permite ao navegador pintar a aba antes de iniciar o cruzamento
   setTimeout(()=>motoristasComparadosAsync().then(res=>{
     if(job!==MOTOR_RENDER_JOB||activeViewName()!=='motoristas')return;
-    const qualified=$('#fDirecao').value?new Set(filtered().map(recordDriverKey)):null;
+    const qualified=($('#fDirecao').value||($('#fGrave')&&$('#fGrave').value||''))?new Set(filtered().map(recordDriverKey)):null;
     const unique=selectMotoristas(res.rows||[],{op,f,q,mot:norm($('#fMot').value),search:norm($('#fBusca').value),qualified});
     const sm=motoristasSummary(unique);
     MOTORISTAS_ROWS=unique;
@@ -8278,7 +8372,7 @@ applyDadosGate();
 // A abertura é controlada por bootPulso360() no final do arquivo para evitar cargas e renders duplicados.
 // filtros
 const onTopFilterChange=()=>{ saveTopFilterState(CURRENT_FILTER_TAB); VIEW_RENDER_KEYS[activeViewName()]=''; renderAll(); };
-['#fFecha','#fOp','#fDia','#fDe','#fAte','#fStatus','#fDirecao','#fMot'].forEach(s=>$(s).addEventListener('change',onTopFilterChange));
+['#fFecha','#fOp','#fDia','#fDe','#fAte','#fStatus','#fDirecao','#fGrave','#fMot'].forEach(s=>$(s).addEventListener('change',onTopFilterChange));
 $('#fMot').addEventListener('focus',openMotMenu);
 $('#fMot').addEventListener('click',openMotMenu);
 $('#fMot').addEventListener('input',()=>{ openMotMenu(); renderMotMenu(); saveTopFilterState(CURRENT_FILTER_TAB); renderAllDebounced(); });
