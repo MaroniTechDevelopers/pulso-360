@@ -7,5 +7,18 @@ const row=(nome,placa,km)=>({motoristaEscala:nome,_nMot:nome,data:'2026-10-21',p
 function value(text,label){const chunks=text.split('<div class="card kpi"');const x=chunks.find(x=>x.includes('class="lab">'+label+'</div>'));assert.ok(x,label);return x.match(/class="val tnum">([^<]+)/)[1];}
 test('troca de motorista atualiza placas e alertas; limpar recupera frota e resultado vazio mostra zero',()=>{const {c,els}=setup(),a=row('JOAO','AAA1A11',100),b=row('MARIA','BBB2B22',50);for(const [name,rs,total,ok,acao,alerts] of [['JOAO',[a],1,1,0,2],['MARIA',[b],1,0,1,5],['', [a,b],3,2,1,7],['INEXISTENTE',[],0,0,0,0]]){els['#fMot'].value=name;c.rows=rs;c.renderKpis(rs);const text=els['#kpis'].innerHTML;assert.equal(value(text,'Placas (total)'),String(total));assert.equal(value(text,'Placas OK (câmera)'),String(ok));assert.equal(value(text,'Placas p/ ação'),String(acao));assert.equal(value(text,'⚠ Alertas (câmera/telemetria)'),String(alerts));if(name==='JOAO')assert.equal(value(text,'KM rodado — motorista'),'100');}});
 test('qualquer filtro restringe placas sem depender de direção 24h selecionada',()=>{const {c,els}=setup();c.rows=[row('JOAO','AAA1A11',100)];els['#fBusca'].value='JOAO';assert.deepEqual([...c.placasNoFiltro()],['AAA1A11']);els['#fBusca'].value='';els['#fDe'].value='2026-10-21';assert.deepEqual([...c.placasNoFiltro()],['AAA1A11']);});
+test('cabeçalho Pulso 360 mantém marca, pulso e navegação acessível, inclusive WebView',()=>{
+ const header=html.slice(html.indexOf('<header>'),html.indexOf('</header>')+9);
+ assert.match(header,/class="brand-emblem"/);
+ assert.match(header,/id="brandLogo"/);
+ assert.match(header,/class="pulse"/);
+ assert.match(header,/Pulso <span class="gold">360<\/span>/);
+ assert.match(header,/Grupo Maroni/);
+ assert.match(header,/id="tabs"/);
+ for(const t of ['semana','motoristas','aderencia','linha','dados'])assert.ok(header.includes('data-tab="'+t+'"'));
+ assert.match(html,/body\.sc-embed header/);
+ assert.match(html,/body > header::before/);
+ assert.match(html,/@media\(max-width:560px\)/);
+});
 test('cabeçalho inclui marca e modelo de todas as placas do recorte sem misturar cadastros',()=>{const c=ctx();Object.assign(c,{TMS:{AAA1A11:{marca:'SCANIA',modelo:'R 420 A 6X2'},BBB2B22:{marca:'VOLVO',modelo:'FH 540'}},pdfEsc:c.scEsc});const rs=[{placa:'AAA1A11',placas:['AAA1A11','BBB2B22']}],v=c.fichaPlacasComModelo(rs,true);for(const t of ['AAA1A11','SCANIA R 420 A 6X2','BBB2B22','VOLVO FH 540'])assert.ok(v.includes(t),t);assert.ok(c.fichaPlacasComModelo([{placa:'CCC3C33'}],true).includes('marca/modelo não informados'));});
 test('nota da ficha usa perfil do recorte em escala 0 a 10, inclusive zero e pendência',()=>{const c=ctx();assert.equal(c.fichaNotaValor({movDays:1,hCond:60,score:0}),0);assert.equal(c.scFmt(c.scN10(c.fichaNotaValor({movDays:1,hCond:60,score:83}))),'8,3');assert.equal(c.fichaNotaValor({movDays:0,hCond:0,score:100}),null);assert.equal(c.fichaNotaValor(null),null);const f=source('renderFicha');for(const t of ['Admissão','Nota do condutor','Placa · marca · modelo','fichaNotaValor(_notaProfile)','class="ficha-nota"'])assert.ok(f.includes(t),t);assert.ok(html.includes("'#fDirecao','#fGrave','#fMot'].forEach"));});
