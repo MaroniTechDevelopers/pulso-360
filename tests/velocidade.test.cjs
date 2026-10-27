@@ -15,6 +15,30 @@ test('boletim e fallback agregado também excluem velocidade sem alterar fonte',
 function scoreContext(){const c=ctx();for(const n of ['rankClamp','_rankScoreProfiles'])vm.runInContext(source(n),c);Object.assign(c,{ALERTS:{},BOL:null,MULTAS_N:1,MEDIA_OFF:false,BASES:{ponto:true},ALERT_CAP:150,MULTA_CAP:2,ALERT_TETO_TAXA:100,ALERT_TETO_NOTA:60});return c;}
 const profile=pct=>({identMot:80,identCam:80,ajPonto:80,interjScore:80,extraScore:80,mediaScore:80,alertRate:30,multaRate:0.4,idDiv:0,velocidade:{penaltyPct:pct,maxKmh:pct===5?88:pct===10?95:105,unknown:0,pending:false}});
 test('velocidade compõe 15%: outros indicadores com nota 8 somam 6,8 e velocidade soma 1,5 / 1 / 0,5 / 0',()=>{const c=scoreContext();for(const [pct,expected] of [[0,83],[5,78],[10,73],[15,68]]){const p=profile(pct);c._rankScoreProfiles({JOAO:p});near(p.score,expected);near(p.components.reduce((s,x)=>s+x.w,0),100);assert.equal(p.components.find(x=>x.k==='velocidade').w,15);assert.equal(p.speedPenaltyPoints,0);}});
+test('cobertura da câmera não entra na nota e não altera o score ao variar de zero a 100',()=>{
+  const c=scoreContext(),p0=profile(0),p100=profile(0),pMissing=profile(0);
+  p0.identCam=0;p100.identCam=100;pMissing.identCam=null;
+  c._rankScoreProfiles({ZERO:p0,COMPLETA:p100,AUSENTE:pMissing});
+  for(const p of [p0,p100,pMissing]){
+    assert.equal(p.components.some(x=>x.k==='identCam'),false);
+    near(p.components.reduce((sum,x)=>sum+x.w,0),100);
+    assert.ok(p.components.find(x=>x.k==='velocidade'));
+    assert.ok(p.components.find(x=>x.k==='identMot'));
+  }
+  near(p0.score,p100.score);near(p100.score,pMissing.score);
+  assert.equal(p0.identCam,0);assert.equal(p100.identCam,100);
+  const lower=profile(0);lower.identMot=0;c._rankScoreProfiles({OTHER:lower});
+  assert.ok(lower.score<p100.score,'identificação do próprio motorista continua compondo a nota');
+});
+test('pesos não incluem cobertura e WebView rejeita nota antiga pré-calculada',()=>{
+  const s=source('_rankScoreProfiles');
+  assert.doesNotMatch(s,/add\('identCam'/);
+  assert.match(s,/add\('identMot'/);
+  assert.match(html,/scoreRulesVersion:3/);
+  assert.match(source('_loadPublishedWebview'),/scoreRulesVersion!==3/);
+  assert.match(html,/identCam=aderRecs\(recs\)/);
+  assert.doesNotMatch(html,/câmera \(5%\)/);
+});
 test('recalcular não acumula desconto e velocidade vem após demais ajustes',()=>{const c=scoreContext(),p=profile(15);p.idDiv=1;c._rankScoreProfiles({JOAO:p});near(p.scoreBeforeSpeed,66);near(p.score,66);c._rankScoreProfiles({JOAO:p});near(p.score,66);});
 test('só velocidade não aciona teto de outros alertas nem é removida da timeline',()=>{const c=ctx();c.AL_TL={JOAO:Array.from({length:50},()=>ev(110))};const a=c.rankAlertSummary('JOAO',recs);assert.equal(a.total,0);assert.equal(c.rankSpeedSummary('JOAO',recs).penaltyPct,15);assert.equal(c.AL_TL.JOAO.length,50);});
 test('importações síncrona e assíncrona preservam km/h e ignoram limite da via',async()=>{const c=ctx();for(const n of ['splitCSVLine','rowSigCells','_dedupeCell','_dedupeSig','dedupeAccept','placaKey','tipoPareceCpf','toMin'])vm.runInContext(source(n),c);Object.assign(c,{isoDate:x=>x,splitDT:x=>({date:x,time:''}),weekInfo:()=>({key:'2026-10-19'}),uoCurta:x=>x,uiYield:async()=>{}});vm.runInContext(html.slice(html.indexOf('function aggAlertas('),html.indexOf('function placaKey(')),c);const csv='MOTORISTA;TIPO;NIVEL;DATA;HORA;PLACA;Velocidade permitida;Velocidade máxima\nJOAO;EXCESSO_VELOCIDADE;ALTO;2026-10-21;10:00:00;ABC1D23;80;95,5\n';for(const fn of [c.aggAlertas,c.aggAlertasAsync]){const a=await fn(csv,null,new Set(),{});assert.equal(a.tl.JOAO[0][4].velocidadeKmh,95.5);} });
