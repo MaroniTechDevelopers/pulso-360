@@ -1816,6 +1816,26 @@ function alertasReais(nome){ const nn=norm(nome); const b=BOL&&BOL[nn], a=ALERTS
   if(b) return {nome, total:b.total, tipos:b.tipos||{}, niveis:(a&&a.niveis)||{}, semanas:(a&&a.semanas)||{}};
   return a||null; }
 function alertaEhVelocidade(tp){ return norm(tp).indexOf('VELOC')>=0; }
+
+// Alerta SEM_IDENTIFICACAO_DE_MOTORISTA não representa infração de conduta.
+// A cobertura e os trechos sem leitura de câmera continuam em indicadores próprios.
+function alertaEhSemIdentificacaoMotorista(tipo){
+  const t=norm(tipo).replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim();
+  return /^(?:SEM (?:MOTORISTA|IDENTIFICACAO (?:DE |DO )?(?:MOTORISTA|CONDUTOR)|CONDUTOR IDENTIFICADO)|(?:MOTORISTA|CONDUTOR) (?:SEM IDENTIFICACAO|NAO IDENTIFICADO|AUSENTE))$/.test(t);
+}
+function resumoSemAlertaIdentificacao(v){
+  if(!v||!v.real||!v.tipos)return v;
+  let removidos=0;const tipos={};
+  for(const [tp,q] of Object.entries(v.tipos)){
+    if(alertaEhSemIdentificacaoMotorista(tp)){removidos+=Math.max(0,Number(q)||0);continue;}
+    tipos[tp]=q;
+  }
+  if(!removidos)return v;
+  // Agregado legado não informa severidade por tipo: não inventar níveis restantes.
+  // Para AL_TL a classificação vem dos eventos já filtrados, preservando os outros alertas.
+  return {...v,tipos,total:Math.max(0,(Number(v.total)||0)-removidos),niveis:{},badges:[]};
+}
+
 function aplicaResumoVelocidade(nn, range, v){
   if(!v) return v;
   const tipos=Object.assign({},v.tipos||{});
@@ -1848,11 +1868,11 @@ function alertasResumo(nome, range){
   const nn=norm(nome);
   const ck=DATA_REV+'|'+nn+'|'+(range?(range.de+'|'+range.ate):'*');
   if(ALERT_SUM_CACHE.has(ck)) return ALERT_SUM_CACHE.get(ck);
-  const done=v=>{ v=aplicaResumoVelocidade(nn,range,v); ALERT_SUM_CACHE.set(ck,v); return v; };
+  const done=v=>{ v=resumoSemAlertaIdentificacao(v);v=aplicaResumoVelocidade(nn,range,v); ALERT_SUM_CACHE.set(ck,v); return v; };
   // com filtro de data: conta por dia (Boletim) ou por evento (Alertas/AL_TL)
   if(range){
     if(BOL_DAY){ let total=0; const tipos={}; const dm=BOL_DAY[nn]||{}; for(const d in dm){ if(d>=range.de && d<=range.ate){ total+=dm[d].t; const tp=dm[d].tipos; for(const k in tp) tipos[k]=(tipos[k]||0)+tp[k]; } } return done({total, badges:[], real:true, niveis:{}, tipos}); }
-    if(AL_TL){ let total=0; const tipos={}, niveis={}; (AL_TL[nn]||[]).forEach(e=>{ if(e[0]>=range.de && e[0]<=range.ate){ total++; const tp=e[3]||'ALERTA'; tipos[tp]=(tipos[tp]||0)+1; const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':''; if(nv)niveis[nv]=(niveis[nv]||0)+1; } }); const badges=NIVEL_DEF.filter(d=>niveis[d.k]).map(d=>({lab:d.lab,ic:d.ic,n:niveis[d.k],hot:d.k==='ALTO'})); return done({total, badges, real:true, niveis, tipos}); }
+    if(AL_TL){ let total=0; const tipos={}, niveis={}; (AL_TL[nn]||[]).forEach(e=>{ if(e[0]>=range.de && e[0]<=range.ate && !alertaEhSemIdentificacaoMotorista(e[3])){ total++; const tp=e[3]||'ALERTA'; tipos[tp]=(tipos[tp]||0)+1; const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':''; if(nv)niveis[nv]=(niveis[nv]||0)+1; } }); const badges=NIVEL_DEF.filter(d=>niveis[d.k]).map(d=>({lab:d.lab,ic:d.ic,n:niveis[d.k],hot:d.k==='ALTO'})); return done({total, badges, real:true, niveis, tipos}); }
   }
   const real=alertasReais(nome);
   if(real){
@@ -2025,7 +2045,7 @@ function alertsForRec(r){
   if(r.alertasTimed && r.alertasTimed.length)return r.alertasTimed.map(a=>({
     t:toMin(a.hora),niv:(a.niv||'').toUpperCase()[0]||'',tipo:a.tipo||'ALERTA',
     placa:String(a.placa||''),velocidadeKmh:a.velocidadeKmh==null?null:a.velocidadeKmh,velocidadeFonte:a.velocidadeFonte||''
-  })).filter(a=>a.t!=null);
+  })).filter(a=>a.t!=null&&!alertaEhSemIdentificacaoMotorista(a.tipo));
   if(AL_TL){const arr=AL_TL[norm(r.motoristaEscala)];if(arr){
     const base=Date.parse(r.data),lo=(r.scopeIni!=null?r.scopeIni:(r.entradaU!=null?r.entradaU:0)),hi=(r.scopeFim!=null?r.scopeFim:(r.saidaU!=null?r.saidaU:1439));
     return arr.map((e,index)=>{
@@ -2033,7 +2053,7 @@ function alertsForRec(r){
       return {eventKey:meta.key||norm(r.motoristaEscala)+'|AL_TL|'+index,rel:Math.round((Date.parse(e[0])-base)/60000)+e[1],
         niv:e[2],tipo:e[3],placa:String(meta.placa||''),velocidadeKmh:meta.velocidadeKmh==null?null:meta.velocidadeKmh,
         velocidadeFonte:meta.velocidadeFonte||''};
-    }).filter(e=>e.rel>=lo&&e.rel<=hi&&!tipoPareceCpf(e.tipo))
+    }).filter(e=>e.rel>=lo&&e.rel<=hi&&!tipoPareceCpf(e.tipo)&&!alertaEhSemIdentificacaoMotorista(e.tipo))
       .map(e=>({eventKey:e.eventKey,t:e.rel,niv:e.niv,tipo:e.tipo,placa:e.placa,velocidadeKmh:e.velocidadeKmh,velocidadeFonte:e.velocidadeFonte}));
   }}
   return [];
@@ -2692,11 +2712,12 @@ function dedupeTimelineAlerts(alerts){
   const seen=new Set();
   // Only collapse repeated references to the SAME source event across overlapping shifts.
   // Legacy events have their array index as identity: same minute/type alone is not proof.
-  return alerts.filter(a=>{if(!a.eventKey)return true;if(seen.has(a.eventKey))return false;seen.add(a.eventKey);return true;});
+  return alerts.filter(a=>{if(alertaEhSemIdentificacaoMotorista(a.tipo))return false;if(!a.eventKey)return true;if(seen.has(a.eventKey))return false;seen.add(a.eventKey);return true;});
 }
 function auditAlertDuplicates(timeline){
   let total=0,confirmed=0,candidates=0;const confirmedKeys=new Set(),candidateKeys=new Set();
   for(const [driver,events] of Object.entries(timeline||{}))for(const e of events){
+    if(alertaEhSemIdentificacaoMotorista(e[3]))continue;
     total++;const id=e[4]&&e[4].key;
     if(id&&confirmedKeys.has(driver+'|'+id)){confirmed++;continue;}if(id)confirmedKeys.add(driver+'|'+id);
     const candidate=JSON.stringify([driver,e[0],e[1],e[2],norm(e[3]),e[4]&&e[4].placa||'']);
@@ -2973,8 +2994,8 @@ function scSpeedSnapshot(p){
 function rankAlertSummary(nome,recs){
   const nn=norm(nome), dias=new Set((recs||[]).filter(r=>r&&r.data&&((r.mov&&r.mov.length)||(r.movimento&&r.movimento.length)||(r.horasMov||0)>0)).map(r=>r.data));
   if(!dias.size)return {total:0,niveis:{},tipos:{},real:true,badges:[]};
-  if(AL_TL){let total=0;const tipos={},niveis={};for(const e of (AL_TL[nn]||[])){if(!dias.has(e[0])||alertaEhVelocidade(e[3]))continue;total++;const tp=e[3]||'ALERTA';tipos[tp]=(tipos[tp]||0)+1;const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':'';if(nv)niveis[nv]=(niveis[nv]||0)+1;}return {total,niveis,tipos,real:true,badges:[]};}
-  if(BOL_DAY){let total=0;const tipos={};const dm=BOL_DAY[nn]||{};for(const d of dias){const x=dm[d];if(!x)continue;total+=x.t||0;for(const k in (x.tipos||{}))tipos[k]=(tipos[k]||0)+(x.tipos[k]||0);}return rankWithoutSpeed({total,niveis:{},tipos,real:true,badges:[]});}
+  if(AL_TL){let total=0;const tipos={},niveis={};for(const e of (AL_TL[nn]||[])){if(!dias.has(e[0])||alertaEhVelocidade(e[3])||alertaEhSemIdentificacaoMotorista(e[3]))continue;total++;const tp=e[3]||'ALERTA';tipos[tp]=(tipos[tp]||0)+1;const nv=e[2]==='A'?'ALTO':e[2]==='M'?'MEDIO':e[2]==='B'?'BAIXO':'';if(nv)niveis[nv]=(niveis[nv]||0)+1;}return {total,niveis,tipos,real:true,badges:[]};}
+  if(BOL_DAY){let total=0;const tipos={};const dm=BOL_DAY[nn]||{};for(const d of dias){const x=dm[d];if(!x)continue;total+=x.t||0;for(const k in (x.tipos||{}))tipos[k]=(tipos[k]||0)+(x.tipos[k]||0);}return rankWithoutSpeed(resumoSemAlertaIdentificacao({total,niveis:{},tipos,real:true,badges:[]}));}
   const dates=[...dias].sort();return rankWithoutSpeed(alertasResumo(nome,{de:dates[0],ate:dates[dates.length-1]}));
 }
 function rankProfile(nome,recs){
@@ -4218,14 +4239,14 @@ function tratAlertCoverage(){
   const source=typeof AL_TL!=='undefined'&&AL_TL,rev=typeof DATA_REV==='undefined'?0:DATA_REV;
   if(!source)return null;
   if(TRAT_ALERT_COVER_CACHE&&TRAT_ALERT_COVER_CACHE.source===source&&TRAT_ALERT_COVER_CACHE.rev===rev)return TRAT_ALERT_COVER_CACHE.value;
-  let de='',ate='';for(const arr of Object.values(source)){for(const e of arr||[]){if(tratIsoDay(e[0])==null)continue;if(!de||e[0]<de)de=e[0];if(e[0]>ate)ate=e[0];}}
+  let de='',ate='';for(const arr of Object.values(source)){for(const e of arr||[]){if(alertaEhSemIdentificacaoMotorista(e[3])||tratIsoDay(e[0])==null)continue;if(!de||e[0]<de)de=e[0];if(e[0]>ate)ate=e[0];}}
   const value=de?{de,ate}:null;TRAT_ALERT_COVER_CACHE={source,rev,value};return value;
 }
 function fichaEvolTratativas(nome){
   const trats=tratList(nome);if(!trats.length)return '';
   const nn=norm(nome),rows=(typeof RECORDS_BY_DRIVER_N!=='undefined'&&RECORDS_BY_DRIVER_N[nn])||RECORDS.filter(r=>norm(r.motoristaEscala)===nn);
   const byDay=auditMetrics(rows).byDay||{},source=typeof AL_TL!=='undefined'&&AL_TL,coverage=tratAlertCoverage();
-  const events=source?(source[nn]||[]).map((e,i)=>({date:e[0],type:e[3],id:e[4]&&e[4].key||'source:'+i})):[];
+  const events=source?(source[nn]||[]).filter(e=>!alertaEhSemIdentificacaoMotorista(e[3])).map((e,i)=>({date:e[0],type:e[3],id:e[4]&&e[4].key||'source:'+i})):[];
   const esc=pdfEsc,f=v=>(Math.round(v*100)/100).toLocaleString('pt-BR');
   const head='<div class="sec-title"><h2>📈 Evolução por tratativa</h2><span>temas da observação do gestor · comparação desde a data da conversa</span></div>';
   const intro='<p class="evt-details" style="margin:0 0 12px">Clique na seta de cada tratativa para ver a evolução. Feedbacks positivos mostram apenas o registro da conversa.</p>';
@@ -6089,6 +6110,7 @@ function aggAlertas(text, keep, seen, diag){
     if(!line) continue;
     const c=splitCSVLine(line,delim); if(iTipo>=0 && c.length<=iTipo) continue;
     if(iDesc>=0 && norm(c[iDesc]||'')[0]==='S') continue;         // desconsiderado
+    if(iTipo>=0 && alertaEhSemIdentificacaoMotorista(c[iTipo]))continue; // tipo não elegível
     if(!dedupeAccept(seen,rowSigCells(c),diag)) continue;        // mesmo evento já veio em outro relatório/ZIP
     // placa → UO (Trimble), independente de ter motorista
     if(iPlaca>=0 && iUO>=0){ const pl=placaKey(c[iPlaca]); const uo=(c[iUO]||'').trim(); if(pl&&uo){ (puo[pl]=puo[pl]||{})[uo]=(puo[pl][uo]||0)+1; } }
@@ -6128,6 +6150,7 @@ async function aggAlertasAsync(text, keep, seen, diag){
     const line=text.slice(start,text.charCodeAt(end-1)===13?end-1:end); start=end+1; if(!line)continue;
     const c=splitCSVLine(line,delim); if(iTipo>=0&&c.length<=iTipo)continue;
     if(iDesc>=0&&norm(c[iDesc]||'')[0]==='S')continue;
+    if(iTipo>=0&&alertaEhSemIdentificacaoMotorista(c[iTipo]))continue;
     if(!dedupeAccept(seen,rowSigCells(c),diag))continue;
     if(iPlaca>=0&&iUO>=0){const pl=placaKey(c[iPlaca]),uo=(c[iUO]||'').trim();if(pl&&uo)(puo[pl]=puo[pl]||{})[uo]=(puo[pl][uo]||0)+1;}
     const nomeFonte=(iMot>=0?(c[iMot]||'').trim():''),cpfFonte=iCpf>=0?c[iCpf]:'';const who=typeof canonicalDriverInput==='function'?canonicalDriverInput(nomeFonte,cpfFonte):{name:nomeFonte,cpf:''};const nome=who.name;if(!nome)continue;const nn=norm(nome);
@@ -6781,7 +6804,6 @@ const BOL_TIPOS=[
   {c:'DISTRACAO', l:'Distração', k:'n'},
   {c:'SEM CINTO', l:'Sem Cinto', k:'n'},
   {c:'USO DE CIGARRO', l:'Uso de Cigarro', k:'n'},
-  {c:'SEM MOTORISTA', l:'Sem Motorista', k:'n'},
   {c:'CAMERA OBSTRUIDA', l:'Câmera Obstruída', k:'n'},
   {c:'DISTANCIA PERIGOSA', l:'Distância Perigosa', k:'n'},
   {c:'ACELERACAO BRUSCA', l:'Aceleração Brusca', k:'n'},
@@ -7429,7 +7451,8 @@ function updateDropStatus(){
   if(RAW&&RAW.identityDiag&&$('#stPonto'))$('#stPonto').textContent+=' · vínculo por CPF: '+RAW.identityDiag.withCpf+' registros · '+RAW.identityDiag.unresolved+' nome(s) pendente(s)';
   set('#stMov',   (pending.mov&&pending.mov.length)  ||(RAW&&RAW.counts&&RAW.counts.mov)  ||0, '#drop-mov');
   if(SOURCE_COVERAGE.mov&&SOURCE_COVERAGE.mov.max&&$('#stMov')) $('#stMov').textContent+=coverageLabel('mov');
-  set('#stAlertas', ALERTS_N||(RAW&&RAW.counts&&RAW.counts.alertas)||0, '#drop-alertas', 'alertas');
+  const visiveis=ALERTS?Object.values(ALERTS).reduce((tot,x)=>tot+Object.entries(x.tipos||{}).reduce((n,[tp,c])=>n+(alertaEhSemIdentificacaoMotorista(tp)?0:(Number(c)||0)),0),0):(ALERTS_N||(RAW&&RAW.counts&&RAW.counts.alertas)||0);
+  set('#stAlertas', visiveis, '#drop-alertas', 'alertas');
   if(AL_TL){const d=auditAlertDuplicates(AL_TL);$('#stAlertas').textContent+=' · '+d.total.toLocaleString('pt-BR')+' eventos com horário auditados · '+d.confirmed+' repetições com mesma identidade · '+d.candidates+' coincidências de minuto/tipo a conferir';$('#stAlertas').title='A auditoria cobre somente os eventos com horário carregados na linha do tempo (há limite de 5.000 por motorista). Coincidências não são removidas sem identidade; valide placa, segundos e ID na fonte.';}
   set('#stTms', TMS_N, '#drop-tms', 'veículos');
   set('#stAbast', ABAST_N, '#drop-abast', 'motoristas');
