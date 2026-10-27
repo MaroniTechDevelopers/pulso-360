@@ -336,6 +336,14 @@
   .op-block .op-kpi{font-size:12.5px;color:var(--muted)}
   .op-block .op-kpi span{color:var(--serious);font-weight:700;font-size:14px}
   .op-block .op-kpi b{color:var(--ink)}
+  .op-block .op-kpi .op-total-count{
+    display:inline-flex;align-items:baseline;gap:5px;
+    padding:3px 9px;margin-left:4px;border-radius:9px;
+    background:rgba(43,105,190,.10);border:1px solid rgba(43,105,190,.24);
+    color:var(--ink);font-weight:700;font-size:12px;white-space:nowrap;
+  }
+  .op-block .op-kpi .op-total-count strong{font-size:18px;line-height:1.1;font-weight:900;letter-spacing:-.025em;color:var(--ink)}
+
   .op-block .tblwrap{border:none;border-radius:0}
   .op-block table{min-width:640px}
   .farol-strip{display:inline-flex;gap:5px;align-items:center}
@@ -3276,7 +3284,7 @@ function renderSemana(rows){
     if(!vis.length)return; visibleTotal+=vis.length;
     const eligOp=g.list.filter(resumoRankElegivel).length;
     const note=chosen?`<span class="op-ranknote">${vis.length} selecionado(s) · ${eligOp} elegível(is) de ${g.list.length}</span>`:'';
-    const kpi=`<span style="color:${ajColor(g.aj)}">${g.aj==null?'—':g.aj+'%'}</span> aderência de jornada · ${hDec(g.dd)} fora da jornada · <b>${g.motsDedo}</b> motorista(s) · ${g.list.length} no total`;
+    const kpi=`<span style="color:${ajColor(g.aj)}">${g.aj==null?'—':g.aj+'%'}</span> aderência de jornada · ${hDec(g.dd)} fora da jornada · <b>${g.motsDedo}</b> motorista(s) · <span class="op-total-count"><strong>${g.list.length.toLocaleString('pt-BR')}</strong> no total</span>`;
     progressiveGroups.push({title:g.op+note,kpi,vis});
     if(visibleTotal<=220) html.push(`<div class="card op-block"><div class="op-head"><h3>${g.op}${note}</h3><div class="op-kpi">${kpi}</div></div><div class="capgrid">${vis.map(m=>capinha(m,weeks)).join('')}</div></div>`);
   });
