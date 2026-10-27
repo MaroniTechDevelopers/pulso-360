@@ -4334,6 +4334,23 @@ function focusDriving24h(a,b){
   if(!best)return;const {id,st,base}=best;st.t0=Math.max(0,a-base-60);st.t1=Math.min(st.total,b-base+60);renderZoom(id);
   const el=document.getElementById(id),card=el&&el.closest('.wtl-card');if(card){card.classList.add('driving24-focus');card.scrollIntoView({behavior:'smooth',block:'center'});}
 }
+
+const META_UNILEVER_KM_POR_ALERTA=75;
+// O indicador da ficha e do PDF usa o mesmo numerador/denominador e a mesma meta.
+function fichaKmPorAlerta(km, alertas){
+  const k=Number(km),a=Number(alertas);
+  if(!Number.isFinite(k)||k<=0) return {valor:null,status:'sem-km',descricao:'Sem km rodado no período'};
+  if(!Number.isFinite(a)||a<0) return {valor:null,status:'sem-dados',descricao:'Alertas não disponíveis'};
+  if(a===0) return {valor:null,status:'sem-alertas',descricao:'Sem alertas no período'};
+  const valor=k/a;
+  return {valor,status:valor>=META_UNILEVER_KM_POR_ALERTA?'ok':'atencao',
+    descricao:valor>=META_UNILEVER_KM_POR_ALERTA?'dentro da meta':'⚠ ponto de atenção'};
+}
+function fichaKmPorAlertaCor(status, pdf){
+  if(status==='atencao')return pdf?'#ef4444':'var(--critical)';
+  if(status==='sem-km'||status==='sem-dados')return pdf?'#94a3b8':'var(--muted)';
+  return pdf?'#10b981':'var(--good)';
+}
 function fichaNotaValor(profile){ return profile&&profile.movDays>0&&profile.hCond>0&&Number.isFinite(profile.score)?profile.score:null; }
 function renderFicha(){
   const nome=fichaAtual; if(!nome){ $('#fichaBox').innerHTML=''; return; }
@@ -4343,9 +4360,7 @@ function renderFicha(){
   const periodoFicha=periodoLabel();
   const dsr=dsrForDriver(nome,activeRange());
   const driveWindows=[...driving24hEvidence(recs,(driving24hSelectedHours()===24?1439:driving24hSelectedHours()*60),activeRange()).values()].flat();
-  const alertasPorMilKm=(kmR>0)?(totAl/(kmR/1000)):null;
-  const alertaKmMeta=75;
-  const alertaKmCrit=alertasPorMilKm!=null&&alertasPorMilKm>alertaKmMeta;
+  const kmAlerta=fichaKmPorAlerta(kmR,totAl);
   const fichaRisco=M.risco;
   const weeks=GLOBAL_WEEKS.length?GLOBAL_WEEKS:Object.values(recs.reduce((a,r)=>{if(r.semKey&&!a[r.semKey])a[r.semKey]={key:r.semKey,label:r.semana,mesKey:r.mesKey,mesLabel:r.mesLabel};return a;},{})).sort((a,b)=>a.key<b.key?-1:1);
   const _dayF=dayFilter(); let _recsEvid=(_dayF?recs.filter(r=>r.data===_dayF):recs).slice();
@@ -4455,8 +4470,8 @@ function renderFicha(){
       ${dsrCard(dsr)}
       <div class="card kpi"><div class="accent" style="background:${(velR.alto)?'var(--critical)':(totAl>0?'var(--warning)':'var(--muted)')}"></div>
         <div class="lab">Alertas (total)</div><div class="val tnum">${totAl.toLocaleString('pt-BR')}</div><div class="sub">todos os tipos${velR.alto?' · '+velR.alto+' veloc. em nível alto':''}</div></div>
-      <div class="card kpi"><div class="accent" style="background:${alertaKmCrit?'var(--critical)':'var(--good)'}"></div>
-        <div class="lab">Alertas / 1.000 km</div><div class="val tnum">${alertasPorMilKm==null?'—':alertasPorMilKm.toFixed(1).replace('.',',')}</div><div class="sub">meta ≤ ${alertaKmMeta} · ${alertaKmCrit?'⚠ ponto de atenção':'dentro da meta'}</div></div>
+      <div class="card kpi"><div class="accent" style="background:${fichaKmPorAlertaCor(kmAlerta.status,false)}"></div>
+        <div class="lab">KM por alerta</div><div class="val tnum">${kmAlerta.valor==null?'—':kmAlerta.valor.toFixed(1).replace('.',',')}</div><div class="sub">meta Unilever ≥ ${META_UNILEVER_KM_POR_ALERTA} km/alerta · ${kmAlerta.descricao}</div></div>
       ${MULTAS_N?`<div class="card kpi"><div class="accent" style="background:${_multaList.length?'var(--warning)':'var(--muted)'}"></div>
         <div class="lab">Multas</div><div class="val tnum">${_multaList.length.toLocaleString('pt-BR')}</div><div class="sub">${_multaCel} celular · ${_multaVel} velocidade · período operacional</div></div>`:''}
     </div>
@@ -4589,14 +4604,14 @@ function exportFichaPDF(){
   const multaVelPDF=multaListPDF.filter(m=>multaTipoClasse(m.tipo)==='VELOCIDADE').length;
   const multaByTipoPDF={CELULAR:multaCelPDF,VELOCIDADE:multaVelPDF};
   const multaSubPDF=(tp)=>{ const c=multaTipoClasse(tp), n=multaByTipoPDF[c]||0; return (c==='CELULAR'||c==='VELOCIDADE')?`<div class="amsub">${n.toLocaleString('pt-BR')} multa${n===1?'':'s'}</div>`:''; };
-  const _alertaKmPDF=(M.kmR>0)?(M.totAl/(M.kmR/1000)):null, _alertaKmCrit=_alertaKmPDF!=null&&_alertaKmPDF>75;
+  const _kmPorAlertaPDF=fichaKmPorAlerta(M.kmR,M.totAl);
   const kpis=`<div class="kgrid p6">
     ${MEDIA_OFF?'':pdfKpi('④ Média realizada', (M.mediaR==null?'—':nf(M.mediaR)), 'meta '+nf(M.metaFicha)+(M.mediaR!=null?(M.medaOk?' ✓':' ✗'):''), M.medaOk?'#10b981':'#ef4444')}
     ${pdfKpi('① Aderência (câmera)', (M.semel==null?'—':M.semel+'<small>%</small>'), 'movimento do veículo identificado', M.semel==null?'#94a3b8':(M.semel>=CFG.sem?'#10b981':'#ef4444'))}
     ${pdfKpi('Aderência (motorista)', (M.semelMot==null?'—':M.semelMot+'<small>%</small>'), 'reconhecido como '+pdfEsc(firstName(nome)), M.semelMot==null?'#94a3b8':(M.semelMot>=CFG.sem?'#10b981':'#ef4444'))}
     ${pdfKpi('③ Aderência de jornada', (M.aderJornadaVal==null?'—':M.aderJornadaVal+'<small>%</small>'), 'aderência ao período de jornada', M.aderJornadaVal==null?'#94a3b8':(M.aderJornadaVal>=90?'#10b981':M.aderJornadaVal>=70?'#f59e0b':'#ef4444'))}
     ${pdfKpi('KM rodado', Math.round(M.kmR||0).toLocaleString('pt-BR'), 'quilômetros no período', '#3b82f6')}
-    ${pdfKpi('Alertas / 1.000 km', _alertaKmPDF==null?'—':_alertaKmPDF.toFixed(1).replace('.',','), 'meta ≤ 75'+(_alertaKmCrit?' · ponto de atenção':' · dentro da meta'), _alertaKmCrit?'#ef4444':'#10b981')}
+    ${pdfKpi('KM por alerta', _kmPorAlertaPDF.valor==null?'—':_kmPorAlertaPDF.valor.toFixed(1).replace('.',','), 'meta Unilever ≥ '+META_UNILEVER_KM_POR_ALERTA+' km/alerta · '+_kmPorAlertaPDF.descricao, fichaKmPorAlertaCor(_kmPorAlertaPDF.status,true))}
     ${pdfKpi('Alertas (total)', M.totAl.toLocaleString('pt-BR'), (alto?alto+' veloc. em nível alto':'todos os tipos'), alto?'#ef4444':(M.totAl>0?'#f59e0b':'#94a3b8'))}
     ${MULTAS_N?pdfKpi('Multas', multaListPDF.length.toLocaleString('pt-BR'), multaCelPDF+' celular · '+multaVelPDF+' velocidade · período operacional', multaListPDF.length?'#f59e0b':'#94a3b8'):''}
   </div>`;
