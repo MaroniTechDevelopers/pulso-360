@@ -1216,7 +1216,7 @@
         <span class="lg"><span class="sw" style="background:#d4af37"></span> 🥇 Ouro (9–10)</span>
         <span class="lg"><span class="sw" style="background:#9ca3af"></span> 🥈 Prata (5–9)</span>
         <span class="lg"><span class="sw" style="background:#b87333"></span> 🥉 Bronze (≤5)</span>
-        <span class="lg" style="margin-left:auto;color:var(--muted)">nota = jornada+ponto (20%) · alertas (15%) · hora extra (15%) · média (15%) · identificação (10%) · multas (10%) · interjornada (10%) · câmera (5%)</span>
+        <span class="lg" style="margin-left:auto;color:var(--muted)">nota = jornada+ponto · alertas · hora extra · média · identificação do motorista · multas · interjornada · velocidade; pesos normalizados sem cobertura da câmera</span>
       </div>
     </div>
     <div id="bonifBox"></div>
@@ -2952,7 +2952,7 @@ function resumoRankMelhorElegivel(m){
   const p=m&&m._rankProfile; if(!resumoRankElegivel(m)||!p)return false;
   if(p.movDays<rankMinMovDays())return false;
   if(BASES&&BASES.ponto && (p.pontoDays<=0||p.aj==null||p.pointCoverage<=0))return false;
-  if(p.identCam==null||p.identMot==null)return false;
+  if(p.identMot==null)return false;
   if(!MEDIA_OFF && p.media==null)return false;
   return (p.pend||0)===0;
 }
@@ -3096,10 +3096,12 @@ function _rankScoreProfiles(profiles){
     // Ex.: motorista sem litros não é penalizado na média — a nota é calculada sobre o que dá para medir.
     // Valor medido 0 (ex.: identificação 0%) continua entrando como 0 (é um 0 real, não ausência de dado).
     const comps=[]; const add=(k,lab,w,val,active=true)=>{if(!active||w<=0||val==null)return;const vv=rankClamp(val);if(vv==null)return;comps.push({k,lab,w,v:vv,pts:w*vv/100});};
-    // Pesos (08/10/2026, decisão do William): jornada+ponto unificados em 20%, alertas 15%, hora extra 15%,
-    // identificação do motorista 10%, média 15%. Câmera 5%, multas 10%, interjornada 10%. Soma = 100%.
+    // Regra 27/10/2026: cobertura da câmera é KPI de SAÚDE DO EQUIPAMENTO, não de conduta.
+    // Pesos-base sem cobertura: jornada+ponto 20; outros alertas 15; hora extra 15;
+    // identificação do motorista 10; média 15; multas 10; interjornada 10 (total 95).
+    // Os componentes ativos são normalizados proporcionalmente para 100% da nota;
+    // quando velocidade tem dados, mantém peso fixo de 15% e reparte 85% entre os demais.
     add('identMot','Identificação motorista',10,p.identMot,true);
-    add('identCam','Cobertura câmera',5,p.identCam,true);
     add('jornada','Aderência de jornada e ponto',20,p.ajPonto,!!(BASES&&BASES.ponto));
     add('alertas','Outros alertas (sem velocidade)',15,rankClamp(100*(1-Math.min(1,(p.alertRate||0)/ALERT_CAP))),hasAlerts);
     add('multas','Multas conduta',10,rankClamp(100*(1-Math.min(1,(p.multaRate||0)/MULTA_CAP))),hasMultas);
@@ -8099,7 +8101,7 @@ async function _buildWebviewPayload(rows){
       mediaTrimble:r2(md.t!=null?md.t:null),mediaAbast:r2(md.a!=null?md.a:null),mensal};
   }).filter(d=>d.cpf);
   try{ applyResumoRankScores(agg.data, rows); }catch(e){}
-  return {v:1,scoreRulesVersion:2,publishedAt:Date.now(),dataMin:cov.min||'',dataMax:cov.max||'',drivers};
+  return {v:1,scoreRulesVersion:3,publishedAt:Date.now(),dataMin:cov.min||'',dataMax:cov.max||'',drivers};
 }
 
 async function _loadPublishedWebview(manifest){
@@ -8109,7 +8111,9 @@ async function _loadPublishedWebview(manifest){
     const r=await fetch('dados/'+manifest.webviewFile+'?v='+ver,{cache:'force-cache'});
     if(!r.ok)return false;
     const data=await r.json();
-    if(data.scoreRulesVersion!==2)return false;
+    // Não usar nota pré-calculada de pacote anterior (que incluía cobertura da câmera).
+    // Sem pacote v3, o boot recalcula a nota pela base principal publicada.
+    if(data.scoreRulesVersion!==3)return false;
     const ck=cpfKey(E.cpf), d=((data&&data.drivers)||[]).find(x=>cpfKey(x.cpf)===ck);
     if(!d)return false;
     MOBILE_DATA={v:data.v||1,publishedAt:data.publishedAt||manifest.publishedAt||0,dataMin:data.dataMin||'',dataMax:data.dataMax||'',drivers:[d]};

@@ -214,6 +214,15 @@ Ponderada **pelo tempo** (reflete a trilha vermelha da linha do tempo):
 identificação = Σ MOV_IDN / Σ MOV_TOT      (minutos identificados ÷ minutos de movimento)
 ```
 Usa `MOV_TOT`/`MOV_IDN` por `placa|dia` (do Boletim/movimentação).
+
+**Regra da nota (27/10/2026):** a cobertura da câmera continua sendo medida para
+saúde do equipamento e auditoria de identificação, mas **não compõe a nota do
+motorista**, nem restringe a seleção dos melhores colocados. A identificação
+do motorista em si continua sendo um componente distinto da nota.
+O peso-base anteriormente atribuído à cobertura (5) é redistribuído
+proporcionalmente entre os demais critérios ativos; velocidade mantém
+peso de 15% quando apurada. O WebView precisa de pacote atualizado com
+`scoreRulesVersion=3`; pacotes antigos usam a base integral para recálculo.
 > **Por que ponderar pelo tempo:** a média simples dos %s diários mascarava dias longos sem
 > identificação (aparecia 97% com a trilha cheia de vermelho). Corrigido.
 
