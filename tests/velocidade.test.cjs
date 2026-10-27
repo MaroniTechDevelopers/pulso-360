@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync('index.html','utf8');
 function source(name){const i=html.indexOf('function '+name+'(');assert.notEqual(i,-1,name);const tail=html.slice(i),next=tail.slice(1).search(/\n(?:function |async function |let |const |\/\*)/);return next<0?tail:tail.slice(0,next+1);}
-function ctx(){const c=vm.createContext({console,Set,Map,Date,Math,Number,String});for(const n of ['norm','alertaEhVelocidade','rankAlertSummary'])vm.runInContext(source(n),c);vm.runInContext(html.split('// BEGIN SPEED SCORE HELPERS')[1].split('// END SPEED SCORE HELPERS')[0],c);Object.assign(c,{AL_TL:null,BOL_DAY:null,activeRange:()=>null,alertasResumo:()=>({total:0,tipos:{}})});return c;}
+function ctx(){const c=vm.createContext({console,Set,Map,Date,Math,Number,String});for(const n of ['norm','alertaEhVelocidade','alertaEhSemIdentificacaoMotorista','resumoSemAlertaIdentificacao','rankAlertSummary'])vm.runInContext(source(n),c);vm.runInContext(html.split('// BEGIN SPEED SCORE HELPERS')[1].split('// END SPEED SCORE HELPERS')[0],c);Object.assign(c,{AL_TL:null,BOL_DAY:null,activeRange:()=>null,alertasResumo:()=>({total:0,tipos:{}})});return c;}
 const recs=[{data:'2026-10-21',mov:[{ini:0,fim:600}]}];
 const ev=(v,extra={})=>['2026-10-21',100,'A','EXCESSO_VELOCIDADE',{velocidadeKmh:v,...extra}];
 test('faixas 85/86/90/91/98/99 com desconto de no máximo 15%',()=>{const c=ctx();for(const [v,p] of [[0,0],[85,0],[85.9,0],[86,5],[90,5],[90.5,10],[91,10],[98,10],[98.1,15],[99,15],[150,15]])assert.equal(c.descontoVelocidade(v),p);});

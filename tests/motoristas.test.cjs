@@ -8,7 +8,7 @@ const html=fs.readFileSync('index.html','utf8');
 function source(name){const start=html.indexOf('function '+name+'(');assert.notEqual(start,-1,name);const rest=html.slice(start);const next=rest.slice(1).search(/\n(?:function |async function |let |const |\/\*)/);return next<0?rest:rest.slice(0,next+1);}
 function context(){
  const c=vm.createContext({console,Set,Map,Date,Number,String,Math});
- const names=['norm','cpfKey','opFamily','classMotCad','motCadPassClass','classMotLabel','cpfCurto','_motorWorkerCode','matchPontoCad'];
+ const names=['norm','alertaEhSemIdentificacaoMotorista','cpfKey','opFamily','classMotCad','motCadPassClass','classMotLabel','cpfCurto','_motorWorkerCode','matchPontoCad'];
  for(const name of ['OP_FAMILIAS','OP_CANON','OP_NAOOP'])vm.runInContext(html.match(new RegExp('^const '+name+'=.*$','m'))[0],c);
  for(const name of names)vm.runInContext(source(name),c);
  vm.runInContext("function cpfDeNome(){return '';} function nomeCanon(n){return norm(n);}",c);

@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
 const html=fs.readFileSync('index.html','utf8');
-function context(){const c=vm.createContext({console});vm.runInContext("function norm(s){return String(s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toUpperCase().trim();}",c);vm.runInContext(html.split('// BEGIN TREATMENT EVOLUTION HELPERS')[1].split('// END TREATMENT EVOLUTION HELPERS')[0],c);return c;}
+function context(){const c=vm.createContext({console});vm.runInContext("function norm(s){return String(s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toUpperCase().trim();}",c);vm.runInContext("function alertaEhSemIdentificacaoMotorista(){return false;}",c);vm.runInContext(html.split('// BEGIN TREATMENT EVOLUTION HELPERS')[1].split('// END TREATMENT EVOLUTION HELPERS')[0],c);return c;}
 const t={data:'2026-10-19',obs:'Uso de celular ao dirigir; desligar a ignição ao trocar de motoristas nas viagens em dupla. Velocidade tbm abordada.'};
 const byDay={'2026-10-17':{hCond:600,hCondWithPoint:600},'2026-10-18':{hCond:600,hCondWithPoint:600},'2026-10-19':{hCond:1440},'2026-10-20':{hCond:300,hCondWithPoint:300},'2026-10-21':{hCond:300,hCondWithPoint:300}};
 const coverage={de:'2026-10-01',ate:'2026-10-21'};
