@@ -2353,11 +2353,23 @@ function auditMetrics(rows){
 
   const movGroups=Object.create(null), pointByDriver=Object.create(null), pointByBaseDay=Object.create(null), envByDriver=Object.create(null);
   const pointDayKeys=new Set(), movementDayKeys=new Set(), motoristasHex=new Set();
+  // O painel possui milhares de eventos mas poucos dias distintos.
+  // Memorizar conversões por chamada evita Date.parse/toISOString repetidos sem mudar as datas.
+  const baseMsByDate=new Map(), isoByDayStart=new Map();
+  const baseMsFor=(value)=>{
+    const date=String(value||'');
+    if(!baseMsByDate.has(date))baseMsByDate.set(date,Date.parse(date));
+    return baseMsByDate.get(date);
+  };
+  const isoFor=(dayStart)=>{
+    if(!isoByDayStart.has(dayStart))isoByDayStart.set(dayStart,new Date(dayStart*60000).toISOString().slice(0,10));
+    return isoByDayStart.get(dayStart);
+  };
   let invalidMov=0,invalidPoint=0,rawMov=0,dupJornada=0,dupMov=0;
 
   for(const r of rows){
     if(!r)continue;
-    const nome=r.motoristaEscala||'—', nn=norm(nome)||'—', baseMs=Date.parse(r.data||'');
+    const nome=r.motoristaEscala||'—', nn=r._nMot||norm(nome)||'—', baseMs=baseMsFor(r.data);
     if(!Number.isFinite(baseMs))continue; const baseMin=baseMs/60000;
 
     // MOVIMENTAÇÃO: usa o timestamp civil real derivado de data + minuto relativo.
@@ -2368,7 +2380,7 @@ function auditMetrics(rows){
       if(dur>1440){invalidMov++;continue;}
       const absA=baseMin+ai, absB=baseMin+bi, km0=Math.max(0,+s.km||0), lit0=Math.max(0,+s.litros||0), pl=placaBR(s.placa||'');
       _auditSplitCivil(absA,absB,(ds,a,b)=>{
-        const iso=new Date(ds*60000).toISOString().slice(0,10), k=nn+'|'+iso, frac=(b-a)/(absB-absA);
+        const iso=isoFor(ds), k=nn+'|'+iso, frac=(b-a)/(absB-absA);
         (movGroups[k]=movGroups[k]||[]).push({nn,nome,date:iso,dayStart:ds,a:a-ds,b:b-ds,absA:a,absB:b,km:km0*frac,litros:lit0*frac,placa:pl,srcDur:b-a});
       });
     }
@@ -2423,7 +2435,7 @@ function auditMetrics(rows){
 
   // Ponto canônico por motorista (tempo efetivamente registrado, sem sobreposição duplicada).
   const mergedPointByDriver=Object.create(null),pointSegments=[]; let hPonto=0;
-  for(const nn in pointByDriver){const m=_auditMergeIntervals(pointByDriver[nn]);mergedPointByDriver[nn]=m;hPonto+=m.reduce((s,x)=>s+x[1]-x[0],0);for(const x of m)_auditSplitCivil(x[0],x[1],(ds,a,b)=>{const iso=new Date(ds*60000).toISOString().slice(0,10);pointSegments.push({nn,date:iso,dayStart:ds,a:a-ds,b:b-ds,absA:a,absB:b});const d=(byDay[iso]=byDay[iso]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hPonto+=b-a;});}
+  for(const nn in pointByDriver){const m=_auditMergeIntervals(pointByDriver[nn]);mergedPointByDriver[nn]=m;hPonto+=m.reduce((s,x)=>s+x[1]-x[0],0);for(const x of m)_auditSplitCivil(x[0],x[1],(ds,a,b)=>{const iso=isoFor(ds);pointSegments.push({nn,date:iso,dayStart:ds,a:a-ds,b:b-ds,absA:a,absB:b});const d=(byDay[iso]=byDay[iso]||{hCond:0,km:0,litros:0,hFora:0,hDedo:0,hCondWithPoint:0,hPonto:0,hExtra:0});d.hPonto+=b-a;});}
 
   // Hora extra por jornada/dia de origem, depois da deduplicação dos pares de ponto.
   const extraByDay=Object.create(null); let hExtra=0,jornadasExtra=0;
@@ -7969,10 +7981,23 @@ function idbOpen(){ return new Promise((res,rej)=>{let r;try{r=indexedDB.open('i
 async function idbSet(k,v){try{const db=await idbOpen();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});db.close();return true;}catch(e){return false;}}
 async function idbGet(k){try{const db=await idbOpen();const v=await new Promise((res,rej)=>{const tx=db.transaction('kv','readonly'),rq=tx.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});db.close();return v;}catch(e){return null;}}
 let _cacheTimer=null;
-function agendarCache(){clearTimeout(_cacheTimer);_cacheTimer=setTimeout(()=>{const run=()=>cacheSalvar();if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:12000});else setTimeout(run,0);},4500);}
+// IndexedDB usa structured clone e pode duplicar o snapshot inteiro na RAM.
+// A publicacao atual ultrapassa 1 GB: salvar esse cache automaticamente causa picos
+// de memoria e travamentos; manter os dados publicados e a consulta integral inalterados.
+const PULSO_CACHE_MAX_RAW_BYTES=256*1024*1024;
+let PULSO_PUBLISHED_RAW_BYTES=0;
+function pulsoCachePesado(){
+  return PULSO_PUBLISHED_RAW_BYTES>PULSO_CACHE_MAX_RAW_BYTES ||
+    !!(REAL && RAW && Array.isArray(RAW.records) && RAW.records.length>50000);
+}
+function agendarCache(){
+  clearTimeout(_cacheTimer);
+  if(pulsoCachePesado())return; // nunca clonar mais de 1 GB para o IndexedDB
+  _cacheTimer=setTimeout(()=>{const run=()=>cacheSalvar();if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:12000});else setTimeout(run,0);},4500);
+}
 async function cacheSalvar(){
   try{
-    if(!REAL||!RAW)return;
+    if(!REAL||!RAW||pulsoCachePesado())return;
     const S=snapshotState(), ts=Date.now();
     // Caminho rápido: structured clone do IndexedDB, sem stringify/gzip na próxima abertura.
     const ok=await idbSet('estadoFast',{v:1,s:S,ts});
@@ -8592,7 +8617,7 @@ $('#clearData').onclick=()=>{ pending={ponto:null,mov:null}; RAW=null; REAL=fals
   }
   function sync(kpis){
     const cards=[...kpis.children].filter(x=>x.classList&&x.classList.contains('kpi'));
-    const sig=cards.map(c=>(c.innerText||'').trim()).join('||');
+    const sig=cards.map(c=>(c.textContent||'').trim()).join('||');
     if(sig===lastSig&&rail.querySelectorAll('.kpi').length===cards.length)return cards.length;
     lastSig=sig;
     rail.innerHTML='<div class="rail-title">Indicadores</div>';
@@ -8682,6 +8707,7 @@ async function bootPulso360(){
     // restaurando, indexando e renderizando uma base antiga para logo depois descartá-la.
     if(bt)bt.textContent='Verificando publicação…';
     try{manifest=await _fetchPublishedManifest();}catch(e){}
+    PULSO_PUBLISHED_RAW_BYTES=Number(manifest&&manifest.rawBytes)||0;
     if(window.SC_EMBED){
       if(bt)bt.textContent='Carregando WebView do motorista…';
       const webOk=manifest?await _loadPublishedWebview(manifest):false;
