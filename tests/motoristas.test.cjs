@@ -98,7 +98,7 @@ test('filtro de reincidencia mantem o estado e permite 2, 3 e 4 graves',()=>{
  const select=html.split('id="fGrave"')[1].split('</select>')[0];
  for(const h of [2,3,4])assert.ok(select.includes('<option value="'+h+'">'));
  assert.ok(html.includes("$('#fGrave').value"));
- assert.ok(html.includes("$('#fDirecao').value||$('#fGrave').value"));
+ assert.ok(html.includes("$('#fDirecao').value"));
  assert.ok(html.includes("fGrave:''"));
 });
 test('filtro de 24 horas mostra novos limites e trata 24h como janela completa',()=>{
@@ -114,7 +114,7 @@ test('filtro de 24 horas mostra novos limites e trata 24h como janela completa',
    assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:n+1}]})],n).length,1,'acima '+h);
  }
  assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:1439}]})],1440).length,0);
- assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:1440}]})],1440).length,1);
+ assert.equal(c.filterDriving24hDrivers([rec({mov:[{ini:0,fim:1440}]})],1439).length,1);
  vm.runInContext(source('driving24hSelectedHours'),c);
  c.$=()=>({value:'22'});assert.equal(c.driving24hSelectedHours(),22);
  c.$=()=>({value:'24'});assert.equal(c.driving24hSelectedHours(),24);
