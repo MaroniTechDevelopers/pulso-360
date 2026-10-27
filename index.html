@@ -50,22 +50,54 @@
   a{color:var(--s2)}
   .tnum{font-variant-numeric:tabular-nums}
 
-  /* ============ HEADER ============ */
-  header{
-    position:sticky; top:0; z-index:20; color:#e5e7eb;
-    background:linear-gradient(180deg,var(--navy-2),var(--navy)); padding:15px 22px 0;
-    border-bottom:1px solid rgba(255,255,255,.06); box-shadow:0 1px 0 var(--gold), var(--shadow);
+  /* ============ PULSO 360 · HEADER CORPORATIVO ============ */
+  body > header{
+    position:sticky;top:0;z-index:20;isolation:isolate;
+    color:#eff5ff;overflow:visible;
+    background:
+      radial-gradient(ellipse 42% 120% at 22% -12%,rgba(15,83,159,.40),transparent 100%),
+      radial-gradient(ellipse 36% 90% at 82% 0%,rgba(24,65,116,.34),transparent 100%),
+      linear-gradient(111deg,#0a1426 0%,#15243c 49%,#0c172b 100%);
+    padding:14px 22px 0;border-bottom:2px solid var(--gold);
+    box-shadow:0 8px 26px rgba(4,13,28,.16);
   }
-  .head-top{display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap}
-  .brand{display:flex; align-items:center; gap:13px; flex:1; min-width:260px}
-  .brand-logo{height:44px;width:auto;flex:none;display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,.35))}
-  .brand h1{font-family:"Barlow Condensed","Barlow",system-ui,sans-serif;font-weight:800;font-size:27px;letter-spacing:.03em;color:#fff;line-height:1;display:flex;align-items:center;gap:11px;flex-wrap:wrap}
-  .brand h1 .gold{color:var(--gold)}
-  .brand h1 .pulse{height:18px;width:auto;opacity:.6;flex:none}
-  .brand h1 .pulse polyline{fill:none;stroke:var(--gold);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-  .brand .sub{color:#9aa4b2; font-size:12px; margin-top:3px; letter-spacing:.01em}
-  .brand .sub b{color:#c9d2e0}
-  .brand .sub b{color:var(--gold)}
+  body > header::before{
+    content:'';position:absolute;z-index:-1;inset:0;pointer-events:none;
+    background-image:
+      linear-gradient(rgba(35,139,236,.10) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(35,139,236,.10) 1px,transparent 1px);
+    background-size:39px 39px;
+    mask-image:linear-gradient(90deg,rgba(0,0,0,.55),rgba(0,0,0,.24) 72%,transparent);
+  }
+  body > header::after{
+    content:'';position:absolute;z-index:-1;right:18%;top:-124px;
+    width:330px;height:330px;border-radius:50%;pointer-events:none;opacity:.26;
+    background:repeating-radial-gradient(circle,transparent 0 20px,rgba(31,142,245,.36) 21px 22px,transparent 23px 40px);
+  }
+  .head-top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:relative}
+  .brand{display:flex;align-items:center;gap:14px;flex:1 1 380px;min-width:260px}
+  .brand-emblem{
+    width:58px;height:58px;display:grid;place-items:center;position:relative;flex:none;
+    border:1px solid rgba(245,200,0,.40);border-radius:15px;
+    background:radial-gradient(circle at 50% 22%,rgba(245,200,0,.20),rgba(245,200,0,.045) 68%,rgba(3,12,24,.23));
+    box-shadow:inset 0 1px rgba(255,234,122,.15),0 0 21px rgba(245,200,0,.08);
+  }
+  .brand-emblem::after{
+    content:'';position:absolute;inset:5px;pointer-events:none;border:1px solid rgba(245,200,0,.12);border-radius:10px;
+  }
+  .brand-logo{width:50px;height:50px;object-fit:contain;display:block;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+  .brand-copy{min-width:0}
+  .brand-eyebrow{color:rgba(193,215,240,.75);font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;margin:0 0 3px}
+  .brand h1{display:flex;align-items:center;gap:9px;flex-wrap:nowrap;white-space:nowrap;
+    font-family:"Barlow Condensed","Barlow",system-ui,sans-serif;font-weight:800;
+    font-size:clamp(27px,2.5vw,35px);letter-spacing:.015em;line-height:1;color:#fff;
+    text-shadow:0 1px 16px rgba(0,0,0,.16)
+  }
+  .brand h1 .gold{color:var(--gold);text-shadow:0 0 15px rgba(245,200,0,.18)}
+  .brand h1 .pulse{height:21px;width:clamp(58px,8.8vw,162px);opacity:.96;flex:none;overflow:visible}
+  .brand h1 .pulse polyline{fill:none;stroke:#ffd329;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 3px rgba(245,200,0,.36))}
+  .brand .sub{color:#aebdd1;font-size:12px;margin-top:5px;letter-spacing:.008em;line-height:1.35}
+  .brand .sub b{color:var(--gold);font-weight:700}
   .head-tools{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
   .pill{
     display:inline-flex;align-items:center;gap:7px;
@@ -103,7 +135,7 @@
   }
   nav.tabs button .badge{font-size:11px;background:rgba(255,255,255,.1);color:#c7cfda;border-radius:20px;padding:1px 7px;border:1px solid rgba(255,255,255,.14)}
   nav.tabs button:hover{color:#fff; background:rgba(255,255,255,.06)}
-  nav.tabs button.active{color:#fff; background:color-mix(in srgb,var(--gold) 16%,transparent); border-color:color-mix(in srgb,var(--gold) 45%,transparent)}
+  nav.tabs button.active{color:#fff;background:rgba(245,200,0,.16);border-color:rgba(245,200,0,.68);box-shadow:inset 0 1px 0 rgba(255,239,163,.14)}
   nav.tabs button.active .badge{background:color-mix(in srgb,var(--gold) 30%,transparent);color:#fff;border-color:transparent}
 
   /* ============ LAYOUT ============ */
@@ -884,13 +916,17 @@
 
   @media(max-width:560px){
     /* Cabeçalho / marca */
-    header{padding:12px 14px 0}
+    body > header{padding:10px 12px 0}
+    body > header::after{right:0;top:-100px;width:220px;height:220px}
     .head-top{gap:10px}
-    .brand{min-width:0;gap:10px}
-    .brand-logo{height:36px}
-    .brand h1{font-size:22px;gap:8px}
-    .brand h1 .pulse{height:14px}
-    .brand .sub{font-size:11px}
+    .brand{min-width:0;gap:9px;flex-basis:100%}
+    .brand-emblem{width:43px;height:43px;border-radius:11px}
+    .brand-emblem::after{inset:4px;border-radius:7px}
+    .brand-logo{width:36px;height:36px}
+    .brand-eyebrow{font-size:8px;letter-spacing:.12em;margin-bottom:2px}
+    .brand h1{font-size:25px;gap:6px}
+    .brand h1 .pulse{height:15px;width:clamp(30px,16vw,74px)}
+    .brand .sub{font-size:10px;line-height:1.3;margin-top:4px}
     .head-tools{width:100%;gap:8px}
     .head-tools .pill{flex:1 1 100%;justify-content:center}
     .head-tools .btn{flex:1 1 0;justify-content:center;text-align:center}
@@ -1069,9 +1105,12 @@
 <header>
   <div class="head-top">
     <div class="brand">
-      <img class="brand-logo" id="brandLogo" alt="Grupo Maroni" src="">
-      <div>
-        <h1>Pulso <span class="gold">360</span><svg class="pulse" viewBox="0 0 170 24" aria-hidden="true" preserveAspectRatio="xMidYMid meet"><polyline points="0,12 44,12 52,12 57,9 61,12 68,3 74,21 80,12 170,12"/></svg></h1>
+      <div class="brand-emblem">
+        <img class="brand-logo" id="brandLogo" alt="Grupo Maroni" src="">
+      </div>
+      <div class="brand-copy">
+        <div class="brand-eyebrow">Inteligência de condução</div>
+        <h1>Pulso <span class="gold">360</span><svg class="pulse" viewBox="0 0 170 24" aria-hidden="true" preserveAspectRatio="xMidYMid meet"><polyline points="0,12 43,12 51,12 58,8 64,12 71,3 78,21 85,12 170,12"/></svg></h1>
         <div class="sub">Conferência de jornada · ponto × movimentação × identificação facial · <b>Grupo Maroni</b></div>
       </div>
     </div>
