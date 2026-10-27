@@ -69,6 +69,38 @@ test('janela móvel confere com referência minuto a minuto em cenários determi
   assert.equal(c.filterDriving24hDrivers(records,max-1).length,3,'máximo encontrado '+trial);
  }
 });
+test('reincidencia grave usa pico >=100 km/h, deduplica evento e respeita dias/CPF',()=>{
+ const c=context();
+ for(const x of ['alertaEhVelocidade','velocidadeKmh'])vm.runInContext(source(x),c);
+ const D='2026-10-22',N='JOAO SILVA';
+ c.AL_TL={[N]:[
+   [D,30,'A','EXCESSO DE VELOCIDADE',{key:'a',cpf:'12345678901',velocidadeKmh:100}],
+   [D,30,'A','EXCESSO DE VELOCIDADE',{key:'a',cpf:'12345678901',velocidadeKmh:100}],
+   [D,60,'A','EXCESSO DE VELOCIDADE',{key:'b',cpf:'12345678901',velocidadeKmh:101}],
+   [D,90,'A','EXCESSO DE VELOCIDADE',{key:'c',cpf:'12345678901',velocidadeKmh:99}],
+   [D,110,'A','EXCESSO DE VELOCIDADE',{key:'d',cpf:'12345678901',velocidadeKmh:null}],
+   [D,115,'A','CELULAR',{key:'e',cpf:'12345678901',velocidadeKmh:110}],
+   [D,130,'A','EXCESSO DE VELOCIDADE',{key:'f',cpf:'99988877766',velocidadeKmh:120}],
+   ['2026-10-23',30,'A','EXCESSO DE VELOCIDADE',{key:'g',cpf:'12345678901',velocidadeKmh:120}],
+ ]};
+ const r=[rec({data:D,mov:[{ini:0,fim:120}]}),rec({data:'2026-10-24',mov:[{ini:0,fim:90}]})];
+ let counts=c.speedGraveDriverCounts(r);
+ assert.equal(counts.get('C:12345678901'),2);
+ assert.equal(c.filterSpeedGraveRecurrentDrivers(r,2).rows.length,2);
+ assert.equal(c.filterSpeedGraveRecurrentDrivers(r,3).rows.length,0);
+ assert.equal(c.filterSpeedGraveRecurrentDrivers(r,4).rows.length,0);
+ c.AL_TL[N].push([D,160,'A','EXCESSO DE VELOCIDADE',{key:'z',cpf:'12345678901',velocidadeKmh:100.1}]);
+ assert.equal(c.filterSpeedGraveRecurrentDrivers(r,3).drivers,1);
+ assert.equal(c.filterSpeedGraveRecurrentDrivers(r,3).events,3);
+ assert.equal(c.filterSpeedGraveRecurrentDrivers([rec({data:'2026-10-24'})],3).drivers,0);
+});
+test('filtro de reincidencia mantem o estado e permite 2, 3 e 4 graves',()=>{
+ const select=html.split('id="fGrave"')[1].split('</select>')[0];
+ for(const h of [2,3,4])assert.ok(select.includes('<option value="'+h+'">'));
+ assert.ok(html.includes("$('#fGrave').value"));
+ assert.ok(html.includes("$('#fDirecao').value||$('#fGrave').value"));
+ assert.ok(html.includes("fGrave:''"));
+});
 test('filtro de 24 horas mostra novos limites e trata 24h como janela completa',()=>{
  const i=html.indexOf('<select id="fDirecao"'),j=html.indexOf('</select>',i);
  assert.ok(i>=0&&j>i,'filtro existe');
