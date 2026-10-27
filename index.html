@@ -1936,7 +1936,8 @@ let REAL = !!RAW;
 // ===== BASE ÚNICA EM TODOS OS DISPOSITIVOS =====
 // Celular, WebView Trizy e desktop consomem a mesma publicação principal.
 // As variáveis abaixo permanecem apenas por compatibilidade com funções antigas não acionadas.
-let MOBILE_LIGHT=false, MOBILE_DATA=null, MOBILE_Q='';
+let MOBILE_LIGHT=false, MOBILE_DATA=null, MOBILE_Q='', MOBILE_LEGACY=false;
+let SC_EMBED_BOOT_ERROR=null;
 let RECORDS = [];           // registros motorista-dia já com análise
 let BASES = {ponto:true, mov:true, trim:true};   // quais das 3 fontes estão carregadas
 let ALERTS = null;          // agregado de alertas por motorista (norm) — do relatório de alertas
@@ -5192,7 +5193,7 @@ function _scTryOpenEmbed(){
   const modal=$('#scoreModal'), shell=$('#scoreShell'); if(!modal||!shell) return;
   modal.style.display='flex';
   shell.innerHTML='<div class="sc-body"><div class="empty" style="padding:48px;text-align:center">Montando o scorecard…</div></div>';
-  setTimeout(()=>{ try{ if(MOBILE_LIGHT&&MOBILE_DATA)renderScorecardLight(nome); else renderScorecard(nome); }catch(e){ console.error('[Pulso360] embed scorecard',e); shell.innerHTML='<div class="sc-body"><div class="empty" style="padding:48px;text-align:center">Não foi possível montar o scorecard.</div></div>'; } },0);
+  setTimeout(()=>{ try{ if(MOBILE_LIGHT&&MOBILE_DATA){ if(MOBILE_LEGACY)renderScorecardLegacy(nome); else renderScorecardLight(nome); }else renderScorecard(nome); }catch(e){ console.error('[Pulso360] embed scorecard',e); shell.innerHTML='<div class="sc-body"><div class="empty" style="padding:48px;text-align:center">Não foi possível montar o scorecard.</div></div>'; } },0);
 }
 /* ===== BOTÃO "Abrir webview (Trizy)" na visão do PAINEL (dentro de .sc-actions, por isso some no próprio webview via body.sc-embed): resolve o CPF do motorista aberto, copia o link e abre pré-visualização ===== */
 function _scCpfDoScorecard(){
@@ -5305,6 +5306,29 @@ function renderScorecard(nome){
   </div>`;
   shell.innerHTML=scBrand+body;
 }
+
+/* O pacote v2 (antes de 27/10) contém notas calculadas com cobertura da câmera.
+   Exibe apenas os dados operacionais; não apresenta nota, medalha ou bonificação antigas. */
+function renderScorecardLegacy(nome){
+  const shell=document.getElementById('scoreShell');
+  const d=((MOBILE_DATA&&MOBILE_DATA.drivers)||[]).find(x=>norm(x.nome)===norm(nome));
+  if(!shell||!d){ _scEmbedMsg('Resumo indisponível','Não foi possível identificar o condutor neste pacote.'); return; }
+  const val=v=>(Number.isFinite(Number(v))&&v!==null&&v!=='')?Math.round(Number(v)).toLocaleString('pt-BR'):'—';
+  const hora=Number.isFinite(Number(d.hCond))?(Number(d.hCond)/60).toFixed(1).replace('.',','):'—';
+  const met=[
+    ['KM rodados',val(d.km)],
+    ['Dias com movimentação',val(d.movDays)],
+    ['Dias com ponto',val(d.pontoDays)],
+    ['Horas de condução',hora]
+  ];
+  const cards=met.map(x=>'<div class="card" style="padding:14px"><div class="lab">'+scEsc(x[0])+'</div><div class="val tnum" style="font-size:27px">'+scEsc(x[1])+'</div></div>').join('');
+  shell.innerHTML='<div class="sc-brand"><span class="mk"><img src="'+LOGO_MARONI+'" alt="Pulso 360"></span><div class="bt"><b>PULSO 360</b><small>Grupo Maroni</small></div></div>'
+    +'<div class="sc-body"><div class="card" style="padding:19px;border-left:4px solid var(--warning);margin-bottom:15px">'
+    +'<h2 style="font-size:23px">'+scEsc(d.nome)+'</h2><p>'+scEsc(d.op||'')+'</p>'
+    +'<b>Nota temporariamente indisponível</b><p>Este pacote de dados foi publicado antes da atualização das regras de pontuação de 27/10/2026. Para não exibir uma nota ou bonificação incorreta, esses valores estão ocultos até a republicação do pacote de dados na versão 3.</p>'
+    +'</div><div class="kgrid p4">'+cards+'</div><p class="sc-hint" style="margin-top:15px">Os dados operacionais acima pertencem à última publicação disponível. A atualização precisa ser feita pela equipe responsável pela base de dados.</p></div>';
+}
+
 function renderScorecardLight(nome){
   const shell=$('#scoreShell'), nn=norm(nome);
   const d=((MOBILE_DATA&&MOBILE_DATA.drivers)||[]).find(x=>x.nn===nn||norm(x.nome)===nn);
@@ -7882,6 +7906,54 @@ async function _snapGz(root){
   return {gz:true,b,rawLen};
 }
 async function _gunz(bytes){ if(typeof DecompressionStream==='undefined') throw new Error('Este navegador não suporta descompactação gzip'); const ds=new DecompressionStream('gzip'); const w=ds.writable.getWriter(); w.write(bytes); w.close(); return new Uint8Array(await new Response(ds.readable).arrayBuffer()); }
+
+/* Proteção de memória: o snapshot atual passa de 1 GB descompactado.
+   Em vez de derrubar a aba, oferece consulta operacional leve pelo resumo dos
+   motoristas. O modo completo permanece disponível sob solicitação explícita. */
+const PULSO_MAX_AUTOMATIC_RAW_BYTES=450*1024*1024;
+async function _showMemorySafeRoot(manifest){
+  const main=document.querySelector('main'),tabs=document.getElementById('tabs');
+  if(!main)return;
+  if(tabs)tabs.style.display='none';
+  const gb=(Number(manifest.rawBytes||0)/1e9).toFixed(2).replace('.',',');
+  main.innerHTML='<div class="card" style="padding:24px;max-width:950px;margin:24px auto;border-left:5px solid var(--warning)">'
+    +'<h2>Modo leve — proteção de memória</h2>'
+    +'<p>O painel completo contém '+scEsc(gb)+' GB de dados descompactados. A abertura automática foi suspensa para evitar a falha <b>Out of Memory</b> do navegador. A base não foi apagada.</p>'
+    +'<p>Consulte um condutor por vez abaixo. Nesta versão, o resumo individual exibe somente informações operacionais quando as regras de pontuação do pacote estão desatualizadas.</p>'
+    +'<label for="safeDriverSearch">Buscar condutor (mínimo 3 caracteres)</label>'
+    +'<input id="safeDriverSearch" type="search" autocomplete="off" placeholder="Digite o nome do condutor" style="width:100%;padding:11px;margin:8px 0 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink)">'
+    +'<div id="safeDriverList" style="display:grid;gap:8px">Preparando consulta leve…</div>'
+    +'<p style="margin-top:20px;color:var(--muted)">Para recuperar todas as abas, a publicação de dados precisa ser particionada e os resumos recalculados com as regras atuais.</p>'
+    +'<a href="?full=1" style="font-size:12px">Tentar modo completo (uso elevado de memória; pode travar o navegador)</a>'
+    +'</div>';
+  const box=document.getElementById('safeDriverList'),input=document.getElementById('safeDriverSearch');
+  try{
+    if(!manifest.webviewFile)throw new Error('Arquivo leve não encontrado');
+    const ver=encodeURIComponent(String(manifest.publishedAt||1));
+    const r=await fetch('dados/'+manifest.webviewFile+'?v='+ver,{cache:'force-cache'});
+    if(!r.ok)throw new Error('Falha ao carregar o arquivo de resumos');
+    const data=await r.json(),drivers=Array.isArray(data.drivers)?data.drivers:[];
+    if(!drivers.length)throw new Error('Não há resumos de condutores nesta publicação');
+    box.textContent='Digite pelo menos 3 caracteres para localizar o condutor.';
+    const update=()=>{
+      const q=norm(input.value.trim());
+      box.replaceChildren();
+      if(q.length<3){box.textContent='Digite pelo menos 3 caracteres para localizar o condutor.';return;}
+      const hits=drivers.filter(d=>d&&d.cpf&&norm(d.nome).includes(q)).slice(0,30);
+      if(!hits.length){box.textContent='Nenhum condutor encontrado neste pacote.';return;}
+      for(const d of hits){
+        const a=document.createElement('a');
+        a.href=location.pathname+'?cpf='+encodeURIComponent(d.cpf);
+        a.style.cssText='display:block;border:1px solid var(--border);border-radius:8px;padding:11px 14px;text-decoration:none;color:var(--ink);background:var(--surface-2)';
+        a.textContent=(d.nome||'Condutor')+' · '+(d.op||'operação não informada');
+        box.appendChild(a);
+      }
+      if(hits.length===30){const note=document.createElement('small');note.textContent='Exibindo os primeiros 30 resultados. Refine a busca.';box.appendChild(note);}
+    };
+    input.addEventListener('input',update);
+  }catch(e){console.warn('[Pulso360] modo leve',e);box.textContent='Não foi possível consultar os resumos. O arquivo de dados precisa ser republicado.';}
+}
+
 const CACHE_PUB_KEY='pulso360_cache_pub_v1';
 async function _fetchPublishedManifest(){
   try{ const r=await fetch('dados/manifesto.json?_='+Date.now(),{cache:'no-store'}); if(!r.ok)return null; const m=await r.json(); return (m&&m.v===1&&Array.isArray(m.parts)&&m.parts.length)?m:null; }catch(e){return null;}
@@ -8105,22 +8177,40 @@ async function _buildWebviewPayload(rows){
 }
 
 async function _loadPublishedWebview(manifest){
+  const E=window.SC_EMBED;
+  SC_EMBED_BOOT_ERROR=null;
+  if(!E||(!E.cpf&&!E.sc)||!manifest||!manifest.webviewFile){
+    SC_EMBED_BOOT_ERROR=['WebView indisponível','O pacote de resumos individuais não foi encontrado. Solicite a republicação dos dados.'];
+    return false;
+  }
   try{
-    const E=window.SC_EMBED; if(!E||!E.cpf||!manifest||!manifest.webviewFile)return false;
     const ver=encodeURIComponent(String(manifest.publishedAt||1));
     const r=await fetch('dados/'+manifest.webviewFile+'?v='+ver,{cache:'force-cache'});
-    if(!r.ok)return false;
+    if(!r.ok)throw new Error('Pacote WebView HTTP '+r.status);
     const data=await r.json();
-    // Não usar nota pré-calculada de pacote anterior (que incluía cobertura da câmera).
-    // Sem pacote v3, o boot recalcula a nota pela base principal publicada.
-    if(data.scoreRulesVersion!==3)return false;
-    const ck=cpfKey(E.cpf), d=((data&&data.drivers)||[]).find(x=>cpfKey(x.cpf)===ck);
-    if(!d)return false;
+    const v=Number(data&&data.scoreRulesVersion);
+    if(v!==2&&v!==3){
+      SC_EMBED_BOOT_ERROR=['Versão de dados incompatível','O resumo individual precisa ser republicado com as regras de nota atuais.'];
+      return false;
+    }
+    const ds=Array.isArray(data.drivers)?data.drivers:[];
+    const matches=E.cpf
+      ? ds.filter(x=>cpfKey(x.cpf)===cpfKey(E.cpf))
+      : ds.filter(x=>norm(x.nome)===norm(E.sc));
+    if(matches.length!==1){
+      SC_EMBED_BOOT_ERROR=['Motorista não encontrado','Não há um resumo individual único para o condutor solicitado nesta publicação.'];
+      return false;
+    }
+    const d=matches[0];
     MOBILE_DATA={v:data.v||1,publishedAt:data.publishedAt||manifest.publishedAt||0,dataMin:data.dataMin||'',dataMax:data.dataMax||'',drivers:[d]};
     MOBILE_LIGHT=true;
+    // O pacote v2 pode ser lido, mas sua nota foi calculada com cobertura da câmera.
+    // Não carregar o snapshot de 1+ GB e não exibir pontuação antiga como atual.
+    MOBILE_LEGACY=v===2;
     return true;
   }catch(e){
     console.warn('[Pulso360] webview leve indisponível',e);
+    SC_EMBED_BOOT_ERROR=['Não foi possível abrir o WebView','Falha ao carregar o resumo individual. A base completa não será carregada para evitar esgotamento de memória.'];
     return false;
   }
 }
@@ -8652,14 +8742,27 @@ async function bootPulso360(){
     // restaurando, indexando e renderizando uma base antiga para logo depois descartá-la.
     if(bt)bt.textContent='Verificando publicação…';
     try{manifest=await _fetchPublishedManifest();}catch(e){}
-    if(window.SC_EMBED && manifest){
+    if(window.SC_EMBED){
       if(bt)bt.textContent='Carregando WebView do motorista…';
       const webOk=await _loadPublishedWebview(manifest);
       if(webOk){
         const d=MOBILE_DATA.drivers[0];
-        if(txt)txt.textContent='dados do WebView · '+(d&&d.nome?d.nome:'motorista');
-        return;
+        if(txt)txt.textContent=(MOBILE_LEGACY?'resumo operacional · nota em atualização · ':'dados do WebView · ')+(d&&d.nome?d.nome:'motorista');
+      }else{
+        const err=SC_EMBED_BOOT_ERROR||['Resumo indisponível','O pacote individual não pôde ser carregado.'];
+        _scEmbedMsg(err[0],err[1]);
+        if(txt)txt.textContent='WebView indisponível · sem carregar base completa';
       }
+      return; // NUNCA acionar o snapshot geral em link de CPF
+    }
+    // A base publicada excede 1 GB; evitar o cold start pesado que derruba o Edge.
+    // Só acessa a base completa com ?full=1, para quem tem memória suficiente.
+    const fullRequested=new URLSearchParams(location.search).get('full')==='1';
+    if(manifest && Number(manifest.rawBytes||0)>PULSO_MAX_AUTOMATIC_RAW_BYTES && !fullRequested){
+      if(bt)bt.textContent='Protegendo memória do navegador…';
+      await _showMemorySafeRoot(manifest);
+      if(txt)txt.textContent='Modo leve · base extensa';
+      return;
     }
     const remotePub=manifest?+(manifest.publishedAt||0):0, cachePub=_cachePubGet();
     if(remotePub && cachePub===remotePub){
@@ -8712,7 +8815,7 @@ async function bootPulso360(){
       if(REAL && RECORDS && RECORDS.length) atualizaDataMode();
       else t.textContent=window.PULSO_PUB_ERROR?('⚠ '+window.PULSO_PUB_ERROR):'⚠ base não carregada';
     }
-    try{ if(window.SC_EMBED) _scTryOpenEmbed(); }catch(e){ console.warn('[Pulso360] embed scorecard',e); }
+    try{ if(window.SC_EMBED && MOBILE_LIGHT && MOBILE_DATA) _scTryOpenEmbed(); }catch(e){ console.warn('[Pulso360] embed scorecard',e); }
   }
 }
 bootPulso360();
