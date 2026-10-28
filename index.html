@@ -3091,7 +3091,7 @@ function _rankScoreProfiles(profiles){
     // Hora extra e média de combustível são informativas, sem desconto na nota.
     // Fontes ausentes não viram zero: os pesos ativos são normalizados. Com
     // velocidade apurada, o peso da velocidade permanece fixo em 20%.
-    add('identMot','Identificação motorista',10,p.identMot,true);
+    add('identMot','Aderência de identificação e verificação do equipamento',10,p.identMot,true);
     add('jornada','Aderência de jornada e ponto',20,p.ajPonto,!!(BASES&&BASES.ponto));
     add('alertas','Outros alertas (sem velocidade)',20,rankClamp(100*(1-Math.min(1,(p.alertRate||0)/ALERT_CAP))),hasAlerts);
     add('multas','Multas conduta',10,rankClamp(100*(1-Math.min(1,(p.multaRate||0)/MULTA_CAP))),hasMultas);
@@ -5064,7 +5064,7 @@ function exportBonifFolha(){
 let SCORECARD_NOME=null;
 const SC_ICON={identMot:'📷',identCam:'🎥',jornada:'⏱️',ponto:'📋',alertas:'🚨',multas:'🚦',interj:'🛌',extra:'➕',media:'⛽',velocidade:'🚚'};
 const SC_EXPL={
-  identMot:'% do tempo de condução nos seus veículos em que a câmera reconheceu VOCÊ ao volante. 100 = sempre reconhecido.',
+  identMot:'% do tempo de condução em que a câmera reconheceu VOCÊ ao volante. A saúde do equipamento é verificada separadamente, sem peso adicional na nota.',
   identCam:'% do movimento do veículo em que a câmera conseguiu identificar algum condutor (saúde do equipamento).',
   jornada:'Combina a condução dentro do horário do ponto (60%) e o registro do ponto nos dias de movimentação (40%). Hora extra não integra essa nota.',
   ponto:'% dos dias em que você moveu o veículo e tem o ponto registrado.',
