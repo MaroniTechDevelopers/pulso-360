@@ -223,9 +223,9 @@ O peso-base anteriormente atribuído à cobertura (5) é redistribuído
 proporcionalmente entre os demais critérios ativos; velocidade mantém
 peso de 15% quando apurada.
 
-**Regra de 28/10/2026:** jornada/ponto (peso-base 20) e hora extra (15) são um único componente de 35 partes. Hora extra só penaliza acima de 3h extras/dia (180 minutos), com redução progressiva até 5h extras/dia. Média de combustível em km/l é apenas informativa no scorecard, não compõe a nota nem restringe elegibilidade no ranking. Os demais pesos ativos são normalizados e velocidade mantém peso fixo de 15% quando apurada.
+**Regra final de 28/10/2026:** aderência de jornada e ponto, alertas (exceto velocidade), velocidade e interjornada têm peso de 20% cada; identificação do motorista e multas de conduta possuem 10% cada. Aderência de jornada e ponto mantém 60% para condução dentro do ponto e 40% para cobertura de ponto. **Hora extra e média de combustível não compõem a nota** e permanecem informativas. Divergência de condutor não gera desconto extra, embora continue disponível para tratativas e análise. Reincidência grave de velocidade e teto de alertas continuam conforme regras existentes. Componentes ausentes têm seus pesos redistribuídos proporcionalmente; com velocidade apurada, o peso dela fica fixo em 20%.
 
-O WebView exige publicação do pacote `scoreRulesVersion=4` para mostrar a nota atual. Pacotes anteriores ocultam nota e bonificação, mas mantêm a média consultiva, sem baixar a base integral.
+O WebView precisa de pacote `scoreRulesVersion=5` para exibir a nota atual; pacotes anteriores ocultam a nota e a bonificação, mantendo dados informativos sem baixar a base integral.
 > **Por que ponderar pelo tempo:** a média simples dos %s diários mascarava dias longos sem
 > identificação (aparecia 97% com a trilha cheia de vermelho). Corrigido.
 
