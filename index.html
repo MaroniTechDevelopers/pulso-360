@@ -668,6 +668,13 @@
   .alert-tile .l{font-size:11px;color:var(--muted);margin-top:2px}
   .alert-tile .msub{font-size:10.5px;color:var(--ink-2);margin-top:5px;font-weight:700}
   .alert-tile .msub.zero{color:var(--muted);font-weight:600}
+  /* KPI Excesso Velocidade: 3 faixas de km/h no mesmo cartão, sem mexer na nota. */
+  .alert-tile.speed-by-range{min-width:218px;flex:1.4}
+  .alert-tile .speed-ranges{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:9px;padding-top:8px;border-top:1px solid var(--border)}
+  .alert-tile .speed-bin{min-width:0;border-radius:7px;background:var(--surface);padding:5px 2px}
+  .alert-tile .speed-bin span{display:block;font-size:10px;color:var(--muted);line-height:1.3;white-space:nowrap}
+  .alert-tile .speed-bin b{display:block;margin-top:2px;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .alert-tile .speed-range-note,.alert-tile .speed-range-missing{font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.4}
 
   /* ============ MOTORISTAS — TMS x PONTO ============ */
   .motbar{margin:0;align-items:flex-end}
@@ -1860,18 +1867,30 @@ function resumoSemAlertaIdentificacao(v){
   return {...v,tipos,total:Math.max(0,(Number(v.total)||0)-removidos),niveis:{},badges:[]};
 }
 
+// Faixas informativas do KPI de velocidade (não alteram as faixas da nota).
+// A unidade do alerta pode conter décimos: 89,9 entra em 80–89; 99,9 entra em 90–99.
+function faixaVelocidadeKpi(raw){
+  const kmh=velocidadeKmh(raw);
+  if(kmh==null)return 'semKmh';
+  if(kmh<80)return 'abaixo80';
+  if(kmh<90)return 'de80a89';
+  if(kmh<100)return 'de90a99';
+  return 'de100Mais';
+}
 function aplicaResumoVelocidade(nn, range, v){
   if(!v) return v;
   const tipos=Object.assign({},v.tipos||{});
   let tipoTotal=0;
   Object.keys(tipos).forEach(k=>{ if(alertaEhVelocidade(k)) tipoTotal+=(+tipos[k]||0); });
   let evtTotal=0,alto=0,medio=0,baixo=0,semNivel=0;
+  const faixas={de80a89:0,de90a99:0,de100Mais:0,abaixo80:0,semKmh:0};
   const evs=(AL_TL&&AL_TL[nn])||[];
   if(evs.length){
     for(const e of evs){
       if(range && (e[0]<range.de || e[0]>range.ate)) continue;
       if(!alertaEhVelocidade(e[3]||'')) continue;
       evtTotal++;
+      faixas[faixaVelocidadeKpi((e[4]||{}).velocidadeKmh)]++;
       if(e[2]==='A')alto++; else if(e[2]==='M')medio++; else if(e[2]==='B')baixo++; else semNivel++;
     }
   }
@@ -1884,7 +1903,7 @@ function aplicaResumoVelocidade(nn, range, v){
     tipos['Excesso Velocidade']=evtTotal;
     v=Object.assign({},v,{tipos,total:Math.max(0,(+v.total||0)-old+evtTotal)});
   } else v=Object.assign({},v,{tipos});
-  v.velocidade={total:velTotal,alto,medio,baixo,semNivel,detalhado:evtTotal>0};
+  v.velocidade={total:velTotal,alto,medio,baixo,semNivel,detalhado:evtTotal>0,faixas:evtTotal>0?faixas:null};
   return v;
 }
 // resumo de alertas de um motorista — usa o relatório real se carregado; senão o cadastro demo
@@ -4355,6 +4374,22 @@ function fichaKmPorAlertaCor(status, pdf){
   return pdf?'#10b981':'var(--good)';
 }
 function fichaNotaValor(profile){ return profile&&profile.movDays>0&&profile.hCond>0&&Number.isFinite(profile.score)?profile.score:null; }
+// Detalhamento do KPI Excesso Velocidade — usa os mesmos eventos e período do total.
+// Boletim agregado não contém km/h por evento; nesse caso não apresentar zeros artificiais.
+function fichaVelocidadeFaixasHtml(vel){
+  if(!vel||!(vel.total>0))return '';
+  const f=vel.faixas;
+  if(!f||!((f.de80a89||0)+(f.de90a99||0)+(f.de100Mais||0)+(f.abaixo80||0)))
+    return '<div class="speed-range-missing">Faixas por km/h indisponíveis na origem</div>';
+  const n=v=>(Number(v)||0).toLocaleString('pt-BR');
+  const bin=(label,value)=>'<div class="speed-bin"><span>'+label+'</span><b>'+n(value)+'</b></div>';
+  let note='';
+  if(f.abaixo80)note+=n(f.abaixo80)+' abaixo de 80 km/h';
+  if(f.semKmh)note+=(note?' · ':'')+n(f.semKmh)+' sem km/h informado';
+  return '<div class="speed-ranges" aria-label="Quantidade de alertas por faixa de velocidade">'
+    +bin('80–89 km/h',f.de80a89)+bin('90–99 km/h',f.de90a99)+bin('≥100 km/h',f.de100Mais)
+    +'</div>'+(note?'<div class="speed-range-note">'+note+'</div>':'');
+}
 function renderFicha(){
   const nome=fichaAtual; if(!nome){ $('#fichaBox').innerHTML=''; return; }
   const M=fichaMetrics(nome);
@@ -4400,7 +4435,7 @@ function renderFicha(){
   const _multaByTipo={CELULAR:_multaCel,VELOCIDADE:_multaVel};
   const _multaSub=(tp)=>{ const c=multaTipoClasse(tp), n=_multaByTipo[c]||0; return (c==='CELULAR'||c==='VELOCIDADE')?`<div class="msub ${n?'':'zero'}">${n.toLocaleString('pt-BR')} multa${n===1?'':'s'}</div>`:''; };
   const alertTiles = alR.real
-    ? (tiposArr.length ? tiposArr.map(([tp,n])=>`<div class="alert-tile ${n===maxTipo&&n>0?'hot':''}"><div class="n">${alertaIcon(tp)} ${n.toLocaleString('pt-BR')}</div><div class="l">${tipoLabel(tp)}</div>${_multaSub(tp)}</div>`).join('') : '<div class="empty" style="padding:16px">sem alertas no período</div>')
+    ? (tiposArr.length ? tiposArr.map(([tp,n])=>`<div class="alert-tile ${alertaEhVelocidade(tp)?'speed-by-range ':''}${n===maxTipo&&n>0?'hot':''}"><div class="n">${alertaIcon(tp)} ${n.toLocaleString('pt-BR')}</div><div class="l">${tipoLabel(tp)}</div>${alertaEhVelocidade(tp)?fichaVelocidadeFaixasHtml(velR):''}${_multaSub(tp)}</div>`).join('') : '<div class="empty" style="padding:16px">sem alertas no período</div>')
     : ALERTA_DEF.map(a=>{ const n=(d.alertas&&d.alertas[a.k])||0; return `<div class="alert-tile ${n>=5?'hot':''}"><div class="n">${a.ic} ${n}</div><div class="l">${a.lab}</div>${_multaSub(a.lab)}</div>`; }).join('');
 
 
