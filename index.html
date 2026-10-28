@@ -4435,9 +4435,7 @@ function renderFicha(){
   // tiles de alertas: relatório real → por severidade (Alto/Médio/Baixo); demo → 5 tipos
   const tiposArr = alR.real ? Object.entries(alR.tipos||{}).sort((a,b)=>b[1]-a[1]) : [];
   const velR=alR.velocidade||{total:0,alto:0,medio:0,baixo:0,semNivel:0,detalhado:false};
-  const temNiv = alR.real && velR.detalhado && (velR.alto||velR.medio||velR.baixo||velR.semNivel);
-  const sevLine = temNiv ? `🔴 ${velR.alto.toLocaleString('pt-BR')} alto · 🟠 ${velR.medio.toLocaleString('pt-BR')} médio · 🟡 ${velR.baixo.toLocaleString('pt-BR')} baixo${velR.semNivel?' · '+velR.semNivel.toLocaleString('pt-BR')+' sem nível':''}` : '';
-  const alertaSubt = alR.real ? (totAl?('por tipo · total '+totAl.toLocaleString('pt-BR')+(velR.total?(' · <b>excesso de velocidade</b> total '+velR.total.toLocaleString('pt-BR')+(temNiv?(': '+sevLine):'')):'')):'sem alertas no período') : '5 tipos monitorados (demo)';
+  const alertaSubt = alR.real ? (totAl ? 'por tipo · total '+totAl.toLocaleString('pt-BR') : 'sem alertas no período') : '5 tipos monitorados (demo)';
   const maxTipo = tiposArr.length?tiposArr[0][1]:0;
   const _multaCel=_multaList.filter(m=>multaTipoClasse(m.tipo)==='CELULAR').length;
   const _multaVel=_multaList.filter(m=>multaTipoClasse(m.tipo)==='VELOCIDADE').length;
@@ -4455,6 +4453,7 @@ function renderFicha(){
     <div class="ficha-fixbar ${_faixaNota}">
       <div class="ff-nome"><span>Condutor</span><b>${scEsc(nome)}</b></div>
       <div class="ff-periodo"><span>Admissão</span><b>${adm?brDate(adm):'Não informada'}</b></div>
+      ${motoristaDesligadoTms(nome)?`<div class="ff-periodo"><span>Demissão (TMS)</span><b>${cadMotoristaDe(nome)?.demissao?brDate(cadMotoristaDe(nome).demissao):'Data não informada'}</b></div>`:''}
       <div class="ff-periodo"><span>Nota do condutor</span><b style="color:${_notaCor}">${_notaScore==null?(motoristaDesligadoTms(nome)?'Desligado — histórico':'Não apurada'):scFmt(scN10(_notaScore))+' / 10'}</b></div>
       <div class="ff-periodo"><span>Período</span><b>${scEsc(periodoFicha)}</b></div>
       <div class="ff-veiculos"><span>Placa · marca · modelo</span><div>${placasDetalhadasHtml||'Sem veículo no período'}</div></div>
@@ -4523,7 +4522,7 @@ function renderFicha(){
         <div class="lab">Multas</div><div class="val tnum">${_multaList.length.toLocaleString('pt-BR')}</div><div class="sub">${_multaCel} celular · ${_multaVel} velocidade · período operacional</div></div>`:''}
     </div>
 
-    <div class="sec-title"><h2>Alertas</h2><span>${alertaSubt}${MULTAS_N?` · multas no período: ${_multaList.length}`:''}</span></div>
+    <div class="sec-title"><h2>Alertas</h2><span>${alertaSubt}</span></div>
     <div class="card"><div class="alert-row">${alertTiles}</div></div>
 
     <div class="sec-title"><h2>Farol semanal — jornada</h2><span>semanas agrupadas por mês</span></div>
