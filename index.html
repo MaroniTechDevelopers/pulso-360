@@ -663,6 +663,7 @@
   .reco.observar{background:color-mix(in srgb,var(--warning) 14%,transparent);border-color:color-mix(in srgb,var(--warning) 45%,var(--border))}
   .alert-row{display:flex;gap:10px;flex-wrap:wrap}
   .alert-tile{flex:1;min-width:110px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;text-align:center}
+  .alert-tile:not(.speed-by-range){display:flex;flex-direction:column;align-items:center;justify-content:center}
   .alert-tile .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
   .alert-tile.hot .n{color:var(--crit-ink)}
   .alert-tile .l{font-size:11px;color:var(--muted);margin-top:2px}
@@ -2914,6 +2915,7 @@ function renderKpis(rows){
   const motRowsN=[...new Set((rows||[]).map(r=>r._nMot||norm(r.motoristaEscala||'')).filter(Boolean))];
   const motSelecionado=!!(motSelN && motRowsN.length===1 && (motRowsN[0]===motSelN || motRowsN[0].includes(motSelN) || motSelN.includes(motRowsN[0])));
   const K=[
+    {lab:'KM rodados',val:Math.round(kmTot).toLocaleString('pt-BR'),sub:'total no período filtrado',ac:'var(--s2)',tab:'linha'},
     {lab:'① Identificação'+(opSel?' — '+opSel:''),val:(identSel==null?'—':identSel+'<small>%</small>'),sub:(identSel==null?'sem dado de identificação':'aderência da câmera'+(opSel?' na operação':' no recorte filtrado')),ac:(identSel==null?'var(--muted)':(identSel>=CFG.sem?'var(--good)':'var(--critical)')),tab:'semid'},
     {lab:'③ Aderência de jornada',val:(ajFrota==null?'—':ajFrota+'<small>%</small>'),sub:hDec(dedo)+' fora da jornada · '+motsDedo+' motorista(s)',ac:ajColor(ajFrota),tab:'diverg'},
     {lab:'Cobertura de ponto',val:(cobPonto==null?'—':cobPonto+'<small>%</small>'),sub:'dias com movimento que têm ponto',ac:(cobPonto==null?'var(--muted)':(cobPonto>=90?'var(--good)':cobPonto>=70?'var(--warning)':'var(--critical)')),tab:'tabela'},
@@ -4168,12 +4170,8 @@ function dsrForDriver(nome,range){
 }
 function dsrCard(v){
   const color=v.status==='attention'?'var(--critical)':v.status==='observed'?'var(--good)':'var(--warning)';
-  const state=v.status==='attention'?'⚠ Ponto sem folga — revisar':v.status==='observed'?'Sem sequência irregular no ponto':'Folgas a confirmar';
-  const max=v.runs.length?Math.max(...v.runs.map(r=>r.days)):0;
-  const issues=[...v.runs.map(r=>`${brDate(r.de)} a ${brDate(r.ate)}: ${r.days} dias seguidos com marcação de ponto; alerta a partir de ${brDate(r.firstAlert)}.`),...v.conflicts.map(d=>`${brDate(d)}: DSR informado no espelho, mas há batida de ponto.`)];
-  const list=ds=>ds.length?ds.map(brDate).join(' · '):'Nenhum';
   const value=v.dsrTotal==null?'—':v.dsrTotal;
-  return `<div class="card kpi" id="fichaDsr"><div class="accent" style="background:${color}"></div><div class="lab">DSR — jornada de ponto</div><div class="val tnum">${value}</div><div class="sub">${v.pointDays} de ${v.totalDays} dias com ponto<br>${v.dsrTotal==null?'Importe o relatório de jornada com os registros de DSR':v.dsrTotal+' DSR registrado(s) no relatório de jornada'}<br>${v.unmarked.length} dia(s) sem ponto — não contabilizados como DSR<br><b>${state}</b>${max?'<br>'+max+' dias seguidos com ponto':''}</div><details style="margin-top:8px;font-size:12px"><summary>Ver dias de ponto e folgas</summary><p>${scEsc(v.reason)}</p>${issues.map(t=>'<p>'+scEsc(t)+'</p>').join('')}<p><b>DSR registrado no relatório de jornada:</b> ${list(v.registeredDates)}</p><p><b>Dias sem ponto, com folga a confirmar:</b> ${list(v.unmarked)}</p><p><b>Férias/afastamentos identificados:</b> ${list(v.excluded)}</p><p>A conferência considera os dias com batidas na jornada de ponto. Sete ou mais dias consecutivos com ponto geram alerta; por exemplo, 30 dias marcados em um período de 30 dias. Jornada noturna conta uma vez na data de origem. Movimento do veículo e pausas em horas não alteram este indicador.</p><p>${v.missing||0} dia(s) sem espelho diário${v.contextMissing?' · histórico anterior incompleto':''}${v.invalid?' · '+v.invalid+' dia(s) com batida incompleta':''}. Dia sem marcação não comprova DSR: confirme folga, férias ou ausência de dados no espelho. Este indicador não altera a nota.</p></details></div>`;
+  return `<div class="card kpi" id="fichaDsr"><div class="accent" style="background:${color}"></div><div class="lab">DSR — jornada de ponto</div><div class="val tnum">${value}</div></div>`;
 }
 
 function fichaPontos(M){
