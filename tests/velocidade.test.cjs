@@ -23,7 +23,7 @@ test('hora extra removida da nota; aderência depende só de jornada e ponto',()
  assert.equal(a.components.find(x=>x.k==='jornada').v,94);
  assert.equal(a.components.find(x=>x.k==='jornada').w,20);
 });
-test('nomenclatura de identificação não modifica pesos ou pontuação',()=>{const c=scoreContext(),a=profile(0),b=profile(0);a.identCam=0;b.identCam=100;c._rankScoreProfiles({A:a,B:b});near(a.score,b.score);const comp=a.components.find(x=>x.k==='identMot');assert.equal(comp.lab,'Aderência de identificação e verificação do equipamento');near(comp.w,10);assert.ok(!a.components.some(x=>x.k==='identCam'));});
+test('nomenclatura de identificação não modifica pesos ou pontuação',()=>{const c=scoreContext(),a=profile(0),b=profile(0);a.identCam=0;b.identCam=100;c._rankScoreProfiles({A:a,B:b});near(a.score,b.score);const comp=a.components.find(x=>x.k==='identMot');assert.equal(comp.lab,'Aderência de identificação e verificação do equipamento');near(comp.w,15);assert.ok(!a.components.some(x=>x.k==='identCam'));});
 test('média informativa não altera classificação ou elegibilidade',()=>{
  const c=scoreContext(),a=profile(0),b=profile(0),d=profile(0);
  a.mediaScore=0;b.mediaScore=100;d.mediaScore=null;
@@ -33,6 +33,18 @@ test('média informativa não altera classificação ou elegibilidade',()=>{
  assert.match(html,/informativo · não compõe nota/);
 });
 test('divergência de condutor não reduz nota e nenhum desconto aparece no scorecard',()=>{const c=scoreContext(),a=profile(0),b=profile(0);a.idDiv=10;c._rankScoreProfiles({A:a,B:b});near(a.score,b.score);assert.doesNotMatch(source('renderScorecard'),/penal10/);assert.doesNotMatch(source('renderScorecardLight'),/penal10/);});
+test('identificação 15% e multas 5% influenciam o score independentemente',()=>{
+  const c=scoreContext(),a=profile(0),b=profile(0),d=profile(0);
+  a.identMot=100;a.multaRate=0;
+  b.identMot=0;b.multaRate=0;
+  d.identMot=100;d.multaRate=2;
+  c._rankScoreProfiles({A:a,B:b,D:d});
+  const weight=Object.fromEntries(a.components.map(z=>[z.k,z.w]));
+  near(weight.identMot,15);near(weight.multas,5);
+  near(a.score-b.score,15);
+  near(a.score-d.score,5);
+  near(a.components.reduce((sum,z)=>sum+z.w,0),100);
+});
 test('cobertura da câmera não entra na nota e não altera o score ao variar de zero a 100',()=>{
   const c=scoreContext(),p0=profile(0),p100=profile(0),pMissing=profile(0);
   p0.identCam=0;p100.identCam=100;pMissing.identCam=null;
@@ -52,8 +64,8 @@ test('pesos não incluem cobertura e WebView rejeita nota antiga pré-calculada'
   const s=source('_rankScoreProfiles');
   assert.doesNotMatch(s,/add\('identCam'/);
   assert.match(s,/add\('identMot'/);
-  assert.match(html,/scoreRulesVersion:5/);
-  assert.match(source('_loadPublishedWebview'),/data.scoreRulesVersion!==2&&data.scoreRulesVersion!==3&&data.scoreRulesVersion!==4&&data.scoreRulesVersion!==5/);
+  assert.match(html,/scoreRulesVersion:6/);
+  assert.match(source('_loadPublishedWebview'),/data.scoreRulesVersion!==2&&data.scoreRulesVersion!==3&&data.scoreRulesVersion!==4&&data.scoreRulesVersion!==5&&data.scoreRulesVersion!==6/);
   assert.match(html,/identCam=aderRecs\(recs\)/);
   assert.doesNotMatch(html,/câmera \(5%\)/);
 });
@@ -80,7 +92,7 @@ test('cartão velocidade exibe peso 20% e reincidência sobre o saldo final',()=
 test('base leve preserva valores e deduções com os novos pesos',()=>{const c=cardContext(),z=scoreContext(),p=profile(15);p.velocidade.total=3;p.velocidade.known=3;p.velocidade.graveCount=3;z._rankScoreProfiles({JOAO:p});const light=JSON.parse(JSON.stringify(c.scSpeedSnapshot(p)));assert.equal(c.scSpeedCard(light),c.scSpeedCard(p));near(light.speedRecurrencePoints,19.2);near(light.scoreBeforeRecurrence,64);assert.match(source('_buildWebviewPayload'),/scSpeedSnapshot\(p\)/);});
 test('painel e webview inserem indicador próprio junto aos alertas e exibem descontos no fechamento',()=>{for(const n of ['renderScorecard','renderScorecardLight']){const f=source(n);assert.match(f,/speedIndex=comps.findIndex\(c=>c.k==='alertas'\)/);assert.match(f,/compCards.splice\(speedIndex<0\?0:speedIndex\+1,0,scSpeedCard\(/);assert.doesNotMatch(f,/speedPenaltyPoints\/10/);assert.match(f,/speedRecurrencePoints\/10/);}});
 
-test('pesos 20/20/20/20/10/10 e velocidade fixa quando outros faltam',()=>{const c=scoreContext(),p=profile(5);c._rankScoreProfiles({JOAO:p});const w=Object.fromEntries(p.components.map(z=>[z.k,z.w]));for(const k of ['jornada','alertas','interj','velocidade'])near(w[k],20);for(const k of ['identMot','multas'])near(w[k],10);p.identMot=null;c._rankScoreProfiles({JOAO:p});near(p.components.find(x=>x.k==='velocidade').w,20);near(p.components.filter(x=>x.k!=='velocidade').reduce((sum,x)=>sum+x.w,0),80);});
+test('pesos 20/20/20/20/15/5 e velocidade fixa quando outros faltam',()=>{const c=scoreContext(),p=profile(5);c._rankScoreProfiles({JOAO:p});const w=Object.fromEntries(p.components.map(z=>[z.k,z.w]));for(const k of ['jornada','alertas','interj','velocidade'])near(w[k],20);near(w.identMot,15);near(w.multas,5);near(Object.values(w).reduce((sum,v)=>sum+v,0),100);p.identMot=null;c._rankScoreProfiles({JOAO:p});near(p.components.find(x=>x.k==='velocidade').w,20);near(p.components.filter(x=>x.k!=='velocidade').reduce((sum,x)=>sum+x.w,0),80);});
 test('velocidade sem km/h é retirada da nota sem virar zero',()=>{const c=scoreContext(),p=profile(0);p.velocidade={available:true,total:3,known:0,unknown:3,pending:true,graveCount:0};c._rankScoreProfiles({JOAO:p});near(p.score,80);assert.equal(p.speedPending,true);assert.ok(!p.components.some(x=>x.k==='velocidade'));});
 test('sem excesso contribui 2 pontos e faixas preservam deduplicação',()=>{const c=scoreContext();c.AL_TL={JOAO:[]};const p=profile(0);p.velocidade=c.rankSpeedSummary('JOAO',recs);c._rankScoreProfiles({JOAO:p});near(p.score,84);c.AL_TL.JOAO=[ev(88),ev(88),ev(88)];p.velocidade=c.rankSpeedSummary('JOAO',recs);c._rankScoreProfiles({JOAO:p});near(p.score,64+20*2/3);assert.equal(p.speedRecurrencePct,0);});
-test('webview antigo retém identidade e oculta nota de pacote anterior',()=>{const load=source('_loadPublishedWebview');assert.match(load,/MOBILE_LEGACY=data.scoreRulesVersion!==5/);assert.match(source('renderScorecardLight'),/Nota aguardando atualização/);assert.match(html,/WebView não usa o snapshot de 1 GB/);assert.match(source('_buildWebviewPayload'),/scoreRulesVersion:5/);});
+test('webview antigo retém identidade e oculta nota de pacote anterior',()=>{const load=source('_loadPublishedWebview');assert.match(load,/MOBILE_LEGACY=data.scoreRulesVersion!==6/);assert.match(source('renderScorecardLight'),/Nota aguardando atualização/);assert.match(html,/WebView não usa o snapshot de 1 GB/);assert.match(source('_buildWebviewPayload'),/scoreRulesVersion:6/);});

@@ -223,9 +223,9 @@ O peso-base anteriormente atribuído à cobertura (5) é redistribuído
 proporcionalmente entre os demais critérios ativos; velocidade mantém
 peso de 15% quando apurada.
 
-**Regra final de 28/10/2026:** aderência de jornada e ponto, alertas (exceto velocidade), velocidade e interjornada têm peso de 20% cada; aderência de identificação e verificação do equipamento e multas de conduta possuem 10% cada. A saúde do equipamento é acompanhada separadamente e não adiciona peso à nota. Aderência de jornada e ponto mantém 60% para condução dentro do ponto e 40% para cobertura de ponto. **Hora extra e média de combustível não compõem a nota** e permanecem informativas. Divergência de condutor não gera desconto extra, embora continue disponível para tratativas e análise. Reincidência grave de velocidade e teto de alertas continuam conforme regras existentes. Componentes ausentes têm seus pesos redistribuídos proporcionalmente; com velocidade apurada, o peso dela fica fixo em 20%.
+**Regra final de 28/10/2026:** aderência de jornada e ponto, alertas (exceto velocidade), velocidade e interjornada têm peso de 20% cada; aderência de identificação e verificação do equipamento possui 15%, e multas de conduta possuem 5%. A saúde do equipamento é acompanhada separadamente e não adiciona peso à nota. Aderência de jornada e ponto mantém 60% para condução dentro do ponto e 40% para cobertura de ponto. **Hora extra e média de combustível não compõem a nota** e permanecem informativas. Divergência de condutor não gera desconto extra, embora continue disponível para tratativas e análise. Reincidência grave de velocidade e teto de alertas continuam conforme regras existentes. Componentes ausentes têm seus pesos redistribuídos proporcionalmente; com velocidade apurada, o peso dela fica fixo em 20%.
 
-O WebView precisa de pacote `scoreRulesVersion=5` para exibir a nota atual; pacotes anteriores ocultam a nota e a bonificação, mantendo dados informativos sem baixar a base integral.
+O WebView precisa de pacote `scoreRulesVersion=6` para exibir a nota atual; pacotes anteriores ocultam a nota e a bonificação, mantendo dados informativos sem baixar a base integral.
 > **Por que ponderar pelo tempo:** a média simples dos %s diários mascarava dias longos sem
 > identificação (aparecia 97% com a trilha cheia de vermelho). Corrigido.
 
