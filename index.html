@@ -1287,7 +1287,7 @@
 
   <!-- ===== LINHA DO TEMPO ===== -->
   <section class="view" id="view-linha">
-    <div class="sec-title"><h2>Linha do tempo — período de fechamento</h2><span>por motorista · o fechamento inteiro (16 → 15) · use o filtro <b>Fechamento</b> acima · role o mouse para dar zoom (período → dia → horas)</span></div>
+    <div class="sec-title"><h2>Linha do tempo — dia a dia (validação)</h2><span>um cartão por data, 00:00 a 24:00 · fechamento permanece como filtro</span></div><div class="card" style="padding:10px 14px;margin:10px 0;border-left:4px solid var(--gold)">🧪 PRÉVIA PARA VALIDAÇÃO — sem mudanças em produção</div>
     <div class="card" style="padding:12px 16px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
         <b style="font-size:12px">Análise de condutor</b>
@@ -3535,7 +3535,7 @@ function buildWeekCards(rows, prefix, cap, showNome, mode){
     const identPct = aderTrilhaIdent(ident);   // % realmente verde na trilha; vermelho reduz o indicador
     const dw=[...new Set(g.recs.map(recordDriverKey))].flatMap(k=>drivingEvidence.get(k)||[]);
     const driving24=driving24hTimelineMarks(dw,g.start,g.total,mov);
-    ZTL[id]={driving24,weekStart:g.start, ponto, mov, alertas, multas, ident, interj, dayStats, ferias:feriasDays, motorista:g.nome, t0:0, t1:g.total, total:g.total};
+    ZTL[id]={driving24,weekStart:g.start, ponto, mov, alertas, multas, ident, interj, dayStats, ferias:feriasDays, motorista:g.nome, singleDay:g.total===1440, t0:0, t1:g.total, total:g.total};
     const opsArr=[...ops]; const opTxt=opsArr.join(', ')||'—';
     const meta=`<div class="meta">
       <div class="m"><span>Operação${opsArr.length>1?' ⚠':''}</span><b style="color:${opsArr.length>1?'var(--serious)':'inherit'}" title="${opsArr.length>1?'rodou em '+opsArr.length+' operações no período':''}">${opTxt}</b></div>
@@ -3699,14 +3699,14 @@ function buildPlacaCards(placaQ, prefix, cap){
     if(!MOV_UNSEG_STORE&&r.movUnid)r.movUnid.forEach(s=>g.un.push([s.ini,s.fim])); }); });
   // sem identificação (do store por placa|dia — inclui placas sem NENHUM condutor identificado)
   if(MOV_UNSEG_STORE){ for(const key in MOV_UNSEG_STORE){ const i=key.indexOf('|'), pk=key.slice(0,i), d=key.slice(i+1); if(!pk.includes(pk0)) continue; if(!passDia(d)) continue; if(op){ const o=operacaoDaPlaca(pk); if(o && o!==op) continue; } const g=getPD(pk,d); MOV_UNSEG_STORE[key].forEach(s=>g.un.push(s)); } }
-  // agrupa por placa+fechamento (ou por placa+dia quando um dia está filtrado)
-  const dayF=dayFilter();
+  // VALIDAÇÃO: o fechamento limita os dados, mas a visualização agrupa cada dia isoladamente.
   const grp={};
-  Object.values(PD).forEach(pd=>{ let start,total,label,gk;
-    if(dayF){ start=pd.data; total=1440; label=brDate(pd.data); gk=pd.data; }
-    else { const f=fechamento(pd.data)||{key:pd.data.slice(0,7),start:pd.data,end:pd.data,label:pd.data}; start=f.start; total=f.start?fechaMin(f):WEEK; label=f.label; gk=f.key; }
-    const k=pd.placa+'|'+gk; const g=(grp[k]=grp[k]||{placa:pd.placa,start,total,label,days:[]}); g.days.push(pd); });
-  const groups=Object.values(grp).filter(g=>{ const actual=new Map(),expected=new Map(); let div=false; g.days.forEach(pd=>{pd.expected&&pd.expected.forEach((v,k)=>expected.set(k,v)); const src=(pd.cam&&pd.cam.length)?pd.cam:(pd.id||[]); src.forEach(s=>{if(s&&s.drv)actual.set(norm(s.drv),s.drv);}); if(pd.div)div=true;}); const unexpected=[...actual.keys()].some(k=>!expected.has(k)); const kind=(div||unexpected)?'divergencia':(actual.size>=2?'dupla':'unico'); g._drvInfo={actual:[...actual.values()],expected:[...expected.values()],kind}; return timelineFilterOk(kind); }).sort((a,b)=> a.label<b.label?1:a.label>b.label?-1:a.placa.localeCompare(b.placa));
+  Object.values(PD).forEach(pd=>{
+    const key=pd.placa+'|'+pd.data;
+    const g=(grp[key]=grp[key]||{placa:pd.placa,start:pd.data,total:1440,label:brDate(pd.data),days:[]});
+    g.days.push(pd);
+  });
+  const groups=Object.values(grp).filter(g=>{ const actual=new Map(),expected=new Map(); let div=false; g.days.forEach(pd=>{pd.expected&&pd.expected.forEach((v,k)=>expected.set(k,v)); const src=(pd.cam&&pd.cam.length)?pd.cam:(pd.id||[]); src.forEach(s=>{if(s&&s.drv)actual.set(norm(s.drv),s.drv);}); if(pd.div)div=true;}); const unexpected=[...actual.keys()].some(k=>!expected.has(k)); const kind=(div||unexpected)?'divergencia':(actual.size>=2?'dupla':'unico'); g._drvInfo={actual:[...actual.values()],expected:[...expected.values()],kind}; return timelineFilterOk(kind); }).sort((a,b)=> a.start<b.start?1:a.start>b.start?-1:a.placa.localeCompare(b.placa));
   const shown=groups.slice(0,cap); const ids=[];
   const html=shown.map((g,idx)=>{
     const id=prefix+idx; ids.push(id); const mov=[],ident=[]; let km=0,idMin=0,unMin=0; const drivers=new Set(), dias=new Set();
@@ -3728,23 +3728,23 @@ function buildPlacaCards(placaQ, prefix, cap){
       pd.un.forEach(s=>{ ident.push({a:off+s[0],b:off+s[1],ok:false}); unMin+=(s[1]-s[0]); });
     });
     const ponto=plateDriverPointSegments(g,[...drivers],plateColors,mov);
-    ZTL[id]={weekStart:g.start, ponto, mov, alertas:[], ident, combineMovIdent:true, t0:0, t1:g.total, total:g.total};
+    ZTL[id]={weekStart:g.start, ponto, mov, alertas:[], ident, combineMovIdent:true, singleDay:true, t0:0, t1:1440, total:1440};
     const ader = (idMin+unMin)>0? Math.round(idMin/(idMin+unMin)*100) : null;
     const meta=`<div class="meta">
-      <div class="m"><span>Fechamento</span><b>${g.label}</b></div>
-      <div class="m"><span>Dias c/ mov.</span><b>${dias.size}</b></div>
+      <div class="m"><span>Data</span><b>${g.label}</b></div>
+      <div class="m"><span>Faixa</span><b>00:00–24:00</b></div>
       <div class="m"><span>Identif.</span><b style="color:${ader==null?'var(--muted)':(ader>=CFG.sem?'var(--good)':'var(--critical)')}">${ader==null?'—':ader+'%'}</b></div>
       <div class="m"><span>Motoristas</span><b style="color:${drivers.size>1?'var(--serious)':(drivers.size?'inherit':'var(--critical)')}">${drivers.size||'—'}</b></div>
       <div class="m"><span>Km</span><b>${km?Math.round(km).toLocaleString('pt-BR'):'—'}</b></div></div>`;
     const drvLegend=driverLegendHtml(g._drvInfo&&g._drvInfo.actual.length?g._drvInfo.actual:[...drivers],g._drvInfo?g._drvInfo.kind:'unico',plateColor);
-    return `<div class="card wtl-card"><div class="tl-head"><div class="who"><b>🚚 ${g.placa}</b><small>${[...drivers].map(firstName).join(', ')||'⚠ sem condutor identificado'}</small></div>${meta}</div>${drvLegend}
+    return `<div class="card wtl-card"><div class="tl-head"><div class="who"><b>🚚 ${g.placa} · ${g.label}</b><small>${[...drivers].map(firstName).join(', ')||'⚠ sem condutor identificado'}</small></div>${meta}</div>${drvLegend}
       <div class="wtl" id="${id}">
         <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
         <div class="track"><span class="tlab">Ponto motorista</span><div class="lane lane-pt" data-k="ponto"></div></div>
         <div class="track"><span class="tlab">Direção / ID</span><div class="lane combined-mi" data-k="mov"></div></div>
       </div>
-      <div class="wtl-hint">🖱️ role o mouse para <b>zoom</b> (período → dia → horas) · arraste p/ navegar · duplo-clique reseta <span class="wtl-hint-touch">· 📱 no celular: <b>pinça</b> p/ zoom, 1 dedo p/ navegar ou use os botões +/−</span></div>
+      <div class="wtl-hint">📅 Dia de 00:00 até 24:00 · 🖱️ role o mouse para <b>zoom</b> (dia → horas) · arraste p/ navegar · duplo-clique reseta <span class="wtl-hint-touch">· 📱 no celular: <b>pinça</b> p/ zoom, 1 dedo p/ navegar ou use os botões +/−</span></div>
     </div>`;
   }).join('') || '<div class="empty">Nenhuma movimentação registrada para essa placa no filtro atual.</div>';
   return {html, ids};
@@ -3766,15 +3766,15 @@ function renderTimelines(rows){
   const isPlaca = qk.length>=4 && !isName && (inRecs||inPlacaMov);
   if(isPlaca){
     const {html,ids}=buildPlacaCards(q,'ztl',60);
-    box.innerHTML='<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">🚚 <b>Análise da dupla · modo placa</b>: <b>'+q.toUpperCase()+'</b> · cada condutor identificado recebe uma cor própria · <span style="color:var(--crit-ink)">vermelho = sem identificação/divergência</span></div>'+html;
+    box.innerHTML='<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">📅 <b>Análise diária · modo placa</b>: <b>'+q.toUpperCase()+'</b> · cada condutor identificado recebe uma cor própria · <span style="color:var(--crit-ink)">vermelho = sem identificação/divergência</span></div>'+html;
     setupZoomLazy(ids); return;
   }
   if(!rows.length){ box.innerHTML='<div class="empty">Nenhum registro para o filtro atual.</div>'; for(const k in ZTL) if(k.indexOf('ztl')===0) delete ZTL[k]; return; }
   // Linha do tempo é a visualização mais cara. Sem foco, evita criar milhares de segmentos no DOM.
   const motF=$('#fMot').value.trim(), hasFocus=!!(motF||q||dayF||$('#fDe').value||$('#fAte').value||$('#fFecha').value||$('#fOp').value);
   if(rows.length>2500 && !hasFocus){ box.innerHTML='<div class="empty"><b>Linha do tempo otimizada.</b><br>Há '+rows.length.toLocaleString('pt-BR')+' registros no período. Selecione motorista, operação, fechamento, dia ou placa para abrir a evidência sem travar o navegador.</div>'; for(const k in ZTL) if(k.indexOf('ztl')===0) delete ZTL[k]; return; }
-  const {html,ids}=buildWeekCards(rows,'ztl',60,true, dayF?'dia':'fecha');
-  box.innerHTML=(dayF?'<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">📅 <b>Dia '+brDate(dayF)+'</b>: linha do tempo só desse dia (00:00–24:00)</div>':'')+html;
+  const {html,ids}=buildWeekCards(rows,'ztl',60,true,'dia');
+  box.innerHTML='<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">📅 <b>Visão por dia</b> · cada linha cobre 00:00–24:00</div>'+html;
   setupZoomLazy(ids);
 }
 function renderZoom(id){
@@ -3784,7 +3784,7 @@ function renderZoom(id){
   let ruler='', gl=''; const start=Math.ceil(st.t0/step)*step;
   for(let t=start;t<=st.t1+1;t+=step){ const p=pos(t); if(p<-2||p>102) continue; const dIdx=Math.floor(t/1440), mod=((t%1440)+1440)%1440, day=mod===0;
     const mostraData=dayMode||day; const diso=new Date(Date.parse(st.weekStart)+dIdx*86400000).toISOString().slice(0,10); const vermelho=mostraData&&diaVermelho(diso); const ferias=mostraData&&st.ferias&&st.ferias.includes(diso);
-    const lab = dayMode? fmtDay(st.weekStart,dIdx) : ((day?fmtDay(st.weekStart,dIdx)+' ':'')+hm(mod));
+    const lab = st.singleDay?(t>=1440?'24:00':hm(mod)):(dayMode? fmtDay(st.weekStart,dIdx) : ((day?fmtDay(st.weekStart,dIdx)+' ':'')+hm(mod)));
     const ttl=ferias?'Férias':(vermelho?(isDomingo(diso)?'Domingo':'Feriado nacional'):'');
     ruler+=`<span class="tick ${day?'day':''} ${vermelho&&!ferias?'feriado':''} ${ferias?'ferias':''}" style="left:${p}%"${ttl?' title="'+ttl+'"':''}>${lab}<i></i></span>`;
     gl+=`<div class="gl ${t%1440===0?'day':''}" style="left:${p}%"></div>`; }
