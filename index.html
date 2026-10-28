@@ -1867,14 +1867,14 @@ function resumoSemAlertaIdentificacao(v){
   return {...v,tipos,total:Math.max(0,(Number(v.total)||0)-removidos),niveis:{},badges:[]};
 }
 
-// Faixas informativas do KPI de velocidade (não alteram as faixas da nota).
-// A unidade do alerta pode conter décimos: 89,9 entra em 80–89; 99,9 entra em 90–99.
+// Faixas informativas do KPI (não alteram a pontuação do motorista).
+// Velocidades decimais são agrupadas conforme a faixa inteira exibida.
 function faixaVelocidadeKpi(raw){
   const kmh=velocidadeKmh(raw);
   if(kmh==null)return 'semKmh';
-  if(kmh<80)return 'abaixo80';
-  if(kmh<90)return 'de80a89';
-  if(kmh<100)return 'de90a99';
+  if(kmh<86)return 'abaixo80';
+  if(kmh<91)return 'de80a89';
+  if(kmh<99)return 'de90a99';
   return 'de100Mais';
 }
 function aplicaResumoVelocidade(nn, range, v){
@@ -4384,10 +4384,10 @@ function fichaVelocidadeFaixasHtml(vel){
   const n=v=>(Number(v)||0).toLocaleString('pt-BR');
   const bin=(label,value)=>'<div class="speed-bin"><span>'+label+'</span><b>'+n(value)+'</b></div>';
   let note='';
-  if(f.abaixo80)note+=n(f.abaixo80)+' abaixo de 80 km/h';
+  if(f.abaixo80)note+=n(f.abaixo80)+' abaixo de 86 km/h';
   if(f.semKmh)note+=(note?' · ':'')+n(f.semKmh)+' sem km/h informado';
   return '<div class="speed-ranges" aria-label="Quantidade de alertas por faixa de velocidade">'
-    +bin('80–89 km/h',f.de80a89)+bin('90–99 km/h',f.de90a99)+bin('≥100 km/h',f.de100Mais)
+    +bin('86 a 90 km/h',f.de80a89)+bin('91 a 98 km/h',f.de90a99)+bin('≥99 km/h',f.de100Mais)
     +'</div>'+(note?'<div class="speed-range-note">'+note+'</div>':'');
 }
 function renderFicha(){
