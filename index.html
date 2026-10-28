@@ -1189,11 +1189,11 @@
         <span class="sem-rankhint">nota 0–100 · aderência de jornada e ponto + alertas + velocidade + interjornada (20% cada) · identificação (15%) e multas (5%) · média informativa</span>
       </div>
       <div class="legend">
-        <span class="lg"><b>Farol de risco (composto):</b></span>
-        <span class="lg"><span class="sw" style="background:var(--good)"></span> Verde — sem sinais</span>
-        <span class="lg"><span class="sw" style="background:var(--warning)"></span> Amarelo — 1 sinal</span>
-        <span class="lg"><span class="sw" style="background:var(--critical)"></span> Vermelho — 2+ sinais (ou 1 grave)</span>
-        <span class="lg" style="margin-left:auto;color:var(--muted)">sinais: identificação baixa · alertas alto · média &lt; meta · fora da jornada</span>
+        <span class="lg"><b>Farol pela nota do motorista:</b></span>
+        <span class="lg"><span class="sw" style="background:var(--good)"></span> Verde — nota 8,0 a 10</span>
+        <span class="lg"><span class="sw" style="background:var(--warning)"></span> Amarelo — nota 6,0 a 7,9</span>
+        <span class="lg"><span class="sw" style="background:var(--critical)"></span> Vermelho — nota abaixo de 6,0</span>
+        <span class="lg"><span class="sw" style="background:var(--baseline)"></span> Cinza — sem nota</span>
       </div>
     </div>
     <div id="semanaBox"></div>
@@ -2951,14 +2951,9 @@ function renderKpis(rows){
    FAROL COMPOSTO — combina os sinais de risco (o que é de fato crítico)
    ============================================================ */
 function riscoComposto(m, alR){
-  const reasons=[]; let grave=false;
-  if(m.ident!=null && m.ident<CFG.sem){ reasons.push('identificação '+m.ident+'%'); if(m.ident<50) grave=true; }
-  if(!MEDIA_OFF && m.media!=null && m.meta && m.media<m.meta) reasons.push('média '+m.media.toFixed(2).replace('.',',')+' < meta '+m.meta.toFixed(2).replace('.',','));
-  const alto=(alR&&alR.velocidade&&alR.velocidade.alto)||0; if(alto>0){ reasons.push(alto+' excesso de velocidade grave'); if(alto>=5) grave=true; }
-  const ddH=(m.ddReal||0)/60; if(ddH>=2) reasons.push(hDec(m.ddReal)+' fora da jornada');
-  const n=reasons.length;
-  const cls = (n>=2||grave) ? 'vermelho' : (n===1 ? 'amarelo' : 'verde');
-  return {cls, reasons, n};
+  const score=(m&&Number.isFinite(m._rankScore))?m._rankScore:null;
+  const cls=score==null?'sem-nota':score>=80?'verde':score>=60?'amarelo':'vermelho';
+  return {cls,reasons:[],n:0,score};
 }
 /* ============================================================
    RENDER — RESUMO SEMANAL (Capivara: por operação + farol)
@@ -3278,6 +3273,7 @@ function semanaAgg(rows){
     return {op:og.op,list,dd:og.dd,aj:aderJornada(og.opRows),motsDedo:og.motsDedo.size};
   });
   applyResumoRankScores(data,rows);
+  data.forEach(g=>(g.list||[]).forEach(m=>{m.risco=riscoComposto(m,m._alR);m.farolUlt=m.risco.cls;}));
   const out={weeks,ultima,data}; SEMANA_AGG_CACHE_KEY=cacheKey; SEMANA_AGG_CACHE=out;
   SEMANA_AGG_CACHE_MAP.set(cacheKey,out); while(SEMANA_AGG_CACHE_MAP.size>8)SEMANA_AGG_CACHE_MAP.delete(SEMANA_AGG_CACHE_MAP.keys().next().value);
   return out;
@@ -4128,7 +4124,7 @@ function fichaMetrics(nome){
   const metaFicha = metaVeic(recs.length?(recs.find(r=>r.placa)||{}).placa:'', recs.length?recs[0].operacao:'');
   const medaOk=mediaR!=null&&mediaR>=metaFicha;
   const reco=recomendacao(tempo,mediaR,totAl,ddTotal);
-  const risco=riscoComposto({ident:semel, media:mediaR, meta:metaFicha, ddReal:ddRealTotal}, alR);
+  const risco=riscoComposto({_rankScore:notaDe(nome)}, alR);
   const condDiv=recs.filter(r=>r.idDivergente||r.condutorDivergente).length;
   const diasComPonto=audit.diasPonto;
   const diasComMov=audit.diasMov;
