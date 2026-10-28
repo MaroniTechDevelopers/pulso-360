@@ -221,8 +221,11 @@ motorista**, nem restringe a seleção dos melhores colocados. A identificação
 do motorista em si continua sendo um componente distinto da nota.
 O peso-base anteriormente atribuído à cobertura (5) é redistribuído
 proporcionalmente entre os demais critérios ativos; velocidade mantém
-peso de 15% quando apurada. O WebView precisa de pacote atualizado com
-`scoreRulesVersion=3`; pacotes antigos usam a base integral para recálculo.
+peso de 15% quando apurada.
+
+**Regra de 28/10/2026:** jornada/ponto (peso-base 20) e hora extra (15) são um único componente de 35 partes. Hora extra só penaliza acima de 3h extras/dia (180 minutos), com redução progressiva até 5h extras/dia. Média de combustível em km/l é apenas informativa no scorecard, não compõe a nota nem restringe elegibilidade no ranking. Os demais pesos ativos são normalizados e velocidade mantém peso fixo de 15% quando apurada.
+
+O WebView exige publicação do pacote `scoreRulesVersion=4` para mostrar a nota atual. Pacotes anteriores ocultam nota e bonificação, mas mantêm a média consultiva, sem baixar a base integral.
 > **Por que ponderar pelo tempo:** a média simples dos %s diários mascarava dias longos sem
 > identificação (aparecia 97% com a trilha cheia de vermelho). Corrigido.
 
