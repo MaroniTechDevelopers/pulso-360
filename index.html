@@ -1287,7 +1287,7 @@
 
   <!-- ===== LINHA DO TEMPO ===== -->
   <section class="view" id="view-linha">
-    <div class="sec-title"><h2>Linha do tempo — período de fechamento</h2><span>por motorista · o fechamento inteiro (16 → 15) · use o filtro <b>Fechamento</b> acima · role o mouse para dar zoom (período → dia → horas)</span></div>
+    <div class="sec-title"><h2>Linha do tempo — dia a dia (validação)</h2><span>um cartão por data, 00:00 a 24:00 · fechamento permanece como filtro</span></div><div class="card" style="padding:10px 14px;margin:10px 0;border-left:4px solid var(--gold)">🧪 PRÉVIA PARA VALIDAÇÃO — sem mudanças em produção</div>
     <div class="card" style="padding:12px 16px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
         <b style="font-size:12px">Análise de condutor</b>
@@ -3731,20 +3731,20 @@ function buildPlacaCards(placaQ, prefix, cap){
     ZTL[id]={weekStart:g.start, ponto, mov, alertas:[], ident, combineMovIdent:true, singleDay:true, t0:0, t1:1440, total:1440};
     const ader = (idMin+unMin)>0? Math.round(idMin/(idMin+unMin)*100) : null;
     const meta=`<div class="meta">
-      <div class="m"><span>Fechamento</span><b>${g.label}</b></div>
-      <div class="m"><span>Dias c/ mov.</span><b>${dias.size}</b></div>
+      <div class="m"><span>Data</span><b>${g.label}</b></div>
+      <div class="m"><span>Faixa</span><b>00:00–24:00</b></div>
       <div class="m"><span>Identif.</span><b style="color:${ader==null?'var(--muted)':(ader>=CFG.sem?'var(--good)':'var(--critical)')}">${ader==null?'—':ader+'%'}</b></div>
       <div class="m"><span>Motoristas</span><b style="color:${drivers.size>1?'var(--serious)':(drivers.size?'inherit':'var(--critical)')}">${drivers.size||'—'}</b></div>
       <div class="m"><span>Km</span><b>${km?Math.round(km).toLocaleString('pt-BR'):'—'}</b></div></div>`;
     const drvLegend=driverLegendHtml(g._drvInfo&&g._drvInfo.actual.length?g._drvInfo.actual:[...drivers],g._drvInfo?g._drvInfo.kind:'unico',plateColor);
-    return `<div class="card wtl-card"><div class="tl-head"><div class="who"><b>🚚 ${g.placa}</b><small>${[...drivers].map(firstName).join(', ')||'⚠ sem condutor identificado'}</small></div>${meta}</div>${drvLegend}
+    return `<div class="card wtl-card"><div class="tl-head"><div class="who"><b>🚚 ${g.placa} · ${g.label}</b><small>${[...drivers].map(firstName).join(', ')||'⚠ sem condutor identificado'}</small></div>${meta}</div>${drvLegend}
       <div class="wtl" id="${id}">
         <div class="wtl-day"></div>
         <div class="wtl-ruler"></div>
         <div class="track"><span class="tlab">Ponto motorista</span><div class="lane lane-pt" data-k="ponto"></div></div>
         <div class="track"><span class="tlab">Direção / ID</span><div class="lane combined-mi" data-k="mov"></div></div>
       </div>
-      <div class="wtl-hint">🖱️ role o mouse para <b>zoom</b> (período → dia → horas) · arraste p/ navegar · duplo-clique reseta <span class="wtl-hint-touch">· 📱 no celular: <b>pinça</b> p/ zoom, 1 dedo p/ navegar ou use os botões +/−</span></div>
+      <div class="wtl-hint">📅 Dia de 00:00 até 24:00 · 🖱️ role o mouse para <b>zoom</b> (dia → horas) · arraste p/ navegar · duplo-clique reseta <span class="wtl-hint-touch">· 📱 no celular: <b>pinça</b> p/ zoom, 1 dedo p/ navegar ou use os botões +/−</span></div>
     </div>`;
   }).join('') || '<div class="empty">Nenhuma movimentação registrada para essa placa no filtro atual.</div>';
   return {html, ids};
@@ -3766,7 +3766,7 @@ function renderTimelines(rows){
   const isPlaca = qk.length>=4 && !isName && (inRecs||inPlacaMov);
   if(isPlaca){
     const {html,ids}=buildPlacaCards(q,'ztl',60);
-    box.innerHTML='<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">🚚 <b>Análise da dupla · modo placa</b>: <b>'+q.toUpperCase()+'</b> · cada condutor identificado recebe uma cor própria · <span style="color:var(--crit-ink)">vermelho = sem identificação/divergência</span></div>'+html;
+    box.innerHTML='<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">📅 <b>Análise diária · modo placa</b>: <b>'+q.toUpperCase()+'</b> · cada condutor identificado recebe uma cor própria · <span style="color:var(--crit-ink)">vermelho = sem identificação/divergência</span></div>'+html;
     setupZoomLazy(ids); return;
   }
   if(!rows.length){ box.innerHTML='<div class="empty">Nenhum registro para o filtro atual.</div>'; for(const k in ZTL) if(k.indexOf('ztl')===0) delete ZTL[k]; return; }
@@ -3774,7 +3774,7 @@ function renderTimelines(rows){
   const motF=$('#fMot').value.trim(), hasFocus=!!(motF||q||dayF||$('#fDe').value||$('#fAte').value||$('#fFecha').value||$('#fOp').value);
   if(rows.length>2500 && !hasFocus){ box.innerHTML='<div class="empty"><b>Linha do tempo otimizada.</b><br>Há '+rows.length.toLocaleString('pt-BR')+' registros no período. Selecione motorista, operação, fechamento, dia ou placa para abrir a evidência sem travar o navegador.</div>'; for(const k in ZTL) if(k.indexOf('ztl')===0) delete ZTL[k]; return; }
   const {html,ids}=buildWeekCards(rows,'ztl',60,true,'dia');
-  box.innerHTML=(dayF?'<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">📅 <b>Dia '+brDate(dayF)+'</b>: linha do tempo só desse dia (00:00–24:00)</div>':'')+html;
+  box.innerHTML='<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)">📅 <b>Visão por dia</b> · cada linha cobre 00:00–24:00</div>'+html;
   setupZoomLazy(ids);
 }
 function renderZoom(id){
