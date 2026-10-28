@@ -3036,8 +3036,8 @@ function speedScoreText(p){
 // END SPEED SCORE HELPERS
 // Indicador de peso fixo 20%; as faixas 5/10/15 mantêm a régua de severidade e reincidência gera desconto adicional.
 function scSpeedCard(p){
-  const v=p&&p.velocidade, value=speedIndicatorScore(v), pending=value==null||!!(v&&v.pending), problem=!!(v&&(v.penaltyPct||v.total>0));
-  const state=problem?'Com ocorrência de velocidade':pending?'Pendente de classificação':'Sem ocorrência de velocidade';
+  const v=p&&p.velocidade, value=speedIndicatorScore(v), pending=value==null||!!(v&&v.pending), problem=!pending && value<100;
+  const state=pending?'Pendente de classificação':problem?'Excesso de velocidade penalizado':'Sem excesso de velocidade penalizável';
   const color=problem?'var(--sg-bad)':pending?'#f5c800':'var(--sg-good, #10b981)';
   const recurrence=v?descontoReincidencia(v.graveCount||0):0;
   const impact=value==null?'Não apurado':`+${scFmt(value/50)} de 2,0 pts`;
