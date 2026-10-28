@@ -1625,7 +1625,7 @@ const FAROL_COR={verde:'var(--good)',amarelo:'var(--warning)',vermelho:'var(--cr
 // Mesma régua da capinha: ≥80 verde · ≥60 amarelo · <60 vermelho · sem nota = cinza.
 let RANK_SCORES={};
 function notaCor(s){ return (s==null)?'#cbd5e1':(s>=80?'var(--good)':s>=60?'var(--warning)':'var(--critical)'); }
-function notaDe(nome){ const k=norm(nome||''); if(RANK_SCORES[k]!=null) return RANK_SCORES[k];
+function notaDe(nome){ if(motoristaDesligadoTms(nome))return null; const k=norm(nome||''); if(RANK_SCORES[k]!=null) return RANK_SCORES[k];
   try{ const rows=filtered(); const d=semanaAgg(rows); applyResumoRankScores(d.data, rows); }catch(e){}
   return RANK_SCORES[norm(nome||'')]; }
 const SEV_LABEL={conforme:'Tudo certo',atencao:'Atenção',critico:'Prioridade',pendente:'A conferir'};
@@ -1792,6 +1792,12 @@ function cadMotoristaDe(nome){
   const nn=norm(nome),ids=typeof DRIVER_IDENTITY!=='undefined'&&DRIVER_IDENTITY&&DRIVER_IDENTITY.byName[nn];
   if(ids&&ids.size>1)return null;
   return I.byNome&&I.byNome[nn]||null;
+}
+function motoristaDesligadoTms(nome){
+  const c=cadMotoristaDe(nome);
+  if(!c)return false;
+  const raw=norm(c.statusRaw||'');
+  return !!c.demissao || /DEMIT|DESLIG|RESCIND/.test(raw) || c.status==='INATIVO';
 }
 function nomeCanon(s){
   const stop=new Set(['DE','DA','DO','DAS','DOS','E']);
@@ -2965,7 +2971,7 @@ function rankMinMovDays(){
   const n=Math.max(1,Math.round((Date.parse(r.ate)-Date.parse(r.de))/86400000)+1);
   return n<=7?1:n<=14?2:n<=31?3:5;
 }
-function resumoRankElegivel(m){ const p=m&&m._rankProfile; return !!(p&&p.movDays>0&&p.hCond>0); }
+function resumoRankElegivel(m){ const p=m&&m._rankProfile; return !!(p&&!p._desligadoTms&&Number.isFinite(p.score)&&p.movDays>0&&p.hCond>0); }
 function resumoRankMelhorElegivel(m){
   const p=m&&m._rankProfile; if(!resumoRankElegivel(m)||!p)return false;
   if(p.movDays<rankMinMovDays())return false;
@@ -3100,6 +3106,11 @@ const ALERT_TETO_TAXA=100, ALERT_TETO_NOTA=60;   // taxa de alerta > 100 → not
 function _rankScoreProfiles(profiles){
   const hasAlerts=!!(ALERTS||BOL||AL_TL), hasMultas=!!MULTAS_N;
   for(const p of Object.values(profiles)){
+    if(p && motoristaDesligadoTms(p.nome)){
+      p.score=null;p.scoreDisplay=null;p.components=[];p.scoreTitle='Desligado do TMS — somente histórico';
+      p._desligadoTms=true;
+      continue;
+    }
     // Um registro problemático não pode derrubar o resumo semanal inteiro.
     // Perfis marcados com erro ficam fora do ranking até a origem ser corrigida.
     if(!p || p._rankError){ if(p){p.score=null;p.scoreDisplay=null;p.components=[];p.scoreTitle='';} continue; }
@@ -4371,7 +4382,7 @@ function fichaKmPorAlertaCor(status, pdf){
   if(status==='sem-km'||status==='sem-dados')return pdf?'#94a3b8':'var(--muted)';
   return pdf?'#10b981':'var(--good)';
 }
-function fichaNotaValor(profile){ return profile&&profile.movDays>0&&profile.hCond>0&&Number.isFinite(profile.score)?profile.score:null; }
+function fichaNotaValor(profile){ return profile&&!motoristaDesligadoTms(profile.nome)&&profile.movDays>0&&profile.hCond>0&&Number.isFinite(profile.score)?profile.score:null; }
 // Detalhamento do KPI Excesso Velocidade — usa os mesmos eventos e período do total.
 // Boletim agregado não contém km/h por evento; nesse caso não apresentar zeros artificiais.
 function fichaVelocidadeFaixasHtml(vel){
@@ -4444,7 +4455,7 @@ function renderFicha(){
     <div class="ficha-fixbar ${_faixaNota}">
       <div class="ff-nome"><span>Condutor</span><b>${scEsc(nome)}</b></div>
       <div class="ff-periodo"><span>Admissão</span><b>${adm?brDate(adm):'Não informada'}</b></div>
-      <div class="ff-periodo"><span>Nota do condutor</span><b style="color:${_notaCor}">${_notaScore==null?'Não apurada':scFmt(scN10(_notaScore))+' / 10'}</b></div>
+      <div class="ff-periodo"><span>Nota do condutor</span><b style="color:${_notaCor}">${_notaScore==null?(motoristaDesligadoTms(nome)?'Desligado — histórico':'Não apurada'):scFmt(scN10(_notaScore))+' / 10'}</b></div>
       <div class="ff-periodo"><span>Período</span><b>${scEsc(periodoFicha)}</b></div>
       <div class="ff-veiculos"><span>Placa · marca · modelo</span><div>${placasDetalhadasHtml||'Sem veículo no período'}</div></div>
     </div>
@@ -4453,7 +4464,7 @@ function renderFicha(){
       <div class="ficha-hero">
         <span class="avatar" title="Nota ${_notaScore!=null?scFmt(scN10(_notaScore))+' / 10':'não apurada'}${fichaRisco.reasons.length?' · sinais: '+fichaRisco.reasons.join(' · '):''}" style="background:${_notaCor}">${iniciais(nome)}</span>
         <div style="flex:1;min-width:180px">
-          <h2>${scEsc(nome)} <span class="ficha-nota" style="color:${_notaCor}">Nota ${_notaScore==null?'não apurada':scFmt(scN10(_notaScore))+' / 10'}</span></h2>
+          <h2>${scEsc(nome)} <span class="ficha-nota" style="color:${_notaCor}">Nota ${_notaScore==null?(motoristaDesligadoTms(nome)?'indisponível — desligado':'não apurada'):scFmt(scN10(_notaScore))+' / 10'}</span></h2>
           <div class="sub">${op||'—'}${placasDetalhadasHtml?' · '+placasDetalhadasHtml:''} · <b>${tempo}</b> de casa · admissão ${adm?brDate(adm):'—'}</div>
         </div>
         <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;justify-content:flex-end">
@@ -5246,6 +5257,10 @@ function renderScorecard(nome){
   const shell=$('#scoreShell'), nn=norm(nome), rows=filtered();
   // Não recalcula milhares de perfis ao abrir um único scorecard.
   const p=scoreProfileMotorista(nome,rows);
+  if(motoristaDesligadoTms(nome)){
+    shell.innerHTML='<div class="sc-body"><div class="empty" style="padding:44px;text-align:center"><b>Motorista desligado no TMS.</b><p>Nota desativada. O histórico de jornada, movimentação e alertas permanece disponível na ficha do condutor.</p></div><div class="sc-actions"><button class="btn" data-sc-act="close">Fechar</button></div></div>';
+    return;
+  }
   if(!p || !(p.movDays>0 && p.hCond>0)){
     shell.innerHTML='<div class="sc-body"><div class="empty" style="padding:44px;text-align:center">Este condutor não tem movimentação no período/filtros atuais.</div><div class="sc-actions"><button class="btn" data-sc-act="close">Fechar</button></div></div>';
     return;
