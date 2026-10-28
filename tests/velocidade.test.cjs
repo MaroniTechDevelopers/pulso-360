@@ -23,6 +23,7 @@ test('hora extra removida da nota; aderência depende só de jornada e ponto',()
  assert.equal(a.components.find(x=>x.k==='jornada').v,94);
  assert.equal(a.components.find(x=>x.k==='jornada').w,20);
 });
+test('nomenclatura de identificação não modifica pesos ou pontuação',()=>{const c=scoreContext(),a=profile(0),b=profile(0);a.identCam=0;b.identCam=100;c._rankScoreProfiles({A:a,B:b});near(a.score,b.score);const comp=a.components.find(x=>x.k==='identMot');assert.equal(comp.lab,'Aderência de identificação e verificação do equipamento');near(comp.w,10);assert.ok(!a.components.some(x=>x.k==='identCam'));});
 test('média informativa não altera classificação ou elegibilidade',()=>{
  const c=scoreContext(),a=profile(0),b=profile(0),d=profile(0);
  a.mediaScore=0;b.mediaScore=100;d.mediaScore=null;
