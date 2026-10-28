@@ -4,6 +4,30 @@ function source(name){const i=html.indexOf('function '+name+'(');assert.notEqual
 function ctx(){const c=vm.createContext({console,Set,Map,Date,Math,Number,String});for(const n of ['norm','alertaEhVelocidade','alertaEhSemIdentificacaoMotorista','resumoSemAlertaIdentificacao','rankAlertSummary'])vm.runInContext(source(n),c);vm.runInContext(html.split('// BEGIN SPEED SCORE HELPERS')[1].split('// END SPEED SCORE HELPERS')[0],c);Object.assign(c,{AL_TL:null,BOL_DAY:null,activeRange:()=>null,alertasResumo:()=>({total:0,tipos:{}})});return c;}
 const recs=[{data:'2026-10-21',mov:[{ini:0,fim:600}]}];
 const ev=(v,extra={})=>['2026-10-21',100,'A','EXCESSO_VELOCIDADE',{velocidadeKmh:v,...extra}];
+test('faixas informativas do KPI respeitam 80/90/100, sem alterar a nota',()=>{
+  const c=ctx();vm.runInContext(source('faixaVelocidadeKpi'),c);
+  for(const [kmh,key] of [[79.9,'abaixo80'],[80,'de80a89'],[89.9,'de80a89'],[90,'de90a99'],[99.9,'de90a99'],[100,'de100Mais'],[140,'de100Mais'],[null,'semKmh'],['90/80','semKmh']])assert.equal(c.faixaVelocidadeKpi(kmh),key);
+  assert.equal(c.descontoVelocidade(90),5);assert.equal(c.descontoVelocidade(99),15);
+});
+test('KPI separa velocidade real por faixa e período; gravidade Trimble não define km/h',()=>{
+  const c=ctx();for(const n of ['faixaVelocidadeKpi','aplicaResumoVelocidade','fichaVelocidadeFaixasHtml'])vm.runInContext(source(n),c);
+  c.AL_TL={JOAO:[ev(80),ev(89.9),ev(90),ev(99.9),ev(100),ev(120),ev(79.9),ev(null),['2026-10-22',0,'A','EXCESSO_VELOCIDADE',{velocidadeKmh:120}],['2026-10-21',0,'A','CELULAR',{velocidadeKmh:120}]]};
+  const v=c.aplicaResumoVelocidade('JOAO',{de:'2026-10-21',ate:'2026-10-21'},{total:10,tipos:{EXCESSO_VELOCIDADE:9,CELULAR:1}});
+  assert.equal(v.velocidade.total,8);assert.equal(v.tipos['Excesso Velocidade'],8);
+  assert.equal(v.velocidade.faixas.de80a89,2);assert.equal(v.velocidade.faixas.de90a99,2);assert.equal(v.velocidade.faixas.de100Mais,2);
+  assert.equal(v.velocidade.faixas.abaixo80,1);assert.equal(v.velocidade.faixas.semKmh,1);
+  const rendered=c.fichaVelocidadeFaixasHtml(v.velocidade);
+  for(const label of ['80–89 km/h','90–99 km/h','≥100 km/h','abaixo de 80 km/h','sem km/h informado'])assert.ok(rendered.includes(label),label);
+  assert.match(source('renderFicha'),/alertaEhVelocidade\(tp\)\?fichaVelocidadeFaixasHtml\(velR\)/);
+});
+test('boletim agregado sem pico por evento não inventa quantidades por faixa',()=>{
+  const c=ctx();for(const n of ['faixaVelocidadeKpi','aplicaResumoVelocidade','fichaVelocidadeFaixasHtml'])vm.runInContext(source(n),c);
+  c.AL_TL=null;
+  const v=c.aplicaResumoVelocidade('JOAO',null,{total:3144,tipos:{'Excesso Velocidade':3144}});
+  assert.equal(v.velocidade.total,3144);assert.equal(v.velocidade.faixas,null);
+  const s=c.fichaVelocidadeFaixasHtml(v.velocidade);assert.match(s,/Faixas por km\/h indisponíveis/);
+  assert.doesNotMatch(s,/speed-bin/);
+});
 test('faixas 85/86/90/91/98/99 com desconto de no máximo 15%',()=>{const c=ctx();for(const [v,p] of [[0,0],[85,0],[85.9,0],[86,5],[90,5],[90.5,10],[91,10],[98,10],[98.1,15],[99,15],[150,15]])assert.equal(c.descontoVelocidade(v),p);});
 test('km/h aceita decimais brasileiros e rejeita valor ausente/limite textual',()=>{const c=ctx();for(const v of ['',null,undefined,'ALTO','90/80',-1,301])assert.equal(c.velocidadeKmh(v),null);assert.equal(c.velocidadeKmh('98,5 km/h'),98.5);});
 test('coluna prioriza máxima registrada e nunca escolhe velocidade permitida/da via/média',()=>{const c=ctx();assert.equal(c.colunaVelocidade(['Velocidade permitida','Velocidade média','Velocidade máxima registrada']),2);assert.equal(c.colunaVelocidade(['Velocidade da via','Limite de velocidade']),-1);assert.equal(c.colunaVelocidade(['TIPO','Velocidade']),1);});
