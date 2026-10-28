@@ -1178,7 +1178,7 @@
           <button type="button" data-rank="worst">10 piores</button>
           <button type="button" data-rank="best">10 melhores</button>
         </div>
-        <span class="sem-rankhint">nota 0–100 · aderência de jornada e ponto + alertas + velocidade + interjornada (20% cada) · identificação e multas (10% cada) · média informativa</span>
+        <span class="sem-rankhint">nota 0–100 · aderência de jornada e ponto + alertas + velocidade + interjornada (20% cada) · identificação (15%) e multas (5%) · média informativa</span>
       </div>
       <div class="legend">
         <span class="lg"><b>Farol de risco (composto):</b></span>
@@ -1201,7 +1201,7 @@
         <span class="lg"><span class="sw" style="background:#d4af37"></span> 🥇 Ouro (9–10)</span>
         <span class="lg"><span class="sw" style="background:#9ca3af"></span> 🥈 Prata (5–9)</span>
         <span class="lg"><span class="sw" style="background:#b87333"></span> 🥉 Bronze (≤5)</span>
-        <span class="lg" style="margin-left:auto;color:var(--muted)">nota = aderência de jornada e ponto · alertas · velocidade · interjornada (20% cada) · identificação e multas (10% cada); média e hora extra apenas informativas</span>
+        <span class="lg" style="margin-left:auto;color:var(--muted)">nota = aderência de jornada e ponto · alertas · velocidade · interjornada (20% cada) · identificação (15%) e multas (5%); média e hora extra apenas informativas</span>
       </div>
     </div>
     <div id="bonifBox"></div>
@@ -3087,14 +3087,14 @@ function _rankScoreProfiles(profiles){
     // Valor medido 0 (ex.: identificação 0%) continua entrando como 0 (é um 0 real, não ausência de dado).
     const comps=[]; const add=(k,lab,w,val,active=true)=>{if(!active||w<=0||val==null)return;const vv=rankClamp(val);if(vv==null)return;comps.push({k,lab,w,v:vv,pts:w*vv/100});};
     // Regra 28/10/2026: jornada e ponto, alertas, velocidade e interjornada
-    // possuem peso-base de 20% cada; identificação e multas recebem 10% cada.
+    // possuem peso-base de 20% cada; identificação recebe 15% e multas recebem 5%.
     // Hora extra e média de combustível são informativas, sem desconto na nota.
     // Fontes ausentes não viram zero: os pesos ativos são normalizados. Com
     // velocidade apurada, o peso da velocidade permanece fixo em 20%.
-    add('identMot','Aderência de identificação e verificação do equipamento',10,p.identMot,true);
+    add('identMot','Aderência de identificação e verificação do equipamento',15,p.identMot,true);
     add('jornada','Aderência de jornada e ponto',20,p.ajPonto,!!(BASES&&BASES.ponto));
     add('alertas','Outros alertas (sem velocidade)',20,rankClamp(100*(1-Math.min(1,(p.alertRate||0)/ALERT_CAP))),hasAlerts);
-    add('multas','Multas conduta',10,rankClamp(100*(1-Math.min(1,(p.multaRate||0)/MULTA_CAP))),hasMultas);
+    add('multas','Multas conduta',5,rankClamp(100*(1-Math.min(1,(p.multaRate||0)/MULTA_CAP))),hasMultas);
     add('interj','Interjornada',20,p.interjScore,!!(BASES&&BASES.ponto));
     // Hora extra e média são informativas: não fazem parte da nota.
     const speedValue=speedIndicatorScore(p.velocidade), otherW=comps.reduce((s,c)=>s+c.w,0);
@@ -5290,7 +5290,7 @@ function renderScorecard(nome){
     <div class="sg-level"><div class="lr">${lvlLR}</div><div class="sg-bar"><i style="width:${lvlPct}%"></i></div>${track}</div>
     ${streak}
   </section>`;
-  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota combina aderência de jornada e ponto, alertas, velocidade e interjornada (20% cada), identificação e multas (10% cada). Média e hora extra são informativas. Divergências de condutor não descontam pontos; a reincidência grave de velocidade mantém o desconto adicional. A contribuição de cada um = peso × o valor. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
+  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota combina aderência de jornada e ponto, alertas, velocidade e interjornada (20% cada), identificação (15%) e multas (5%). Média e hora extra são informativas. Divergências de condutor não descontam pontos; a reincidência grave de velocidade mantém o desconto adicional. A contribuição de cada um = peso × o valor. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
   const tratSec=`<div class="sc-sec"><h4>🗣️ Tratativas</h4>${tratResumo||'<p class="sc-hint" style="margin:0 0 11px">Acompanhe se cada conversa melhorou a nota no mês seguinte. Registre no resumo semanal (ficha do motorista).</p>'}${trats.length?`<div class="sc-trat">${tratHtml}</div>`:'<div class="sc-empty-trat">Nenhuma tratativa registrada ainda.</div>'}</div>`;
   const body=`<div class="sc-body">
     <div style="font-family:var(--sg-disp);font-weight:600;font-size:18px;color:var(--sg-ink2);margin:2px 2px 13px">Olá, <b style="color:var(--sg-ink)">${scEsc(firstName(nome))}</b> 👋 ${mesRef?('seu desempenho em <b style="color:var(--sg-ink)">'+mesRef+'</b>'):'este é o seu desempenho'}</div>
@@ -5343,7 +5343,7 @@ function renderScorecardLight(nome){
     const mediaInfo=media==null?'':'<span class="sg-media"><span class="em">⛽</span><b>'+fmt(media)+'</b><small>km/l'+(meta!=null?' · meta '+fmt(meta):'')+' · informativo · não compõe nota</small></span>';
     const brand='<div class="sc-brand"><span class="mk"><img src="'+LOGO_MARONI+'" alt="Pulso 360"></span><div class="bt"><b>PULSO 360</b><small>Grupo Maroni</small></div><span class="sc-pulse" aria-hidden="true"></span><button class="sc-close" data-sc-act="close" title="Fechar">✕</button></div>';
     shell.innerHTML=brand+'<div class="sc-body"><section class="sg-hero"><div class="sg-ring"><div class="mid"><span class="nota">—</span><span class="de10">DE 10</span></div></div><div class="sg-badges"><span class="sg-medal">Nota aguardando atualização</span>'+mediaInfo+'</div><div class="sg-who"><b>'+scEsc(d0.nome)+'</b><span>'+scEsc(d0.op||'')+' · '+scEsc(d0.tempo||'')+'</span></div></section>'
-      +'<div class="sc-sec"><h4>📋 Regra da nota atualizada</h4><p>Aderência de jornada e ponto compõe 20% da nota; alertas, velocidade e interjornada também têm 20% cada. Identificação e multas têm 10% cada. Hora extra e média são informativas.</p><p><b>Pacote individual desatualizado.</b> A nota, a evolução da nota e a bonificação ficam indisponíveis até republicar o pacote v5, evitando valores incorretos.</p></div>'
+      +'<div class="sc-sec"><h4>📋 Regra da nota atualizada</h4><p>Aderência de jornada e ponto compõe 20% da nota; alertas, velocidade e interjornada também têm 20% cada. Identificação tem 15% e multas têm 5%. Hora extra e média são informativas.</p><p><b>Pacote individual desatualizado.</b> A nota, a evolução da nota e a bonificação ficam indisponíveis até republicar o pacote v6, evitando valores incorretos.</p></div>'
       +'<div class="sc-actions"><button class="btn" data-sc-act="close">Fechar</button></div></div>';
     return;
   }
@@ -5391,7 +5391,7 @@ function renderScorecardLight(nome){
     <div class="sg-level"><div class="lr">${lvlLR}</div><div class="sg-bar"><i style="width:${lvlPct}%"></i></div>${track}</div>
     ${streak}
   </section>`;
-  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota combina aderência de jornada e ponto, alertas, velocidade e interjornada (20% cada), identificação e multas (10% cada). Média e hora extra são informativas. Divergências de condutor não descontam pontos; a reincidência grave de velocidade mantém o desconto adicional. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
+  const gestor=`<details class="sc-ges"><summary>🔎 Detalhamento da nota (gestor)</summary><div class="inner"><p class="sc-hint" style="margin:0 0 11px">A nota combina aderência de jornada e ponto, alertas, velocidade e interjornada (20% cada), identificação (15%) e multas (5%). Média e hora extra são informativas. Divergências de condutor não descontam pontos; a reincidência grave de velocidade mantém o desconto adicional. Ouro 9–10 · Prata 5–9 · Bronze ≤5.</p><div class="sc-comps">${compHtml}</div>${totalHtml}</div></details>`;
   const body=`<div class="sc-body">
     <div style="font-family:var(--sg-disp);font-weight:600;font-size:18px;color:var(--sg-ink2);margin:2px 2px 13px">Olá, <b style="color:var(--sg-ink)">${scEsc(firstName(d.nome))}</b> 👋 ${mesRef?('seu desempenho em <b style="color:var(--sg-ink)">'+mesRef+'</b>'):'este é o seu desempenho'}</div>
     ${hero}
@@ -8154,7 +8154,7 @@ async function _buildWebviewPayload(rows){
       mediaTrimble:r2(md.t!=null?md.t:null),mediaAbast:r2(md.a!=null?md.a:null),mensal};
   }).filter(d=>d.cpf);
   try{ applyResumoRankScores(agg.data, rows); }catch(e){}
-  return {v:1,scoreRulesVersion:5,publishedAt:Date.now(),dataMin:cov.min||'',dataMax:cov.max||'',drivers};
+  return {v:1,scoreRulesVersion:6,publishedAt:Date.now(),dataMin:cov.min||'',dataMax:cov.max||'',drivers};
 }
 
 async function _loadPublishedWebview(manifest){
@@ -8164,10 +8164,10 @@ async function _loadPublishedWebview(manifest){
     const r=await fetch('dados/'+manifest.webviewFile+'?v='+ver,{cache:'force-cache'});
     if(!r.ok)return false;
     const data=await r.json();
-    // Pacotes anteriores à v5 usam pesos diferentes.
+    // Pacotes anteriores à v6 usam pesos diferentes.
     // Podem mostrar média, mas nunca reutilizar nota anterior como atual.
-    if(data.scoreRulesVersion!==2&&data.scoreRulesVersion!==3&&data.scoreRulesVersion!==4&&data.scoreRulesVersion!==5)return false;
-    MOBILE_LEGACY=data.scoreRulesVersion!==5;
+    if(data.scoreRulesVersion!==2&&data.scoreRulesVersion!==3&&data.scoreRulesVersion!==4&&data.scoreRulesVersion!==5&&data.scoreRulesVersion!==6)return false;
+    MOBILE_LEGACY=data.scoreRulesVersion!==6;
     const ck=cpfKey(E.cpf), d=((data&&data.drivers)||[]).find(x=>cpfKey(x.cpf)===ck);
     if(!d)return false;
     MOBILE_DATA={v:data.v||1,publishedAt:data.publishedAt||manifest.publishedAt||0,dataMin:data.dataMin||'',dataMax:data.dataMax||'',drivers:[d]};
