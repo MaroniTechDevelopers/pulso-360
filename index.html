@@ -1549,6 +1549,27 @@
       <label>Data<input type="date" id="tratData"></label>
       <label>Gestor responsável<input type="text" id="tratGestor" placeholder="seu nome"></label>
     </div>
+    <label>Motivo da tratativa<select id="tratMotivo" required>
+      <option value="">Selecione um motivo</option>
+      <option>Obstrução de câmera</option>
+      <option>Velocidade grave (≥100 km/h)</option>
+      <option>Excesso de velocidade (86–98 km/h)</option>
+      <option>Uso de celular ao volante</option>
+      <option>Distração ao volante</option>
+      <option>Fadiga ou sonolência</option>
+      <option>Bocejo recorrente</option>
+      <option>Falta de identificação do motorista</option>
+      <option>Falha de câmera ou telemetria</option>
+      <option>Movimentação sem registro de ponto</option>
+      <option>Divergência de jornada e ponto</option>
+      <option>Descanso interjornada insuficiente</option>
+      <option>Direção fora da jornada</option>
+      <option>Multa ou infração de trânsito</option>
+      <option>Parado ligado / marcha lenta</option>
+      <option>Condução de risco</option>
+      <option>Reconhecimento positivo</option>
+      <option>Outro</option>
+    </select></label>
     <label>Tipo de ação<select id="tratTipo">
       <option>Conversa de orientação</option>
       <option>Feedback positivo</option>
@@ -7821,8 +7842,8 @@ async function excluirTratativa(nome,uid){
   toast(ids.length?('Tratativa excluída do histórico compartilhado ✓'+(ids.length>1?' · '+ids.length+' cópias removidas':'')):'Tratativa local excluída ✓');
   renderFicha();
 }
-function openTratModal(){ const nome=fichaAtual; if(!nome)return; $('#tratNome').textContent=nome; $('#tratData').value=new Date().toISOString().slice(0,10); let g=''; if(spSignedIn())g=spGestor().nome; if(!g){try{g=localStorage.getItem('integ360_gestor')||'';}catch(e){}} $('#tratGestor').value=g;$('#tratTipo').value='Conversa de orientação';$('#tratObs').value='';$('#tratModal').style.display='flex';setTimeout(()=>$('#tratObs').focus(),50); }
-async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,obs=$('#tratObs').value.trim();if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,obs,op:M.op||'',placa:M.placas||'',cpf:(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[norm(nome)])||'',sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); if(typeof SCORECARD_NOME!=='undefined'&&SCORECARD_NOME&&$('#scoreModal')&&$('#scoreModal').style.display==='flex'){ try{renderScorecard(SCORECARD_NOME);}catch(e){} } }
+function openTratModal(){ const nome=fichaAtual; if(!nome)return; $('#tratNome').textContent=nome; $('#tratData').value=new Date().toISOString().slice(0,10); let g=''; if(spSignedIn())g=spGestor().nome; if(!g){try{g=localStorage.getItem('integ360_gestor')||'';}catch(e){}} $('#tratGestor').value=g;$('#tratTipo').value='Conversa de orientação';$('#tratMotivo').value='';$('#tratObs').value='';$('#tratModal').style.display='flex';setTimeout(()=>$('#tratObs').focus(),50); }
+async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,motivo=$('#tratMotivo').value,obs=$('#tratObs').value.trim();if(!motivo){toast('Selecione o motivo da tratativa');return;}if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,motivo,obs,op:M.op||'',placa:M.placas||'',cpf:(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[norm(nome)])||'',sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); if(typeof SCORECARD_NOME!=='undefined'&&SCORECARD_NOME&&$('#scoreModal')&&$('#scoreModal').style.display==='flex'){ try{renderScorecard(SCORECARD_NOME);}catch(e){} } }
 
 /* ============================================================
    ABA TRATATIVAS — visão consolidada de todas as tratativas de todos os motoristas
@@ -7858,7 +7879,7 @@ function tratFilteredRows(all){
     const nn=norm(t.nome);
     if(fmot&&nn.indexOf(fmot)<0)return false;
     if(fq&&nn.indexOf(fq)<0&&norm(t.placa||'').indexOf(fq)<0)return false;
-    if(q&&(nn+' '+norm(t.gestor||'')+' '+norm(t.obs||'')+' '+norm(t.tipo||'')).indexOf(q)<0)return false;
+    if(q&&(nn+' '+norm(t.gestor||'')+' '+norm(t.obs||'')+' '+norm(t.tipo||'')+' '+norm(t.motivo||'')).indexOf(q)<0)return false;
     return true;
   });
 }
@@ -7897,12 +7918,13 @@ function renderTratativas(){
   }
   const chip={shared:'<span class="chip conforme" title="Gravada no histórico compartilhado (SharePoint)">☁️ Compartilhada</span>',pending:'<span class="chip atencao" title="Salva só neste navegador, aguardando envio ao SharePoint">⏳ Pendente</span>',local:'<span class="chip pendente" title="Existe só neste navegador">💾 Local</span>'};
   const vis=rows.slice(0,TRAT_LIMIT);
-  box.innerHTML='<div class="tblwrap"><table class="trat-tbl"><thead><tr><th>Data</th><th>Motorista</th><th>Tipo</th><th>Gestor</th><th>Observação</th><th>Sincronização</th></tr></thead><tbody>'+
+  box.innerHTML='<div class="tblwrap"><table class="trat-tbl"><thead><tr><th>Data</th><th>Motorista</th><th>Tipo</th><th>Motivo</th><th>Gestor</th><th>Observação</th><th>Sincronização</th></tr></thead><tbody>'+
     vis.map(t=>{ const obs=String(t.obs||'').replace(/\s+/g,' ').trim();
       return `<tr class="tratrow" data-mot="${encodeURIComponent(t.nome)}" title="abrir a ficha de ${tratEsc(t.nome)}">`+
         `<td class="tnum">${t.data?tratEsc(brDate(t.data)):'—'}</td>`+
         `<td class="trat-mot">${tratEsc(t.nome||'—')}</td>`+
         `<td>${t.tipo?`<span class="trat-tipo">${tratEsc(t.tipo)}</span>`:'—'}</td>`+
+        `<td>${tratEsc(t.motivo||'Não informado')}</td>`+
         `<td>${tratEsc(t.gestor||'—')}</td>`+
         `<td class="trat-obs" title="${tratEsc(t.obs||'')}">${obs?tratEsc(obs):'—'}</td>`+
         `<td>${chip[tratSyncState(t)]}</td></tr>`; }).join('')+
@@ -7914,8 +7936,8 @@ function exportTratativas(){
   if(!TRAT_ROWS.length){ toast('Nada para exportar'); return; }
   const q=v=>{ let s=String(v==null?'':v).replace(/\s*[\r\n]+\s*/g,' ').trim(); if(/^[=+@]|^-\S/.test(s))s="'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
   const lab={shared:'Compartilhada',pending:'Pendente',local:'Local'};
-  const lines=[['Motorista','CPF','Data','Tipo','Gestor','Observacao','Sincronizacao'].join(';')];
-  TRAT_ROWS.forEach(t=>lines.push([t.nome,tratCpfFmt(t),t.data?brDate(t.data):'',t.tipo,t.gestor,t.obs,lab[tratSyncState(t)]].map(q).join(';')));
+  const lines=[['Motorista','CPF','Data','Tipo','Motivo','Gestor','Observacao','Sincronizacao'].join(';')];
+  TRAT_ROWS.forEach(t=>lines.push([t.nome,tratCpfFmt(t),t.data?brDate(t.data):'',t.tipo,t.motivo||'',t.gestor,t.obs,lab[tratSyncState(t)]].map(q).join(';')));
   baixarCsv(lines,'tratativas_motoristas.csv');
 }
 async function tratSyncFromTab(){
