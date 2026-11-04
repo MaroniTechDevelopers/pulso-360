@@ -8519,7 +8519,7 @@ async function carregarDadosPublicados(prefetchedManifest){
     const pub=+(S.publishedAt||S.ts||0),local=+(RAW&&RAW._savedAt||0);
     if(local&&local>pub){const p=$('#dataModeTxt');if(p)p.textContent='dados locais · rascunho não publicado';return false;}
     const restored=await restoreState(S); if(!restored) throw new Error('Snapshot publicado não pôde ser restaurado');
-    DATA_UPDATED_AT=pub||DATA_UPDATED_AT;_cachePubSet(pub||PUBLISHED_AT_LOADED||0);atualizaDataMode();
+    DATA_UPDATED_AT=pub||DATA_UPDATED_AT;atualizaDataMode();  // cachePub é marcado só por cacheSalvar, APÓS gravar no IndexedDB (evita marcar versão nova com cache antigo)
     // Guarda a fotografia publicada no IndexedDB em segundo plano para a próxima abertura.
     if(typeof agendarCache==='function')agendarCache();
     return true;
@@ -8898,6 +8898,12 @@ async function bootPulso360(){
     if(remotePub && cachePub===remotePub){
       if(bt)bt.textContent='Restaurando cache local…';
       try{temCache=await cacheRestaurar();}catch(e){}
+      // Valida que o cache restaurado é DE FATO a versão publicada: se a contagem de registros não
+      // bate com o manifesto, o cache está defasado (gravação anterior falhou/correu) → descarta e baixa.
+      const expRecs=+(manifest&&manifest.records||0);
+      if(temCache && expRecs && RAW && RAW.records && RAW.records.length!==expRecs){
+        temCache=0; try{localStorage.removeItem(CACHE_PUB_KEY);}catch(e){}
+      }
       if(temCache){ pub=true; PUBLISHED_AT_LOADED=remotePub; DATA_UPDATED_AT=remotePub; atualizaDataMode(); }
     }
     if(!pub && manifest){
