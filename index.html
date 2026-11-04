@@ -1604,6 +1604,8 @@
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <!-- MSAL (login Microsoft/M365) para ler os relatórios do SharePoint via Graph -->
 <script defer src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.10.0/lib/msal-browser.min.js"></script>
+<!-- Service Worker: garante que todo usuário sempre receba o index.html/manifesto mais recente (rede-primeiro), sem ficar preso em versão antiga do cache -->
+<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
 <div class="modal-bg" id="aderDetailModal" style="display:none"><section id="aderDetailShell" class="ac-shell" role="dialog" aria-modal="true" aria-label="Ficha de aderência do centro de resultado"></section></div>
 <script>
 /* ============================================================
