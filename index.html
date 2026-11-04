@@ -863,6 +863,20 @@
   .trat-tbl td.trat-obs{max-width:420px;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2)}
   .trat-tbl td.trat-mot{font-weight:650}
   .trat-tipo{display:inline-block;background:color-mix(in srgb,var(--gold) 22%,transparent);color:var(--gold-2);font-weight:700;font-size:11px;padding:2px 8px;border-radius:20px}
+  .acomp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:12px}
+  .acomp-card{padding:12px 14px;cursor:pointer;transition:box-shadow .15s}
+  .acomp-card:hover{box-shadow:var(--shadow-lg)}
+  .acomp-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .acomp-n{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--gold);color:#1a1a1a;font-weight:800;font-size:12px;flex:none}
+  .acomp-nome{font-size:14.5px;font-weight:700}
+  .acomp-op{font-size:11.5px;color:var(--muted)}
+  .acomp-dias{margin-left:auto;font-size:11px;color:var(--muted);white-space:nowrap}
+  .acomp-meta{font-size:12px;color:var(--ink-2);margin-top:6px}
+  .acomp-sinais{font-size:12px;color:#b42318;background:color-mix(in srgb,#ef4444 8%,var(--surface));border-radius:8px;padding:6px 9px;margin-top:7px}
+  .acomp-ev{font-size:12.5px;margin-top:7px;font-weight:600}
+  .acomp-ev.acomp-up{color:#047857}
+  .acomp-ev.acomp-dn{color:#b42318}
+  .acomp-ev.acomp-fl{color:var(--muted)}
   .trat-more{text-align:center;padding:12px;font-size:12.5px;color:var(--muted)}
   .trat-more button{margin-left:8px}
 
@@ -1117,6 +1131,7 @@
     <button data-tab="semana" class="active">Resumo semanal</button>
     <button data-tab="bonificacao">Bonificação</button>
     <button data-tab="trat">Tratativas</button>
+    <button data-tab="acomp">Acompanhamento</button>
     <button data-tab="motoristas">Motoristas</button>
     <button data-tab="aderencia">Aderência</button>
     <button data-tab="linha">Linha do tempo</button>
@@ -1216,6 +1231,13 @@
   </section>
 
   <!-- ===== TRATATIVAS (visão consolidada de todos os motoristas) ===== -->
+  <!-- ===== ACOMPANHAMENTO — follow-up de tratativas (10 a 13 dias) para o daily ===== -->
+  <section class="view" id="view-acomp">
+    <div class="sec-title"><h2>Acompanhamento de tratativas</h2><span id="acompSub">motoristas tratados há 10–13 dias · revisar evolução no daily</span>
+      <button class="btn solid" id="acompCopy" style="margin-left:auto">📋 Copiar para o grupo</button></div>
+    <div id="acompBox"></div>
+  </section>
+
   <section class="view" id="view-trat">
     <div id="tratBanner"></div>
     <div class="grid kpis" id="tratKpis"></div>
@@ -5532,7 +5554,7 @@ function renderAll(){
   }
   // O cache é conferido antes de filtrar. Assim, voltar para uma aba com os mesmos
   // filtros não revarre os ~87 mil registros só para descobrir que o DOM já está pronto.
-  if(view!=='ficha'&&view!=='motoristas'&&view!=='trat'&&VIEW_RENDER_KEYS[view]===viewKey){
+  if(view!=='ficha'&&view!=='motoristas'&&view!=='trat'&&view!=='acomp'&&VIEW_RENDER_KEYS[view]===viewKey){
     const bd=$('#badgeDiv'), n=VIEW_BADGE_COUNTS[view]; if(bd&&n!=null)bd.textContent=n>999?'999+':n;
     atualizaDataMode(); return;
   }
@@ -5581,6 +5603,7 @@ function renderAll(){
   }
   else if(view==='bonificacao') renderBonificacao(rows);
   else if(view==='trat') renderTratativas();
+  else if(view==='acomp') renderAcompanhamento();
   else if(view==='motoristas') renderMotoristas();
   else if(view==='aderencia') renderAderencia(rows);
   else if(view==='linha') renderTimelines(rows);
@@ -5590,7 +5613,7 @@ function renderAll(){
   else if(view==='operacao') renderBatimento();
   else if(view==='semid') renderPlacasSemId(filtered());
   else if(view==='ficha'&&fichaAtual) renderFicha();
-  if(view!=='ficha'&&view!=='motoristas'&&view!=='trat') VIEW_RENDER_KEYS[view]=viewKey;
+  if(view!=='ficha'&&view!=='motoristas'&&view!=='trat'&&view!=='acomp') VIEW_RENDER_KEYS[view]=viewKey;
   const bd=$('#badgeDiv'); if(bd&&rows){const n=FILTER_CACHE_DIV_COUNT; VIEW_BADGE_COUNTS[view]=n; bd.textContent=n>999?'999+':n;}
   atualizaDataMode();
 }
@@ -7904,6 +7927,63 @@ function tratFilteredRows(all){
   });
 }
 function _tratFillSel(sel,arr){ const el=$(sel); if(!el)return; const cur=el.value; el.innerHTML='<option value="">'+tratEsc(el.dataset.all||'Todos')+'</option>'+arr.map(v=>`<option value="${tratEsc(v)}">${tratEsc(v)}</option>`).join(''); el.value=arr.includes(cur)?cur:''; }
+/* ===== ACOMPANHAMENTO: motoristas tratados há 10–13 dias (follow-up do daily) ===== */
+let ACOMP_TEXT='';
+function _acompJanela(){
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const iso=x=>{const z=new Date(x.getTime()-x.getTimezoneOffset()*60000);return z.toISOString().slice(0,10);};
+  const dminus=n=>{const x=new Date(hoje);x.setDate(x.getDate()-n);return iso(x);};
+  return {ini:dminus(13), fim:dminus(10), hoje:iso(hoje)};
+}
+function _acompDiasAtras(ds){ try{ const d=new Date(String(ds).slice(0,10)+'T00:00:00'); const h=new Date(); h.setHours(0,0,0,0); return Math.round((h-d)/86400000); }catch(e){ return '?'; } }
+function _acompSinais(t){ let s=t&&t.sinais; if(Array.isArray(s)) s=s.filter(Boolean).join(' · '); return (s||'').toString().replace(/\s+/g,' ').trim(); }
+function _acompEvol(nome,tData){
+  try{
+    const mensal=scoreMensalMotorista(nome,RECORDS)||[];
+    const cs=mensal.filter(m=>m&&m.score!=null);
+    if(!cs.length) return null;
+    const mk=String(tData||'').slice(0,7);
+    let antes=null; for(let i=cs.length-1;i>=0;i--){ if(cs[i].key<=mk){ antes=cs[i]; break; } }
+    if(!antes) antes=cs[0];
+    const agora=cs[cs.length-1];
+    const a=scN10(antes.score), b=scN10(agora.score), delta=Math.round((b-a)*10)/10;
+    let cls='fl', ic='→', lab='estável'; if(delta>=0.3){cls='up';ic='📈';lab='melhorou';} else if(delta<=-0.3){cls='dn';ic='📉';lab='piorou';}
+    return {a,b,delta,cls,ic,lab, mesmoMes:antes.key===agora.key};
+  }catch(e){ return null; }
+}
+function renderAcompanhamento(){
+  const box=$('#acompBox'); if(!box) return;
+  if(TRAT_CACHE===null && !_tratSyncTried){ _tratSyncTried=true; tratSyncFromSP(false).then(ok=>{ if(ok && activeViewName()==='acomp') renderAcompanhamento(); }); }
+  const J=_acompJanela();
+  const win=tratAllList().filter(t=>{ const d=String(t.data||'').slice(0,10); return d&&d>=J.ini&&d<=J.fim; })
+            .sort((a,b)=>String(a.data).localeCompare(String(b.data)));
+  const sub=$('#acompSub'); if(sub) sub.textContent='tratados há 10–13 dias ('+brDate(J.ini)+' a '+brDate(J.fim)+') · '+win.length+' motorista(s) · revisar evolução no daily';
+  if(!win.length){
+    box.innerHTML='<div class="empty">Nenhum motorista tratado há 10–13 dias ('+brDate(J.ini)+' a '+brDate(J.fim)+').'+(TRAT_CACHE===null?'<br>Se há tratativas registradas em outras máquinas, sincronize com ☁️ na aba Tratativas.':'')+'</div>';
+    ACOMP_TEXT=''; return;
+  }
+  const txt=['📋 *Acompanhamento de Tratativas — daily '+brDate(J.hoje)+'*','_Motoristas tratados há 10–13 dias (revisar evolução):_',''];
+  const cards=win.map((t,i)=>{
+    const nome=t.nome||'—', op=t.op||'—', placa=t.placa||'—', ds=String(t.data||'').slice(0,10);
+    const dias=_acompDiasAtras(ds), gestor=t.gestor||'—', tipo=t.tipo||'—', sinais=_acompSinais(t);
+    const ev=_acompEvol(nome,ds);
+    txt.push('*'+(i+1)+'. '+nome+'*  ('+op+' · '+placa+')');
+    txt.push('   tratado em '+brDate(ds)+' (há '+dias+' dias) · '+gestor+' · '+tipo);
+    if(sinais) txt.push('   sinais: '+sinais);
+    txt.push('   evolução: '+(ev?('nota '+scFmt(ev.a)+' → '+scFmt(ev.b)+' '+ev.ic+' '+ev.lab+(ev.mesmoMes?' (ainda no mesmo mês)':'')):'sem nota apurada ainda'));
+    txt.push('');
+    const evHtml = ev
+      ? `<div class="acomp-ev acomp-${ev.cls}">${ev.ic} nota <b>${scFmt(ev.a)}</b> → <b>${scFmt(ev.b)}</b> · ${ev.lab}${ev.mesmoMes?' <span class="evt-sub">(ainda no mesmo mês da tratativa)</span>':''}</div>`
+      : `<div class="acomp-ev acomp-fl">— sem nota apurada ainda</div>`;
+    return `<div class="card acomp-card" data-mot="${encodeURIComponent(nome)}" title="abrir a ficha de ${tratEsc(nome)}">`+
+      `<div class="acomp-top"><span class="acomp-n">${i+1}</span><b class="acomp-nome">${tratEsc(nome)}</b><span class="acomp-op">${tratEsc(op)} · ${tratEsc(placa)}</span><span class="acomp-dias">há ${dias} dias</span></div>`+
+      `<div class="acomp-meta">tratado em <b>${tratEsc(brDate(ds))}</b> · ${tratEsc(gestor)} · <span class="trat-tipo">${tratEsc(tipo)}</span></div>`+
+      (sinais?`<div class="acomp-sinais">⚠ ${tratEsc(sinais)}</div>`:'')+
+      evHtml+`</div>`;
+  }).join('');
+  box.innerHTML='<div class="acomp-grid">'+cards+'</div>';
+  ACOMP_TEXT=txt.join('\n').trim();
+}
 function renderTratativas(){
   const box=$('#tratBox'), kb=$('#tratKpis'), bn=$('#tratBanner'); if(!box||!kb)return;
   // logado no M365 e ainda sem o banco compartilhado? sincroniza em silêncio (1x) e redesenha — mesmo comportamento da ficha
@@ -8555,6 +8635,12 @@ $('#expMotoristas').onclick=exportMotoristas;
 $('#tratQ').addEventListener('input',debounce(()=>{ TRAT_LIMIT=200; renderTratativas(); },180));
 ['#tratTipoF','#tratGestorF','#tratSyncF'].forEach(s=>$(s).addEventListener('change',()=>{ TRAT_LIMIT=200; renderTratativas(); }));
 $('#tratLimpar').onclick=()=>{ $('#tratQ').value=''; $('#tratTipoF').value=''; $('#tratGestorF').value=''; $('#tratSyncF').value=''; TRAT_LIMIT=200; renderTratativas(); };
+// Acompanhamento (follow-up 10-13 dias): copiar lista p/ o grupo + abrir ficha ao clicar no card
+$('#acompCopy').onclick=()=>{ if(!ACOMP_TEXT){ toast('Nada para copiar — sem motoristas na janela de hoje'); return; }
+  const done=()=>toast('Lista copiada ✓ — cole no grupo');
+  try{ navigator.clipboard.writeText(ACOMP_TEXT).then(done).catch(()=>{ const ta=document.createElement('textarea'); ta.value=ACOMP_TEXT; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); done();}catch(e){ toast('Não consegui copiar'); } document.body.removeChild(ta); }); }
+  catch(e){ toast('Não consegui copiar'); } };
+$('#acompBox').addEventListener('click',e=>{ const c=e.target.closest('.acomp-card'); if(c&&c.dataset.mot) openFicha(decodeURIComponent(c.dataset.mot)); });
 $('#expTrat').onclick=exportTratativas;
 $('#view-trat').addEventListener('click',e=>{
   if(e.target.closest('[data-trat-sync]')){ tratSyncFromTab(); return; }
