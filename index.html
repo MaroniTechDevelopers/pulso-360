@@ -562,6 +562,10 @@
   .capinha-ferias{cursor:default}
   .capinha-ferias:hover{transform:none;box-shadow:none;border-color:var(--border)}
   .cap-ferias-badge{margin-left:auto;font-size:10.5px;font-weight:700;color:#a52f5d;background:#fff3f6;border:1px solid #f1c7d4;border-radius:999px;padding:3px 9px;white-space:nowrap}
+  /* Motorista DESLIGADO no Resumo Semanal: aparece como histórico, com faixa diagonal "Demitido" e fora do ranking/bonificação */
+  .capinha.capinha-demitido{position:relative;border-color:#e8b4b4;background:linear-gradient(0deg,rgba(220,38,38,.045),rgba(220,38,38,.045)),var(--surface)}
+  .capinha.capinha-demitido .avatar{filter:grayscale(.5) opacity(.92)}
+  .cap-demit-ribbon{position:absolute;top:13px;right:-33px;width:132px;transform:rotate(45deg);background:linear-gradient(90deg,#b91c1c,#dc2626);color:#fff;font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;text-align:center;padding:4px 0;box-shadow:0 2px 7px rgba(185,28,28,.4);z-index:4;pointer-events:none}
 
   /* ============ FICHA DO MOTORISTA (detalhamento) ============ */
   .ficha-back{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:9px 14px;cursor:pointer;font:inherit;font-size:13px;transition:border-color .15s,box-shadow .15s,transform .1s}
@@ -2915,6 +2919,34 @@ function filtered(){
   const result=grave.rows;
   FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=result; FILTER_CACHE_DIV_COUNT=result.reduce((n,r)=>n+(r.sev!=='conforme'),0); return result;
 }
+// Registros dos motoristas DEMITIDOS que passam pelos MESMOS filtros do topo.
+// Usado só no Resumo Semanal: os demitidos VOLTAM a aparecer entre os cartões (com a faixa
+// "Demitido"), mas continuam fora do ranking e da bonificação (via resumoRankElegivel → _desligadoTms).
+// As demais abas (consolidado, média, linha do tempo…) seguem usando filtered() sem os demitidos.
+function _demitidoRows(){
+  const dem=ensureDemitidos(); if(!dem.size) return [];
+  const fe=$('#fFecha').value, op=$('#fOp').value, dia=$('#fDia').value, de=$('#fDe').value, ate=$('#fAte').value, mot=norm($('#fMot').value), st=$('#fStatus').value, q=norm($('#fBusca').value);
+  const out=[];
+  for(const nn of dem){
+    const arr=RECORDS_BY_DRIVER_N[nn]; if(!arr) continue;
+    for(let i=0;i<arr.length;i++){ const r=arr[i];
+      if(fe && r._fechaKey!==fe) continue;
+      if(de && r.data<de) continue;
+      if(ate && r.data>ate) continue;
+      if(op && r.operacao!==op) continue;
+      if(dia && r.data!==dia) continue;
+      if(mot && !(r._nMot||'').includes(mot)) continue;
+      if(st && r.sev!==st) continue;
+      if(q && !(r._nBusca||'').includes(q)) continue;
+      out.push(r);
+    }
+  }
+  return out;
+}
+function filteredResumo(){
+  const base=filtered(); const extra=_demitidoRows();
+  return extra.length ? base.concat(extra) : base;
+}
 // Placas presentes no recorte de filtros atuais (null = SEM filtro → mostra tudo).
 // Faz as abas de PLACA (Saúde das câmeras, Operação por placa, Placas sem ID) respeitarem os
 // filtros do topo (operação, período, motorista, busca) — antes elas ignoravam os filtros.
@@ -3474,7 +3506,9 @@ function capinha(m,weeks){
   const rankColor=rankOk?(m._rankScore>=80?'var(--good)':m._rankScore>=60?'var(--warning)':'var(--critical)'):'#cbd5e1';
   const rankTitle=rankOk?(`Nota ranking ${Math.round(m._rankScore||0)}/100 · ${m._rankScoreTitle||''}`):'Não elegível para ranking: sem movimentação no período';
   const alBadges = alR.badges.slice(0,3).map(b=>`<span class="abadge ${b.hot?'hot':''}" title="${b.lab}">${b.ic}${b.n}</span>`).join('') || '<span class="abadge ok">sem alertas</span>';
-  return `<button class="capinha" data-mot="${encodeURIComponent(m.nome)}">
+  const demit = motoristaDesligadoTms(m.nome);
+  return `<button class="capinha${demit?' capinha-demitido':''}" data-mot="${encodeURIComponent(m.nome)}" title="${demit?'Motorista DESLIGADO — aparece aqui só como histórico; fora do ranking e da bonificação':''}">
+    ${demit?'<span class="cap-demit-ribbon">Demitido</span>':''}
     <div class="cap-top">
       <span class="avatar" style="background:${rankColor}">${iniciais(m.nome)}</span>
       <div class="cap-id"><b>${firstName(m.nome)}</b><small>${tempoDeCasa(m.admissao)} de casa</small></div>
@@ -3489,7 +3523,7 @@ function capinha(m,weeks){
     </div>
     <div class="cap-foot">
       ${strip}
-      <span class="cap-alerts">${!rankOk?'<span class="abadge pend" title="Sem movimentação no período">não elegível · sem movimentação</span>':(m.pend>0?`<span class="abadge pend" title="pendências (falta dado)">⚠ ${m.pend} pend.</span>`:(!bestOk&&SEMANA_RANK_MODE==='all'?'<span class="abadge pend" title="Para os melhores: exige amostra mínima de movimentação, ponto, jornada e identificação completos">elegível p/ risco · incompleto p/ melhores</span>':alBadges))}</span>
+      <span class="cap-alerts">${demit?'<span class="abadge pend" title="Motorista desligado — aparece só como histórico; fora do ranking e da bonificação">desligado · fora do ranking</span>':(!rankOk?'<span class="abadge pend" title="Sem movimentação no período">não elegível · sem movimentação</span>':(m.pend>0?`<span class="abadge pend" title="pendências (falta dado)">⚠ ${m.pend} pend.</span>`:(!bestOk&&SEMANA_RANK_MODE==='all'?'<span class="abadge pend" title="Para os melhores: exige amostra mínima de movimentação, ponto, jornada e identificação completos">elegível p/ risco · incompleto p/ melhores</span>':alBadges)))}</span>
     </div>
     <span class="cap-cta">ver detalhamento →</span>
   </button>`;
@@ -5602,7 +5636,7 @@ function renderAll(){
     const bd=$('#badgeDiv'), n=VIEW_BADGE_COUNTS[view]; if(bd&&n!=null)bd.textContent=n>999?'999+':n;
     atualizaDataMode(); return;
   }
-  let rows=null; if(rowViews.has(view)) rows=filtered();
+  let rows=null; if(rowViews.has(view)) rows=(view==='semana')?filteredResumo():filtered();
   if(view==='semana'){
     // Primeiro paint sempre útil: KPIs aparecem mesmo se o ranking ainda estiver sendo preparado.
     try{ renderKpis(rows); }catch(e){ console.error('[Pulso360] KPIs resumo',e); }
