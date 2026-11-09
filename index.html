@@ -7031,7 +7031,10 @@ async function loadMovLocais(files){
 // ALERTAS local (vários csv/zip) — streaming + merge, soma os dias
 async function loadAlertasLocais(files){
   if(typeof JSZip==='undefined' && [...files].some(f=>/\.zip$/i.test(f.name||''))){ toast('Biblioteca ZIP não carregou'); return; }
-  const acc={A:{},n:0,placaUO:{},tl:{}},keep=namesOfInterest(),alertSeen=new Set(),alertDiag={dup:0,unique:0};
+  // Normalmente a linha do tempo é escopada no roster (controla memória no uso manual). No BUILD headless
+  // (window.__PULSO_TL_UNSCOPED) construímos SEM escopo para não perder eventos por divergência de nome no
+  // momento da carga; o build poda depois para o roster final já canonizado.
+  const acc={A:{},n:0,placaUO:{},tl:{}},keep=(typeof window!=='undefined'&&window.__PULSO_TL_UNSCOPED)?null:namesOfInterest(),alertSeen=new Set(),alertDiag={dup:0,unique:0};
   const arr=[...files].filter(f=>f&&!/^~\$/.test(f.name||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR')); let done=0,fail=0,parts=0;
   if(!arr.length){toast('Nenhum arquivo válido selecionado');return;}
   for(const f of arr){

@@ -147,6 +147,7 @@ def do_build_local(push, dias):
         pg.goto(f"http://127.0.0.1:{PORT}/index.html", wait_until="domcontentloaded")
         pg.wait_for_function("typeof gerarDadosPublicacao==='function'", timeout=60000)
         pg.evaluate("(()=>{try{if(typeof goTab==='function')goTab('dados');}catch(e){} var c=document.getElementById('dadosContent');if(c)c.style.display='block'; var g=document.getElementById('dadosGate');if(g)g.style.display='none';})()")
+        pg.evaluate("()=>{ window.__PULSO_TL_UNSCOPED=true; }")  # linha do tempo de alertas SEM escopo; poda p/ roster final antes de publicar
         for sel, subdir, exts, ready, tmo in LOCAL_STEPS:
             files=_collect(subdir, exts, cutoff)
             if not files: log(f"{subdir}: 0 arquivos (pulando)"); continue
@@ -162,6 +163,21 @@ def do_build_local(push, dias):
             pg.set_input_files(sel, files)
             try: pg.wait_for_function(f"()=>{{try{{return ({ready});}}catch(e){{return false;}}}}", timeout=tmo*1000); log("   ok")
             except Exception as e: log(f"   AVISO: {subdir} nao confirmou em {tmo}s — seguindo.")
+        # AL_TL foi construido SEM escopo; agora, com o roster final/canonizado, poda para os motoristas
+        # presentes nos registros (mesmo tamanho do escopado, porem sem perder eventos por timing de nome).
+        try:
+            pr=pg.evaluate("""()=>{ try{
+              if(typeof AL_TL==='undefined'||!AL_TL) return {skip:'sem AL_TL'};
+              const keys=Object.keys(AL_TL);
+              const roster=(typeof RECORD_DRIVER_NAMES_N!=='undefined'&&RECORD_DRIVER_NAMES_N)?RECORD_DRIVER_NAMES_N:null;
+              if(!roster||!roster.size) return {antes:keys.length, podado:false, motivo:'sem roster'};
+              const keep=keys.filter(k=>roster.has(k));
+              if(keep.length>=100){ for(const k of keys){ if(!roster.has(k)) delete AL_TL[k]; } return {antes:keys.length, depois:keep.length, podado:true}; }
+              return {antes:keys.length, matchRoster:keep.length, podado:false, motivo:'poucos matches - mantendo sem escopo'};
+            }catch(e){ return {erro:String(e)}; } }""")
+            log("poda AL_TL:", pr)
+        except Exception as e:
+            log("poda AL_TL falhou (seguindo):", e)
         with pg.expect_download(timeout=1800000) as dlinfo:
             pg.evaluate("document.getElementById('btnSnapshot').click()")
         _save_and_publish(dlinfo.value, push)
