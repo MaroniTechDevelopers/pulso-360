@@ -1242,7 +1242,10 @@
   <!-- ===== DEMITIDOS — desligados no TMS, isolados do ranking/bonificação/seleção ===== -->
   <section class="view" id="view-demitidos">
     <div class="sec-title"><h2>Demitidos</h2><span id="demitidosSub">motoristas desligados no TMS · fora do ranking/bonificação/seleção · clique para abrir o resumo</span></div>
-    <div class="f" style="margin-bottom:12px;max-width:340px"><label>Buscar demitido</label><input type="text" id="demitidosBusca" placeholder="Nome, centro de resultado ou cargo…"></div>
+    <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+      <div class="f" style="max-width:340px;margin:0"><label>Buscar demitido</label><input type="text" id="demitidosBusca" placeholder="Nome, centro de resultado ou cargo…"></div>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;padding-bottom:6px"><input type="checkbox" id="demFiltroPulso" style="width:17px;height:17px;accent-color:var(--gold);cursor:pointer"> 🦏 Só desligados com apoio do Pulso 360</label>
+    </div>
     <div id="demitidosBox"></div>
   </section>
 
@@ -1616,6 +1619,10 @@
       <option>Outro</option>
     </select></label>
     <label>O que foi tratado / ação tomada<textarea id="tratObs" rows="4" placeholder="Ex.: conversei sobre uso de celular e média; combinamos meta para a próxima semana…"></textarea></label>
+    <label class="trat-deslig" style="display:flex;align-items:flex-start;gap:10px;margin:2px 0 4px;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:color-mix(in srgb,var(--gold) 8%,transparent);font-weight:600;cursor:pointer">
+      <input type="checkbox" id="tratDeslig" style="width:18px;height:18px;margin-top:1px;flex:none;accent-color:var(--gold);cursor:pointer">
+      <span>🦏 Esta tratativa <b>embasou o desligamento</b> — decisão apoiada pelo Pulso 360<br><span style="font-weight:400;font-size:12px;color:var(--muted)">Marque para registrar que a ferramenta ajudou na tomada de decisão (aparece na ficha e na aba Demitidos).</span></span>
+    </label>
     <div class="modal-actions">
       <button class="btn" id="tratCancel" style="color:var(--ink);background:var(--surface);border-color:var(--border)">Cancelar</button>
       <button class="btn solid" id="tratSave">Salvar tratativa</button>
@@ -4554,7 +4561,7 @@ function renderFicha(){
 
     <div class="sec-title"><h2>Tratativas com o motorista</h2><span>${trats.length} registro(s) · ${TRAT_CACHE?'histórico compartilhado sincronizado':'histórico local · sincronize para ver nas outras máquinas'}</span></div>
     <div class="card">${ trats.length
-      ? '<ul class="tratlist">'+trats.map(t=>`<li data-trat-uid="${encodeURIComponent(tratUid(t))}"><div class="tt-h"><span class="tt-tipo">${pdfEsc(t.tipo||'—')}</span><b>${brDate(t.data)}</b>${t.gestor?' · <span class="tt-g">'+pdfEsc(t.gestor)+'</span>':''}${isAdmin()?`<button class="trat-del" type="button" data-uid="${encodeURIComponent(tratUid(t))}" title="Excluir esta tratativa do histórico compartilhado">🗑️ Excluir</button>`:''}</div>${t.obs?'<div class="tt-o">'+pdfEsc(t.obs)+'</div>':''}${t.sinais?'<div class="tt-s">sinais na época: '+pdfEsc(t.sinais)+'</div>':''}</li>`).join('')+'</ul>'
+      ? '<ul class="tratlist">'+trats.map(t=>`<li data-trat-uid="${encodeURIComponent(tratUid(t))}"><div class="tt-h"><span class="tt-tipo">${pdfEsc(t.tipo||'—')}</span><b>${brDate(t.data)}</b>${t.gestor?' · <span class="tt-g">'+pdfEsc(t.gestor)+'</span>':''}${isAdmin()?`<button class="trat-del" type="button" data-uid="${encodeURIComponent(tratUid(t))}" title="Excluir esta tratativa do histórico compartilhado">🗑️ Excluir</button>`:''}</div>${t.obs?'<div class="tt-o">'+pdfEsc(t.obs)+'</div>':''}${t.sinais?'<div class="tt-s">sinais na época: '+pdfEsc(t.sinais)+'</div>':''}${t.desligamentoPulso?'<div style="margin-top:7px;display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--gold) 20%,transparent);color:var(--gold-2);font-weight:700;font-size:11.5px;padding:3px 10px;border-radius:20px">🦏 Decisão de desligamento apoiada pelo Pulso 360</div>':''}</li>`).join('')+'</ul>'
       : '<div class="empty" style="padding:22px">Nenhuma tratativa registrada ainda. Use o botão <b>🗣️ Registrar tratativa</b> (acima) para iniciar o acompanhamento com o motorista.</div>' }</div>
 
     ${_notaProfile&&_notaProfile.velocidade?`<div class="card" style="padding:12px 16px;margin-bottom:12px"><b>Velocidade na nota:</b> ${pdfEsc(speedScoreText(_notaProfile))}. Outros alertas continuam no componente de alertas.</div>`:''}
@@ -6945,10 +6952,11 @@ async function loadMovLocais(files){
   for(const f of arr){
     const pos=done+1; const st=$('#stMov'); if(st)st.textContent='processando '+pos+'/'+arr.length+' · '+f.name;
     try{
-      const ext=(f.name.split('.').pop()||'').toLowerCase();
+      const fobj=(f && typeof f.arrayBuffer==='function') ? f : await spGrab(f);  // baixa 1 por vez (evita Out of Memory na movimentação)
+      const ext=(fobj.name.split('.').pop()||'').toLowerCase();
       if(ext==='zip'){
         await uiYield();
-        const zip=await JSZip.loadAsync(await f.arrayBuffer());
+        const zip=await JSZip.loadAsync(await fobj.arrayBuffer());
         const names=Object.keys(zip.files).filter(n=>/\.(csv|txt)$/i.test(n)&&!zip.files[n].dir).sort();
         if(!names.length)throw new Error('ZIP sem CSV/TXT');
         for(let j=0;j<names.length;j++){
@@ -6957,9 +6965,9 @@ async function loadMovLocais(files){
           movRows+=await accMovTextAsync(decodeText(ab),movRaw,jor.roster,movSeen,movDiag); parts++; await uiYieldBudget();
         }
       }else if(ext==='xlsx'||ext==='xls'){
-        movRows+=accMov(await readFileRowsP(f),movRaw,jor.roster,movSeen,movDiag); parts++;
+        movRows+=accMov(await readFileRowsP(fobj),movRaw,jor.roster,movSeen,movDiag); parts++;
       }else{
-        movRows+=await accMovTextAsync(await fileToText(f),movRaw,jor.roster,movSeen,movDiag); parts++;
+        movRows+=await accMovTextAsync(await fileToText(fobj),movRaw,jor.roster,movSeen,movDiag); parts++;
       }
     }catch(e){fail++;console.warn('Falha na movimentação:',f&&f.name,e);}
     done++; await uiYieldBudget();
@@ -7840,7 +7848,7 @@ async function spLoadAll(interactive){
       if(res.rows.length){ pending.ponto=res.rows; jornadaCoverage(res.rows); updateDropStatus(); } }
     // 2) MOVIMENTAÇÃO (exige o ponto) → constrói os RECORDS via finalizeRecords
     if(byType.mov){ if(!pending.ponto){ toast('Jornada não encontrada no SharePoint — a movimentação precisa dela'); }
-      else { const fs=await grabAll('mov','movimentação'); setPill('processando movimentação…'); await loadMovLocais(fs); } }
+      else { const fs=(byType.mov||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR')); setPill('processando movimentação…'); await loadMovLocais(fs); } }
     // 3) ENRIQUECIMENTOS — cada loader se re-analisa (afterImportChange) e anexa aos records
     if(byType.motoristas){ setPill('processando motoristas…'); await loadMotoristasFiles(await grabAll('motoristas','motoristas')); }
     if(byType.tms){ setPill('processando TMS…'); await loadTmsFiles(await grabAll('tms','veículos TMS')); }
@@ -7925,8 +7933,8 @@ async function excluirTratativa(nome,uid){
   toast(ids.length?('Tratativa excluída do histórico compartilhado ✓'+(ids.length>1?' · '+ids.length+' cópias removidas':'')):'Tratativa local excluída ✓');
   renderFicha();
 }
-function openTratModal(){ const nome=fichaAtual; if(!nome)return; $('#tratNome').textContent=nome; $('#tratData').value=new Date().toISOString().slice(0,10); let g=''; if(spSignedIn())g=spGestor().nome; if(!g){try{g=localStorage.getItem('integ360_gestor')||'';}catch(e){}} $('#tratGestor').value=g;$('#tratTipo').value='Conversa de orientação';$('#tratMotivo').value='';$('#tratObs').value='';$('#tratModal').style.display='flex';setTimeout(()=>$('#tratObs').focus(),50); }
-async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,motivo=$('#tratMotivo').value,obs=$('#tratObs').value.trim();if(!motivo){toast('Selecione o motivo da tratativa');return;}if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,motivo,obs,op:M.op||'',placa:M.placas||'',cpf:(function(){const c=cadMotoristaDe(nome);return cpfKey((c&&c.cpf)||cpfDeNome(nome)||'');})(),sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); if(typeof SCORECARD_NOME!=='undefined'&&SCORECARD_NOME&&$('#scoreModal')&&$('#scoreModal').style.display==='flex'){ try{renderScorecard(SCORECARD_NOME);}catch(e){} } }
+function openTratModal(){ const nome=fichaAtual; if(!nome)return; $('#tratNome').textContent=nome; $('#tratData').value=new Date().toISOString().slice(0,10); let g=''; if(spSignedIn())g=spGestor().nome; if(!g){try{g=localStorage.getItem('integ360_gestor')||'';}catch(e){}} $('#tratGestor').value=g;$('#tratTipo').value='Conversa de orientação';$('#tratMotivo').value='';$('#tratObs').value='';(function(){const d=$('#tratDeslig');if(d)d.checked=false;})();$('#tratModal').style.display='flex';setTimeout(()=>$('#tratObs').focus(),50); }
+async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,motivo=$('#tratMotivo').value,obs=$('#tratObs').value.trim();if(!motivo){toast('Selecione o motivo da tratativa');return;}if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,motivo,obs,op:M.op||'',placa:M.placas||'',cpf:(function(){const c=cadMotoristaDe(nome);return cpfKey((c&&c.cpf)||cpfDeNome(nome)||'');})(),desligamentoPulso:!!($('#tratDeslig')&&$('#tratDeslig').checked),sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); if(typeof SCORECARD_NOME!=='undefined'&&SCORECARD_NOME&&$('#scoreModal')&&$('#scoreModal').style.display==='flex'){ try{renderScorecard(SCORECARD_NOME);}catch(e){} } }
 
 /* ============================================================
    ABA TRATATIVAS — visão consolidada de todas as tratativas de todos os motoristas
@@ -8003,11 +8011,14 @@ function renderDemitidos(){
     const a=RECORDS_BY_DRIVER_N[nn]; const nome=a&&a.length?a[0].motoristaEscala:nn;
     const c=cadMotoristaDe(nome)||{}; const cpf=c.cpf||cpfDeNome(nome)||'';
     const k=cpf?('cpf:'+cpfKey(cpf)):('nome:'+nn); if(seen.has(k))return; seen.add(k);
-    uniq.push({nome, cpf, centro:c.centro||'', cargo:c.cargo||'', demissao:c.demissao||''});
+    const _flag=(typeof tratList==='function')?tratList(nome).some(t=>t&&t.desligamentoPulso):false;
+    uniq.push({nome, cpf, centro:c.centro||'', cargo:c.cargo||'', demissao:c.demissao||'', desligFlag:_flag});
   });
   uniq.sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'));
-  const rows=uniq.filter(c=>!q||norm((c.nome||'')+' '+(c.centro||'')+' '+(c.cargo||'')).includes(q));
-  const sub=$('#demitidosSub'); if(sub) sub.textContent=uniq.length.toLocaleString('pt-BR')+' demitido(s) com atividade no período · fora do ranking/bonificação/seleção · clique para abrir o resumo';
+  const soPulso=!!($('#demFiltroPulso')&&$('#demFiltroPulso').checked);
+  const nFlag=uniq.filter(c=>c.desligFlag).length;
+  const rows=uniq.filter(c=>(!q||norm((c.nome||'')+' '+(c.centro||'')+' '+(c.cargo||'')).includes(q)) && (!soPulso||c.desligFlag));
+  const sub=$('#demitidosSub'); if(sub) sub.textContent=uniq.length.toLocaleString('pt-BR')+' demitido(s) com atividade no período'+(nFlag?' · '+nFlag+' com desligamento apoiado pelo Pulso 360':'')+' · clique para abrir o resumo';
   if(!(MOTORISTAS_TMS && Object.keys(MOTORISTAS_TMS).length)){ box.innerHTML='<div class="empty" style="padding:22px">Cadastro de motoristas (TMS) não carregado. Importe/publique o <b>Relatório de Motoristas</b> (com a coluna Situação) na aba Dados.</div>'; return; }
   if(!rows.length){ box.innerHTML='<div class="empty" style="padding:22px">'+(q?'Nenhum demitido para a busca.':'Nenhum motorista demitido com atividade no período.')+'</div>'; return; }
   const esc=s=>String(s==null?'':s).replace(/</g,'&lt;');
@@ -8016,6 +8027,7 @@ function renderDemitidos(){
     return '<button type="button" class="card" style="text-align:left;cursor:pointer;border:0;display:flex;flex-direction:column;gap:5px;padding:14px" data-mot="'+encodeURIComponent(nome)+'" title="Abrir o resumo de '+nome.replace(/"/g,'&quot;')+'">'
       +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:14px">'+esc(nome)+'</b>'+(cpf?'<span style="font-size:11px;color:var(--muted)">'+esc(cpf)+'</span>':'')+'</div>'
       +'<div style="font-size:12.5px;color:var(--ink-2)">'+esc(centro)+(cargo?' · '+esc(cargo):'')+'</div>'
+      +(c.desligFlag?'<div style="display:inline-flex;align-items:center;gap:6px;background:color-mix(in srgb,var(--gold) 20%,transparent);color:var(--gold-2);font-weight:700;font-size:11px;padding:3px 9px;border-radius:20px;margin-top:2px;align-self:flex-start">🦏 Desligamento apoiado pelo Pulso 360</div>':'')
       +'<div style="font-size:11.5px;color:var(--muted)">'+(dem?('Demissão: '+esc(dem)):'Inativo no TMS')+' · ver resumo →</div>'
       +'</button>';
   }).join('')+'</div>';
@@ -8712,6 +8724,7 @@ $('#acompCopy').onclick=()=>{ if(!ACOMP_TEXT){ toast('Nada para copiar — sem m
 $('#acompBox').addEventListener('click',e=>{ const c=e.target.closest('.acomp-card'); if(c&&c.dataset.mot) openFicha(decodeURIComponent(c.dataset.mot)); });
 $('#demitidosBox').addEventListener('click',e=>{ const c=e.target.closest('[data-mot]'); if(c&&c.dataset.mot) openFicha(decodeURIComponent(c.dataset.mot)); });
 if($('#demitidosBusca')) $('#demitidosBusca').addEventListener('input',()=>{ if(activeViewName()==='demitidos') renderDemitidos(); });
+if($('#demFiltroPulso')) $('#demFiltroPulso').addEventListener('change',()=>{ if(activeViewName()==='demitidos') renderDemitidos(); });
 $('#expTrat').onclick=exportTratativas;
 $('#view-trat').addEventListener('click',e=>{
   if(e.target.closest('[data-trat-sync]')){ tratSyncFromTab(); return; }
