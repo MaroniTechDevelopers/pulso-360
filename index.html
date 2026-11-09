@@ -1873,6 +1873,13 @@ function cpfDeNome(nome){
   if(cn && ADMISSAO_CANONCPF && ADMISSAO_CANONCPF[cn]) return ADMISSAO_CANONCPF[cn];
   return '';
 }
+// Identidade do motorista por CPF (não por nome): resolve o CPF pelo cadastro/índices
+// e só cai no nome quando o CPF é desconhecido. Evita duplicar a mesma pessoa com 2 grafias.
+function motUidKey(nome){
+  const cad=cadMotoristaDe(nome);
+  const cpf=(cad&&cad.cpf)?cpfKey(cad.cpf):cpfKey(cpfDeNome(nome)||'');
+  return cpf?('cpf:'+cpf):('nome:'+norm(nome||''));
+}
 function admissaoRealDe(nome){
   const nn=norm(nome), cn=nomeCanon(nome);
   const cpf=cpfDeNome(nome);
@@ -3252,7 +3259,7 @@ function resumoRankCmp(a,b){
   d=(pa.movDays||0)-(pb.movDays||0);if(d)return d; return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR');
 }
 function resumoRankUnique(list){
-  const mp=new Map(); for(const m of (list||[])){const k=norm(m.nome||'');if(!k)continue;const prev=mp.get(k);const hm=m.mov||0;const hp=prev&&(prev.mov||0);if(!prev||hm>hp)mp.set(k,m);} return [...mp.values()];
+  const mp=new Map(); for(const m of (list||[])){const k=motUidKey(m.nome||'');if(!k)continue;const prev=mp.get(k);const hm=m.mov||0;const hp=prev&&(prev.mov||0);if(!prev||hm>hp)mp.set(k,m);} return [...mp.values()];
 }
 // Quando o filtro resolve para um único motorista, consolida todas as operações em uma única capa.
 // Isso evita duplicar o mesmo condutor em blocos diferentes e mantém os KPIs no mesmo universo filtrado.
@@ -7834,13 +7841,15 @@ function tratLocalSave(m){ try{ localStorage.setItem('integ360_tratativas', JSON
 function tratKey(nome){ const nn=norm(nome); const cpf=(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[nn])||''; return cpf?('cpf:'+cpf):('nome:'+nn); }
 function tratUid(t){ return String((t&&t.uid)||((t&&t.ts)||'')+'_'+norm((t&&t.gestor)||'')+'_'+norm((t&&t.obs)||'').slice(0,40)); }
 // assinatura estável: reconhece a MESMA tratativa mesmo em registros legados onde local e SharePoint ficaram com UIDs diferentes
-function tratStableSig(t){ if(!t)return ''; const ts=Number(t.ts||0); return [
-  ts?String(ts):'', String(t.data||''), norm(t.nome||''), cpfKey(t.cpf||''), norm(t.gestor||''),
-  String(t.gestorEmail||'').trim().toLowerCase(), norm(t.tipo||''), norm(t.obs||''), norm(t.op||''), norm(t.placa||'')
+function tratStableSig(t){ if(!t)return ''; return [
+  String(t.data||''), motUidKey(t.nome||''), norm(t.gestor||''),
+  norm(t.tipo||''), norm(t.obs||''), norm(t.op||''), norm(t.placa||'')
 ].join('|'); }
 function tratSame(a,b){ if(!a||!b)return false; const ua=tratUid(a),ub=tratUid(b); if(ua&&ub&&ua===ub)return true; const sa=tratStableSig(a),sb=tratStableSig(b); return !!sa&&sa===sb; }
 function tratMergeArr(a,b){ const out=[],uids=new Set(),sigs=new Set(); [...(a||[]),...(b||[])].forEach(t=>{ const u=tratUid(t),s=tratStableSig(t); if((u&&uids.has(u))||(s&&sigs.has(s)))return; out.push(t); if(u)uids.add(u); if(s)sigs.add(s); }); return out; }
-function tratList(nome){ const key=tratKey(nome), local=tratLocalLoad(), shared=TRAT_CACHE||{}; return tratMergeArr(shared[key],local[key]).sort((a,b)=>(+b.ts||0)-(+a.ts||0)||String(b.data||'').localeCompare(String(a.data||''))); }
+function tratList(nome){ const local=tratLocalLoad(), shared=TRAT_CACHE||{}, want=motUidKey(nome);
+  const pick=(map)=>{ const out=[]; for(const k in (map||{})){ for(const r of (map[k]||[])){ const rk=(r&&r.cpf)?('cpf:'+cpfKey(r.cpf)):motUidKey((r&&r.nome)||''); if(rk===want) out.push(r); } } return out; };
+  return tratMergeArr(pick(shared),pick(local)).sort((a,b)=>(+b.ts||0)-(+a.ts||0)||String(b.data||'').localeCompare(String(a.data||''))); }
 function spSignedIn(){ try{ return !!(typeof msal!=='undefined' && _msal && _msal.getAllAccounts && _msal.getAllAccounts()[0]); }catch(e){ return false; } }
 function spGestor(){ try{ const a=_msal.getAllAccounts()[0]; return a?{nome:a.name||a.username||'', email:a.username||''}:{nome:'',email:''}; }catch(e){ return {nome:'',email:''}; } }
 function spEmail(){ try{ const a=_msal&&_msal.getAllAccounts&&_msal.getAllAccounts()[0]; return a?String(a.username||'').toLowerCase():''; }catch(e){ return ''; } }
@@ -7886,7 +7895,7 @@ async function excluirTratativa(nome,uid){
   renderFicha();
 }
 function openTratModal(){ const nome=fichaAtual; if(!nome)return; $('#tratNome').textContent=nome; $('#tratData').value=new Date().toISOString().slice(0,10); let g=''; if(spSignedIn())g=spGestor().nome; if(!g){try{g=localStorage.getItem('integ360_gestor')||'';}catch(e){}} $('#tratGestor').value=g;$('#tratTipo').value='Conversa de orientação';$('#tratMotivo').value='';$('#tratObs').value='';$('#tratModal').style.display='flex';setTimeout(()=>$('#tratObs').focus(),50); }
-async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,motivo=$('#tratMotivo').value,obs=$('#tratObs').value.trim();if(!motivo){toast('Selecione o motivo da tratativa');return;}if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,motivo,obs,op:M.op||'',placa:M.placas||'',cpf:(typeof NOME2CPF!=='undefined'&&NOME2CPF&&NOME2CPF[norm(nome)])||'',sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); if(typeof SCORECARD_NOME!=='undefined'&&SCORECARD_NOME&&$('#scoreModal')&&$('#scoreModal').style.display==='flex'){ try{renderScorecard(SCORECARD_NOME);}catch(e){} } }
+async function salvarTratativa(){ const nome=fichaAtual;if(!nome)return;const data=$('#tratData').value||new Date().toISOString().slice(0,10),gestor=$('#tratGestor').value.trim(),tipo=$('#tratTipo').value,motivo=$('#tratMotivo').value,obs=$('#tratObs').value.trim();if(!motivo){toast('Selecione o motivo da tratativa');return;}if(!gestor){toast('Informe o gestor responsável');return;}if(!obs){toast('Descreva o que foi tratado');return;}try{localStorage.setItem('integ360_gestor',gestor);}catch(e){} const M=fichaMetrics(nome);const t={data,gestor,gestorEmail:(spSignedIn()?spGestor().email:''),tipo,motivo,obs,op:M.op||'',placa:M.placas||'',cpf:(function(){const c=cadMotoristaDe(nome);return cpfKey((c&&c.cpf)||cpfDeNome(nome)||'');})(),sinais:(M.risco&&M.risco.reasons||[]).join(' · '),ts:Date.now()};$('#tratSave').disabled=true;$('#tratSave').textContent='Salvando…';const r=await tratAdd(nome,t);$('#tratSave').disabled=false;$('#tratSave').textContent='Salvar tratativa';$('#tratModal').style.display='none';toast(r.sp?'Tratativa compartilhada no SharePoint ✓':('Tratativa salva localmente · pendente de sincronização'+(r.err?' ('+r.err+')':'')));renderFicha(); if(typeof SCORECARD_NOME!=='undefined'&&SCORECARD_NOME&&$('#scoreModal')&&$('#scoreModal').style.display==='flex'){ try{renderScorecard(SCORECARD_NOME);}catch(e){} } }
 
 /* ============================================================
    ABA TRATATIVAS — visão consolidada de todas as tratativas de todos os motoristas
