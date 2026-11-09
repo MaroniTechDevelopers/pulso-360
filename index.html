@@ -6284,9 +6284,13 @@ async function readJornadaFiles(files,onProgress){
 }
 function loadXlsxSheetP(file, prefer, needCols){ return new Promise(resolve=>{ let done=false; const finish=(rows,name)=>{ if(done)return; done=true; resolve({rows:rows||[],name:name||''}); }; try{ loadXlsxSheet(file,prefer,needCols,finish); }catch(e){ console.warn('Falha ao ler Excel '+(file&&file.name||''),e); finish([], ''); } setTimeout(()=>{ if(!done)console.warn('Timeout de Excel: '+(file&&file.name||'arquivo')); finish([], ''); },FILE_READ_TIMEOUT_MS); }); }
 function decodeText(buf){
-  try{ return new TextDecoder('utf-8',{fatal:true}).decode(buf); }
-  catch(_){ try{ return new TextDecoder('windows-1252').decode(buf); }
-            catch(e){ return new TextDecoder('iso-8859-1').decode(buf); } }
+  // Remove o BOM UTF-8 (bytes EF BB BF) ANTES de decodificar. Sem isso, arquivos cp1252 com BOM
+  // caíam no windows-1252 e o BOM virava "ï»¿" grudado no 1º cabeçalho (quebrava a 1ª coluna, ex.: PLACA do Boletim do Veículo).
+  let u8 = (buf instanceof Uint8Array) ? buf : new Uint8Array(buf);
+  if(u8.length>=3 && u8[0]===0xEF && u8[1]===0xBB && u8[2]===0xBF) u8 = u8.subarray(3);
+  try{ return new TextDecoder('utf-8',{fatal:true}).decode(u8); }
+  catch(_){ try{ return new TextDecoder('windows-1252').decode(u8); }
+            catch(e){ return new TextDecoder('iso-8859-1').decode(u8); } }
 }
 function splitCSVLine(l,delim){ const out=[]; let cur='',q=false; for(let i=0;i<l.length;i++){ const c=l[i];
     if(c==='"'){ if(q&&l[i+1]==='"'){cur+='"';i++;} else q=!q; }
