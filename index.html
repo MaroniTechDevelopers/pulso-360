@@ -2943,9 +2943,19 @@ function _demitidoRows(){
   }
   return out;
 }
+// IMPORTANTE: precisa devolver SEMPRE A MESMA instância de array enquanto filtros/dados não mudam.
+// O caminho assíncrono do ranking (_rankReadyForRows / RANKPROFILE_CACHE) compara rows POR IDENTIDADE;
+// se devolvêssemos um concat novo a cada render, o resumo ficaria preso em "Preparando…" para sempre.
+let FR_CACHE_ROWS=null, FR_CACHE_KEY='';
 function filteredResumo(){
-  const base=filtered(); const extra=_demitidoRows();
-  return extra.length ? base.concat(extra) : base;
+  const base=filtered();            // já cacheado (FILTER_CACHE_ROWS) e estável enquanto o filtro não muda
+  const dem=ensureDemitidos();
+  if(!dem.size) return base;        // sem demitidos → reaproveita o próprio array do filtered()
+  const key=(FILTER_CACHE_KEY||'')+'|FR|'+DATA_REV+'|'+DEMITIDOS_REV+'|'+base.length;
+  if(FR_CACHE_ROWS && FR_CACHE_KEY===key) return FR_CACHE_ROWS;
+  const extra=_demitidoRows();
+  const out=extra.length ? base.concat(extra) : base;
+  FR_CACHE_ROWS=out; FR_CACHE_KEY=key; return out;
 }
 // Placas presentes no recorte de filtros atuais (null = SEM filtro → mostra tudo).
 // Faz as abas de PLACA (Saúde das câmeras, Operação por placa, Placas sem ID) respeitarem os
