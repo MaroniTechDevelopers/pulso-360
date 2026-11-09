@@ -6950,10 +6950,12 @@ async function loadAlertasLocais(files){
   for(const f of arr){
     const pos=done+1,st=$('#stAlertas'); if(st)st.textContent='processando '+pos+'/'+arr.length+' · '+f.name;
     try{
-      const ext=(f.name.split('.').pop()||'').toLowerCase();
+      // Descritor do SharePoint? baixa SÓ AGORA (1 por vez) para não acumular tudo na memória (evita Out of Memory nos alertas).
+      const fobj=(f && typeof f.arrayBuffer==='function') ? f : await spGrab(f);
+      const ext=(fobj.name.split('.').pop()||'').toLowerCase();
       if(ext==='zip'){
         await uiYield();
-        const zip=await JSZip.loadAsync(await f.arrayBuffer());
+        const zip=await JSZip.loadAsync(await fobj.arrayBuffer());
         const names=Object.keys(zip.files).filter(n=>/\.(csv|txt)$/i.test(n)&&!zip.files[n].dir).sort();
         if(!names.length)throw new Error('ZIP sem CSV/TXT');
         for(let j=0;j<names.length;j++){
@@ -6962,7 +6964,7 @@ async function loadAlertasLocais(files){
           mergeAlertas(acc,await aggAlertasAsync(decodeText(ab),keep,alertSeen,alertDiag));parts++;await uiYieldBudget();
         }
       }else{
-        mergeAlertas(acc,await aggAlertasAsync(await fileToText(f),keep,alertSeen,alertDiag));parts++;
+        mergeAlertas(acc,await aggAlertasAsync(await fileToText(fobj),keep,alertSeen,alertDiag));parts++;
       }
     }catch(e){fail++;console.warn('Falha nos alertas:',f&&f.name,e);}
     done++;await uiYieldBudget();
@@ -7813,7 +7815,7 @@ async function spLoadAll(interactive){
     // 3) ENRIQUECIMENTOS — cada loader se re-analisa (afterImportChange) e anexa aos records
     if(byType.motoristas){ setPill('processando motoristas…'); await loadMotoristasFiles(await grabAll('motoristas','motoristas')); }
     if(byType.tms){ setPill('processando TMS…'); await loadTmsFiles(await grabAll('tms','veículos TMS')); }
-    if(byType.alertas){ setPill('processando alertas…'); await loadAlertasLocais(await grabAll('alertas','alertas')); }
+    if(byType.alertas){ setPill('processando alertas…'); await loadAlertasLocais((byType.alertas||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'))); }
     if(byType.boletim){ setPill('processando boletim…'); await loadBoletimFilesFast(await grabAll('boletim','boletim motorista')); }
     if(byType.bdv){ setPill('processando boletim do veículo…'); await loadBdvFilesFast(await grabAll('bdv','boletim veículo')); }
     if(byType.pedidos){ setPill('processando pedidos…'); await loadPedidosFilesFast(await grabAll('pedidos','pedidos')); }
