@@ -43,10 +43,11 @@ LOCAL_STEPS = [
     ("#fileMotoristas","07 - Motoristas",             ("csv","CSV"), "MOTORISTAS_TMS && Object.keys(MOTORISTAS_TMS).length>0", 300),
     ("#fileTms",       "08 - Veiculos (TMS)",         ("csv","CSV"), "typeof TMS!=='undefined' && TMS && Object.keys(TMS).length>0", 300),
     ("#filePedidos",   "09 - Pedidos",                ("csv","CSV"), "(typeof PED_N!=='undefined' && PED_N>0)", 300),
-    ("#fileAlertas",   "03 - Alertas",                ("csv","CSV"), "ALERTS && Object.keys(ALERTS).length>0", 1800),
     ("#fileBoletim",   "04 - Boletim do Motorista",   ("csv","CSV"), "BOL && Object.keys(BOL).length>0", 300),
     ("#fileMetas",     "11 - Metas",                  ("xlsx",),      "(META_PLACA && Object.keys(META_PLACA).length>0) || (META_FAM && Object.keys(META_FAM).length>0)", 300),
     ("#fileMultas",    "12 - Multas",                 ("csv","CSV"),  "MULTAS && MULTAS.length>0", 300),
+    # Alertas por ÚLTIMO: antes dele, canonizamos o roster (flush) p/ o AL_TL (linha do tempo) casar os nomes.
+    ("#fileAlertas",   "03 - Alertas",                ("csv","CSV"), "typeof AL_TL!=='undefined' && AL_TL && Object.keys(AL_TL).length>0", 1800),
 ]
 
 def log(*a): print("[build]", *a, flush=True)
@@ -149,6 +150,14 @@ def do_build_local(push, dias):
         for sel, subdir, exts, ready, tmo in LOCAL_STEPS:
             files=_collect(subdir, exts, cutoff)
             if not files: log(f"{subdir}: 0 arquivos (pulando)"); continue
+            if sel=="#fileAlertas":
+                # canoniza o roster (consolida tudo) ANTES de ler os alertas, p/ o AL_TL casar os nomes
+                log("consolidando (canonizando roster) antes dos alertas...")
+                try: pg.evaluate("()=>{ try{ flushImportChanges(false); }catch(e){} }")
+                except Exception: pass
+                try: pg.wait_for_function("typeof RECORD_DRIVER_NAMES_N!=='undefined' && RECORD_DRIVER_NAMES_N && RECORD_DRIVER_NAMES_N.size>0", timeout=120000)
+                except Exception: pass
+                pg.wait_for_timeout(3000)
             log(f"{subdir}: {len(files)} arquivo(s) -> {sel}")
             pg.set_input_files(sel, files)
             try: pg.wait_for_function(f"()=>{{try{{return ({ready});}}catch(e){{return false;}}}}", timeout=tmo*1000); log("   ok")
