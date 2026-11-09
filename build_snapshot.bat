@@ -1,15 +1,21 @@
 @echo off
-chcp 65001 >nul
+setlocal
 cd /d "%~dp0"
-set PY=C:\Pulso360\.venv\Scripts\python.exe
-echo == Pulso 360 — build do snapshot (fora do navegador) ==
-"%PY%" -c "import playwright" 2>nul || (
-  echo Primeira vez: instalando Playwright + Chromium...
+set "PY=C:\Pulso360\.venv\Scripts\python.exe"
+if not exist "%PY%" (
+  echo ERRO: Python do robo nao encontrado em %PY%
+  pause
+  exit /b 1
+)
+"%PY%" -c "import playwright" 1>nul 2>nul
+if errorlevel 1 (
+  echo Primeira vez: instalando Playwright e Chromium...
   "%PY%" -m pip install playwright
   "%PY%" -m playwright install chromium
 )
 echo.
-echo Gerando o pacote de dados...
-"%PY%" build_snapshot.py %*
+echo Gerando o pacote de dados (pode levar 15-20 min)...
+"%PY%" "%~dp0build_snapshot.py" %*
 echo.
+echo Concluido.
 pause
