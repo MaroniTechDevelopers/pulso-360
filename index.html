@@ -1133,6 +1133,7 @@
     <button data-tab="trat">Tratativas</button>
     <button data-tab="acomp">Acompanhamento</button>
     <button data-tab="motoristas">Motoristas</button>
+    <button data-tab="demitidos">Demitidos</button>
     <button data-tab="aderencia">Aderência</button>
     <button data-tab="linha">Linha do tempo</button>
     <button data-tab="diverg">Pontos de atenção <span class="badge" id="badgeDiv">0</span></button>
@@ -1236,6 +1237,13 @@
     <div class="sec-title"><h2>Acompanhamento de tratativas</h2><span id="acompSub">motoristas tratados há 10–13 dias · revisar evolução no daily</span>
       <button class="btn solid" id="acompCopy" style="margin-left:auto">📋 Copiar para o grupo</button></div>
     <div id="acompBox"></div>
+  </section>
+
+  <!-- ===== DEMITIDOS — desligados no TMS, isolados do ranking/bonificação/seleção ===== -->
+  <section class="view" id="view-demitidos">
+    <div class="sec-title"><h2>Demitidos</h2><span id="demitidosSub">motoristas desligados no TMS · fora do ranking/bonificação/seleção · clique para abrir o resumo</span></div>
+    <div class="f" style="margin-bottom:12px;max-width:340px"><label>Buscar demitido</label><input type="text" id="demitidosBusca" placeholder="Nome, centro de resultado ou cargo…"></div>
+    <div id="demitidosBox"></div>
   </section>
 
   <section class="view" id="view-trat">
@@ -1845,6 +1853,16 @@ function motoristaDesligadoTms(nome){
   const raw=norm(c.statusRaw||'');
   return !!c.demissao || /DEMIT|DESLIG|RESCIND/.test(raw) || c.status==='INATIVO';
 }
+/* ===== DEMITIDOS: desligados no TMS — isolados do ranking/bonificação/seleção, só na aba Demitidos ===== */
+let DEMITIDOS_NN=new Set(), DEMITIDOS_REV=-1;
+function ensureDemitidos(){
+  if(DEMITIDOS_REV===DATA_REV) return DEMITIDOS_NN;
+  const s=new Set();
+  try{ Object.values(MOTORISTAS_TMS||{}).forEach(c=>{ if(!c)return; const raw=norm(c.statusRaw||''); if(c.demissao||c.status==='INATIVO'||/DEMIT|DESLIG|RESCIND/.test(raw)) s.add(norm(c.nome)); }); }catch(e){}
+  try{ (RECORD_DRIVER_NAMES_N||[]).forEach(nn=>{ const a=RECORDS_BY_DRIVER_N[nn]; const nome=a&&a.length?a[0].motoristaEscala:nn; if(motoristaDesligadoTms(nome)) s.add(nn); }); }catch(e){}
+  DEMITIDOS_NN=s; DEMITIDOS_REV=DATA_REV; return s;
+}
+function isDemitidoNN(nn){ return ensureDemitidos().has(nn); }
 function nomeCanon(s){
   const stop=new Set(['DE','DA','DO','DAS','DOS','E']);
   return norm(s).replace(/[^A-Z0-9 ]/g,' ').split(/\s+/).filter(x=>x&&!stop.has(x)).join(' ');
@@ -2841,10 +2859,19 @@ function auditAlertDuplicates(timeline){
   return {total,confirmed,candidates};
 }
 // END DRIVER FILTER HELPERS
+let RA_CACHE=null, RA_REV=-1, RA_DIV=0;
+function recordsAtivos(){
+  if(RA_CACHE && RA_REV===DATA_REV) return RA_CACHE;
+  const dem=ensureDemitidos();
+  if(!dem.size){ RA_CACHE=RECORDS; RA_REV=DATA_REV; RA_DIV=GLOBAL_DIV_COUNT; return RECORDS; }
+  const out=[]; let div=0; for(let i=0;i<RECORDS.length;i++){ const r=RECORDS[i]; if(dem.has(r._nMot))continue; out.push(r); if(r.sev!=='conforme')div++; }
+  RA_CACHE=out; RA_REV=DATA_REV; RA_DIV=div; return out;
+}
 function filtered(){
+  ensureDemitidos();
   const key=filterStateKey(); if(FILTER_CACHE_ROWS&&key===FILTER_CACHE_KEY) return FILTER_CACHE_ROWS;
   const fe=$('#fFecha').value, op=$('#fOp').value, dia=$('#fDia').value, de=$('#fDe').value, ate=$('#fAte').value, mot=norm($('#fMot').value), st=$('#fStatus').value, q=norm($('#fBusca').value);
-  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value&&!($('#fGrave')&&$('#fGrave').value||'')){ renderSpeedGraveFilterBadge(0); FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=RECORDS; FILTER_CACHE_DIV_COUNT=GLOBAL_DIV_COUNT; return RECORDS; }
+  if(!fe&&!op&&!dia&&!de&&!ate&&!mot&&!st&&!q&&!$('#fDirecao').value&&!($('#fGrave')&&$('#fGrave').value||'')){ renderSpeedGraveFilterBadge(0); const _ra=recordsAtivos(); FILTER_CACHE_KEY=key; FILTER_CACHE_ROWS=_ra; FILTER_CACHE_DIV_COUNT=RA_DIV; return _ra; }
 
   // Escolhe primeiro o menor conjunto indexado disponível. Isso evita iniciar cada filtro nos ~87 mil registros.
   const pools=[];
@@ -2861,6 +2888,7 @@ function filtered(){
   const out=[]; let div=0;
   for(let i=0;i<src.length;i++){
     const r=src[i];
+    if(DEMITIDOS_NN.has(r._nMot)) continue;
     if(fe && r._fechaKey!==fe) continue;
     if(de && r.data<de) continue;
     if(ate && r.data>ate) continue;
@@ -2926,7 +2954,7 @@ function closeMotMenu(){ const c=$('#fMotCombo'); if(!c)return; c.classList.remo
 function fillFilters(){
   const ops=Object.keys(RECORDS_BY_OP).sort((a,b)=>a.localeCompare(b,'pt-BR'));
   const dias=RECORD_DATE_KEYS.slice().sort().reverse();
-  const mots=Object.keys(RECORDS_BY_DRIVER_N).map(nn=>{const a=RECORDS_BY_DRIVER_N[nn];return a&&a.length?a[0].motoristaEscala:nn;}).filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const mots=Object.keys(RECORDS_BY_DRIVER_N).filter(nn=>!isDemitidoNN(nn)).map(nn=>{const a=RECORDS_BY_DRIVER_N[nn];return a&&a.length?a[0].motoristaEscala:nn;}).filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt-BR'));
   MOT_FILTER_LIST=mots;
   fillSel('#fOp',ops); renderMotMenu();
   fillSel('#fDia',dias,brDate);
@@ -5611,6 +5639,7 @@ function renderAll(){
   else if(view==='bonificacao') renderBonificacao(rows);
   else if(view==='trat') renderTratativas();
   else if(view==='acomp') renderAcompanhamento();
+  else if(view==='demitidos') renderDemitidos();
   else if(view==='motoristas') renderMotoristas();
   else if(view==='aderencia') renderAderencia(rows);
   else if(view==='linha') renderTimelines(rows);
@@ -7962,6 +7991,35 @@ function _acompEvol(nome,tData){
     return {a,b,delta,cls,ic,lab, mesmoMes:antes.key===agora.key};
   }catch(e){ return null; }
 }
+/* ===== ABA DEMITIDOS: lista os desligados do TMS; clicar abre o resumo (ficha) do condutor ===== */
+function renderDemitidos(){
+  const box=$('#demitidosBox'); if(!box) return;
+  ensureDemitidos();
+  const q=norm($('#demitidosBusca')?$('#demitidosBusca').value:'');
+  // Demitidos QUE TIVERAM atividade no período (exatamente os casos que saíram do ranking/seleção).
+  const seen=new Set(), uniq=[];
+  (RECORD_DRIVER_NAMES_N||[]).forEach(nn=>{
+    if(!isDemitidoNN(nn))return;
+    const a=RECORDS_BY_DRIVER_N[nn]; const nome=a&&a.length?a[0].motoristaEscala:nn;
+    const c=cadMotoristaDe(nome)||{}; const cpf=c.cpf||cpfDeNome(nome)||'';
+    const k=cpf?('cpf:'+cpfKey(cpf)):('nome:'+nn); if(seen.has(k))return; seen.add(k);
+    uniq.push({nome, cpf, centro:c.centro||'', cargo:c.cargo||'', demissao:c.demissao||''});
+  });
+  uniq.sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'));
+  const rows=uniq.filter(c=>!q||norm((c.nome||'')+' '+(c.centro||'')+' '+(c.cargo||'')).includes(q));
+  const sub=$('#demitidosSub'); if(sub) sub.textContent=uniq.length.toLocaleString('pt-BR')+' demitido(s) com atividade no período · fora do ranking/bonificação/seleção · clique para abrir o resumo';
+  if(!(MOTORISTAS_TMS && Object.keys(MOTORISTAS_TMS).length)){ box.innerHTML='<div class="empty" style="padding:22px">Cadastro de motoristas (TMS) não carregado. Importe/publique o <b>Relatório de Motoristas</b> (com a coluna Situação) na aba Dados.</div>'; return; }
+  if(!rows.length){ box.innerHTML='<div class="empty" style="padding:22px">'+(q?'Nenhum demitido para a busca.':'Nenhum motorista demitido com atividade no período.')+'</div>'; return; }
+  const esc=s=>String(s==null?'':s).replace(/</g,'&lt;');
+  box.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">'+rows.map(c=>{
+    const nome=String(c.nome||'—'), cpf=c.cpf?cpfCurto(c.cpf):'', centro=String(c.centro||'—'), cargo=String(c.cargo||''), dem=c.demissao?brDate(c.demissao):'';
+    return '<button type="button" class="card" style="text-align:left;cursor:pointer;border:0;display:flex;flex-direction:column;gap:5px;padding:14px" data-mot="'+encodeURIComponent(nome)+'" title="Abrir o resumo de '+nome.replace(/"/g,'&quot;')+'">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:14px">'+esc(nome)+'</b>'+(cpf?'<span style="font-size:11px;color:var(--muted)">'+esc(cpf)+'</span>':'')+'</div>'
+      +'<div style="font-size:12.5px;color:var(--ink-2)">'+esc(centro)+(cargo?' · '+esc(cargo):'')+'</div>'
+      +'<div style="font-size:11.5px;color:var(--muted)">'+(dem?('Demissão: '+esc(dem)):'Inativo no TMS')+' · ver resumo →</div>'
+      +'</button>';
+  }).join('')+'</div>';
+}
 function renderAcompanhamento(){
   const box=$('#acompBox'); if(!box) return;
   if(TRAT_CACHE===null && !_tratSyncTried){ _tratSyncTried=true; tratSyncFromSP(false).then(ok=>{ if(ok && activeViewName()==='acomp') renderAcompanhamento(); }); }
@@ -8652,6 +8710,8 @@ $('#acompCopy').onclick=()=>{ if(!ACOMP_TEXT){ toast('Nada para copiar — sem m
   try{ navigator.clipboard.writeText(ACOMP_TEXT).then(done).catch(()=>{ const ta=document.createElement('textarea'); ta.value=ACOMP_TEXT; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); done();}catch(e){ toast('Não consegui copiar'); } document.body.removeChild(ta); }); }
   catch(e){ toast('Não consegui copiar'); } };
 $('#acompBox').addEventListener('click',e=>{ const c=e.target.closest('.acomp-card'); if(c&&c.dataset.mot) openFicha(decodeURIComponent(c.dataset.mot)); });
+$('#demitidosBox').addEventListener('click',e=>{ const c=e.target.closest('[data-mot]'); if(c&&c.dataset.mot) openFicha(decodeURIComponent(c.dataset.mot)); });
+if($('#demitidosBusca')) $('#demitidosBusca').addEventListener('input',()=>{ if(activeViewName()==='demitidos') renderDemitidos(); });
 $('#expTrat').onclick=exportTratativas;
 $('#view-trat').addEventListener('click',e=>{
   if(e.target.closest('[data-trat-sync]')){ tratSyncFromTab(); return; }
