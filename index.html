@@ -1421,7 +1421,8 @@
     <div id="dadosContent">
     <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:12px 16px">
       <b>Publicação e tratativas</b>
-      <button class="btn solid" id="btnSPLoad" title="Entrar no Microsoft 365 e carregar TODOS os relatórios (todos os dias) direto da base do SharePoint">☁️ Carregar dados do SharePoint</button>
+      <button class="btn solid" id="btnSPLoad" title="Entrar no Microsoft 365 e carregar os relatórios da base do SharePoint (dentro da janela de dias)">☁️ Carregar dados do SharePoint</button>
+      <label style="font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:6px">últimos <input type="number" id="spDias" value="45" min="0" max="400" style="width:62px;padding:4px 6px"> dias <span title="0 = carregar tudo (pode estourar a memória do navegador com muitos dias)">(0 = tudo)</span></label>
       <button class="btn solid" id="btnSnapshot" title="Gerar a publicação única usada no computador, celular e WebView Trizy">📦 Gerar dados para publicação</button>
       <button class="btn" id="btnTratSync" title="Sincronizar o histórico compartilhado de tratativas no SharePoint" style="color:var(--ink);background:var(--surface);border-color:var(--border)">☁️ Sincronizar tratativas</button>
       <span style="font-size:12px;color:var(--muted)">Relatórios: ☁️ SharePoint (todos os dias) ou importação manual · depois <b>Gerar dados</b> para publicar</span>
@@ -7845,6 +7846,13 @@ async function spLoadAll(interactive){
     let t=SP_TOP2TIPO[f._top]||'';                 // pela pasta de 1º nível (tipo), sem baixar
     if(!t){ const ext=(f.name.split('.').pop()||'').toLowerCase(); let header=''; if(ext==='csv'||ext==='txt') header=await spHead(f['@microsoft.graph.downloadUrl']); t=detectTipo(f.name, header, ext); }
     if(!t) continue; (byType[t]=byType[t]||[]).push(f);
+  }
+  // Janela de dias: evita estourar a memória do navegador com o período inteiro. Filtra pelos nomes (data) ANTES de baixar.
+  const _dias=Math.max(0,parseInt(($('#spDias')&&$('#spDias').value)||'0',10)||0);
+  if(_dias>0){
+    const cutISO=new Date(Date.now()-_dias*86400000).toISOString().slice(0,10); let skip=0;
+    for(const t in byType){ byType[t]=byType[t].filter(f=>{ const m=String(f&&f.name||'').match(/(\d{4})-\d{2}-\d{2}/); if(!m) return true; const ok=m[0]>=cutISO; if(!ok)skip++; return ok; }); }
+    setPill('janela: últimos '+_dias+' dias (desde '+cutISO+')'); if(skip)toast('Janela de '+_dias+' dias: '+skip.toLocaleString('pt-BR')+' arquivo(s) antigos ignorados');
   }
   const achou=Object.keys(byType);
   if(!achou.length){ toast('Nenhum relatório reconhecido na pasta ('+files.length+' arquivo(s))'); return false; }
