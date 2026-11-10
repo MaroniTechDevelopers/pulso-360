@@ -3464,7 +3464,9 @@ function renderSemana(rows){
   const global=[]; data.forEach(g=>g.list.forEach(m=>global.push(m))); global.sort(resumoRankCmp);
   // Ranking é por motorista único. Se ele passou por mais de uma operação, a capa usada no ranking é a de maior atividade.
   const ranked=resumoRankUnique(global.filter(resumoRankElegivel)).sort(resumoRankCmp);
-  const bestEligible=ranked.filter(resumoRankMelhorElegivel).sort(resumoRankCmp);
+  // MESMO conjunto e ordem da Bonificação: dedup ENTRE os melhor-elegíveis (não entre os base),
+  // para os "10 melhores" do Resumo baterem exatamente com o topo da Bonificação.
+  const bestEligible=resumoRankUnique(global.filter(resumoRankMelhorElegivel)).sort(resumoRankCmp);
   [...ranked].sort((a,b)=>resumoRankCmp(b,a)).forEach((m,i)=>{m._rankPos=i+1;m._rankTotal=ranked.length;});
   global.filter(m=>!resumoRankElegivel(m)).forEach(m=>{m._rankPos=null;m._rankTotal=ranked.length;});
   let chosen=null;
@@ -5157,7 +5159,7 @@ function renderBonificacao(rows){
   // movimento + cobertura de ponto). Evita premiar nota alta com amostra pequena (ex.: 1 dia).
   let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankMelhorElegivel(m)) mots.push(m); }));
   mots=resumoRankUnique(mots);   // 1 por MOTORISTA (a nota é por pessoa)
-  mots.sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
+  mots.sort((a,b)=>resumoRankCmp(b,a));   // MESMA ordem dos "10 melhores" do Resumo (desempate por alertas/multas)
   const cfg=bonifCfg(), pago=bonifPagoMap();
   const data=mots.map(m=>{ const n10=Math.round(m._rankScore||0)/10, t=bonifTier(n10), valor=(+cfg.base||0)*n10/10;
     return {m,nome:m.nome,op:m.op||'—',n10,t,valor,pagoOk:!!pago[norm(m.nome)]}; });
@@ -5224,7 +5226,7 @@ function renderBonificacao(rows){
 function exportBonifFolha(){
   try{
     const rows=filtered(); const agg=semanaAgg(rows); applyResumoRankScores(agg.data, rows);
-    let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankMelhorElegivel(m)) mots.push(m); })); mots=resumoRankUnique(mots).sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
+    let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankMelhorElegivel(m)) mots.push(m); })); mots=resumoRankUnique(mots).sort((a,b)=>resumoRankCmp(b,a));
     const cfg=bonifCfg(), pago=bonifPagoMap();
     const head=['Motorista','CPF','Operacao','Nota_10','Medalha','Valor_RS','Status'];
     const lines=[head.join(';')];
