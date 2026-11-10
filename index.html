@@ -4414,8 +4414,11 @@ function tratEvolution(t,byDay,events,coverage){
       if(!a.withPoint||!b.withPoint||a.noPoint||b.noPoint){r.message='Cobertura de ponto insuficiente para comparar direção fora da jornada. Dias sem ponto não demonstram melhora.';return r;}
       r.before=a.fora;r.after=b.fora;r.rateBefore=a.fora/a.withPoint*100;r.rateAfter=b.fora/b.withPoint*100;r.unit='% da direção com ponto fora da jornada';
     }
-    const delta=r.rateAfter-r.rateBefore;r.status=Math.abs(delta)<0.01?'stable':delta<0?'improved':'worse';
-    r.message=r.before===0&&r.after===0?'Sem ocorrências registradas nos dois períodos; não há redução a demonstrar.':r.after===0?'Sem novas ocorrências registradas após a tratativa, na base disponível.':r.status==='improved'?'A taxa diminuiu, mas ainda houve ocorrências após a tratativa.':r.status==='worse'?'A taxa aumentou após a tratativa.':'A taxa permaneceu estável após a tratativa.';
+    // Alertas: veredito pelo TOTAL de ocorrências (100→50 = melhorou), não pela taxa/hora.
+    // Ponto e fora-da-jornada seguem em % (são percentuais por natureza).
+    const delta=(r.kind==='alert')?(r.after-r.before):(r.rateAfter-r.rateBefore);
+    r.status=Math.abs(delta)<(r.kind==='alert'?0.5:0.01)?'stable':delta<0?'improved':'worse';
+    r.message=r.before===0&&r.after===0?'Sem ocorrências registradas nos dois períodos; não há redução a demonstrar.':r.after===0?'Sem novas ocorrências registradas após a tratativa, na base disponível.':(r.kind==='alert'?(r.status==='improved'?'O total de ocorrências caiu após a tratativa.':r.status==='worse'?'O total de ocorrências aumentou após a tratativa.':'O total de ocorrências ficou igual após a tratativa.'):(r.status==='improved'?'A taxa diminuiu, mas ainda houve ocorrências após a tratativa.':r.status==='worse'?'A taxa aumentou após a tratativa.':'A taxa permaneceu estável após a tratativa.'));
     return r;
   });
   return {topics,results,before,after,a,b,span};
@@ -4452,8 +4455,8 @@ function fichaEvolTratativas(nome){
         const valid=r.status!=='unavailable',isAlert=r.kind==='alert';
         const before=valid?(isAlert?r.before:f(r.rateBefore)+'%'):'—';
         const after=valid?(isAlert?r.after:f(r.rateAfter)+'%'):'—';
-        const change=valid&&r.rateBefore>0?(r.rateAfter/r.rateBefore-1)*100:null;
-        const sub=!valid?(r.kind==='unsupported'?'Fonte específica necessária':'Dados insuficientes'):r.before===0&&r.after===0?'Sem ocorrências nos dois períodos':change!=null?f(Math.abs(change))+'% '+(change<0?'menor':change>0?'maior':'de variação')+' na taxa':r.status==='worse'?'Novas ocorrências registradas':'Sem variação na taxa';
+        const change=valid?(isAlert?(r.before>0?(r.after/r.before-1)*100:null):(r.rateBefore>0?(r.rateAfter/r.rateBefore-1)*100:null)):null;
+        const sub=!valid?(r.kind==='unsupported'?'Fonte específica necessária':'Dados insuficientes'):r.before===0&&r.after===0?'Sem ocorrências nos dois períodos':change!=null?f(Math.abs(change))+'% '+(change<0?'menor':change>0?'maior':'de variação')+(isAlert?' no total':' na taxa'):r.status==='worse'?'Novas ocorrências registradas':(isAlert?'Sem variação no total':'Sem variação na taxa');
         return `<tr><td><b>${esc(r.label)}</b><span class="evt-sub">${isAlert?'ocorrências':valid?esc(r.unit):''}</span></td><td><b>${before}</b></td><td><b>${after}</b></td><td><span class="evt-result ${verdict[0]}">${verdict[1]}</span><span class="evt-sub">${esc(sub)}</span></td></tr>`;
       }).join('');
       detail=`<div class="evt-sub">${e.span} dia(s) antes × ${e.span} dia(s) depois · acompanhado até ${brDate(e.after.ate)}</div><div class="evt-table-wrap"><table class="evt-table"><thead><tr><th scope="col">Tema tratado</th><th scope="col">Antes</th><th scope="col">Depois</th><th scope="col">Evolução</th></tr></thead><tbody>${lines}</tbody></table></div>`;
