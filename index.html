@@ -5153,7 +5153,9 @@ function renderBonificacao(rows){
   const box=$('#bonifBox'), kb=$('#bonifKpis');
   if(!REAL||!RECORDS||!RECORDS.length){ if(kb)kb.innerHTML=''; box.innerHTML='<div class="empty">Carregue os dados na aba <b>Dados</b> para ver a bonificação.</div>'; return; }
   const agg=semanaAgg(rows); applyResumoRankScores(agg.data, rows);
-  let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankElegivel(m)) mots.push(m); }));
+  // Mesma régua dos "10 melhores" (resumoRankMelhorElegivel): exige amostra mínima (dias de
+  // movimento + cobertura de ponto). Evita premiar nota alta com amostra pequena (ex.: 1 dia).
+  let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankMelhorElegivel(m)) mots.push(m); }));
   mots=resumoRankUnique(mots);   // 1 por MOTORISTA (a nota é por pessoa)
   mots.sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
   const cfg=bonifCfg(), pago=bonifPagoMap();
@@ -5222,7 +5224,7 @@ function renderBonificacao(rows){
 function exportBonifFolha(){
   try{
     const rows=filtered(); const agg=semanaAgg(rows); applyResumoRankScores(agg.data, rows);
-    let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankElegivel(m)) mots.push(m); })); mots=resumoRankUnique(mots).sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
+    let mots=[]; agg.data.forEach(g=>g.list.forEach(m=>{ if(resumoRankMelhorElegivel(m)) mots.push(m); })); mots=resumoRankUnique(mots).sort((a,b)=>(b._rankScore||0)-(a._rankScore||0));
     const cfg=bonifCfg(), pago=bonifPagoMap();
     const head=['Motorista','CPF','Operacao','Nota_10','Medalha','Valor_RS','Status'];
     const lines=[head.join(';')];
