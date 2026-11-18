@@ -1,13 +1,13 @@
 {
   "v": 1,
   "snapshotVersion": 3,
-  "publishedAt": 1794827490943,
+  "publishedAt": 1794992311027,
   "dataMin": "2026-08-16",
-  "dataMax": "2026-11-15",
-  "records": 206545,
+  "dataMax": "2026-11-17",
+  "records": 215487,
   "compression": "gzip",
-  "rawBytes": 1390083667,
-  "packedBytes": 164261385,
+  "rawBytes": 1418512837,
+  "packedBytes": 167643941,
   "parts": [
     {
       "file": "parte-001.bin",
@@ -27,9 +27,9 @@
     },
     {
       "file": "parte-005.bin",
-      "bytes": 30043657
+      "bytes": 33426213
     }
   ],
   "webviewFile": "webviews.json",
-  "webviewDrivers": 3345
+  "webviewDrivers": 3362
 }
