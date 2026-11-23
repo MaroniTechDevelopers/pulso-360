@@ -178,6 +178,12 @@
   .kpi[data-tab]:hover::after,.kpi[data-goplacas-all]:hover::after{opacity:1;color:var(--gold-2)}
   .divcard{transition:box-shadow .15s,transform .15s,border-color .15s}
   .divcard:hover{box-shadow:var(--shadow-lg);transform:translateY(-1px);border-color:var(--gold)}
+  .div-seg{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+  .div-seg button{font:inherit;font-size:12px;font-weight:600;padding:6px 12px;border:0;background:var(--surface);color:var(--muted);cursor:pointer}
+  .div-seg button.active{background:var(--gold);color:#111827}
+  .div-dias{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+  .div-dia{font-size:11px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted);white-space:nowrap}
+  .div-dia b{color:var(--ink);font-weight:700}
   .kpi:hover{box-shadow:var(--shadow-lg); transform:translateY(-2px)}
   .kpi{padding:15px 16px 15px 18px}
   .kpi .lab{font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:6px;font-weight:600;letter-spacing:.05em;text-transform:uppercase}
@@ -1361,7 +1367,8 @@
   <!-- ===== DIVERGÊNCIAS ===== -->
   <section class="view" id="view-diverg">
     <div class="sec-title"><h2>Pontos de atenção</h2><span id="divCount"></span>
-      <label style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Tipo de divergência
+      <div id="divGroupToggle" class="div-seg" style="margin-left:auto"><button type="button" data-grp="mot" class="active">Por motorista</button><button type="button" data-grp="dia">Por dia</button></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Tipo de divergência
         <select id="fTipoDiv" style="color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:7px 10px;font:inherit;font-size:13px;text-transform:none;letter-spacing:normal;cursor:pointer"><option value="">Todos</option></select>
       </label>
     </div>
@@ -4887,6 +4894,7 @@ function exportPainelPDF(){
 const DIV_TIPOS={mov_sem_ponto:'Ponto a registrar', id_diverg:'Condutor a confirmar', condutor_nao_vinc:'Vínculo condutor × placa a confirmar', dedo_duro:'Condução fora do horário do ponto', hora_extra:'Jornada além de 7h20', mov_antes_entrada:'Início antes de bater a entrada', interjornada:'Descanso < 11h entre jornadas', semelhanca_baixa:'Cadastro facial a revisar', sem_mov:'Praticamente sem movimento', mov_nao_enc:'Movimentação não encontrada', id_nao_enc:'Identificação não encontrada'};
 function tipoDivKey(f){ return f.k || norm(String(f.t||'').replace(/[:(].*$/,'')); }
 function tipoDivLabel(k){ return DIV_TIPOS[k] || k; }
+let DIV_GROUP='mot';   // 'mot' = agrupa por motorista (1 card/condutor, com os dias); 'dia' = 1 card por motorista-dia
 function renderDiverg(rows){
   const div=(rows===RECORDS)?DIVERG_RECORDS:rows.filter(r=>r.sev!=='conforme');
   let items=[];
@@ -4904,6 +4912,39 @@ function renderDiverg(rows){
   const motDias=new Set(items.map(it=>it.r.motoristaEscala+'|'+it.r.data)).size;
   $('#divCount').textContent = items.length.toLocaleString('pt-BR')+' apontamento'+(items.length!==1?'s':'')+' em '+motDias.toLocaleString('pt-BR')+' motorista-dia'+(motDias!==1?'s':'')+(tipoSel?' · '+tipoDivLabel(tipoSel):'');
   $('#badgeDiv').textContent = div.length>999?'999+':div.length;
+  // ===== MODO "POR MOTORISTA": 1 card por condutor, com os dias que ele cometeu; clique abre o resumo (ficha) =====
+  if(DIV_GROUP==='mot' && items.length){
+    const byMot=new Map();
+    items.forEach(({r,f})=>{
+      const key=(typeof motUidKey==='function')?motUidKey(r.motoristaEscala):norm(r.motoristaEscala);
+      let g=byMot.get(key);
+      if(!g){ g={nome:r.motoristaEscala, ops:new Set(), placas:new Set(), dias:new Map(), sev:3}; byMot.set(key,g); }
+      if(r.operacao&&r.operacao!=='—')g.ops.add(r.operacao);
+      (r.placas&&r.placas.length?r.placas:[r.placa]).forEach(p=>{ const pb=p?placaBR(p):''; if(pb)g.placas.add(pb); });
+      const det=(String(f.t).match(/\(([^)]+)\)\s*$/)||[])[1]||'';
+      if(!g.dias.has(r.data)) g.dias.set(r.data,det);
+      g.sev=Math.min(g.sev, sevRank[f.sev]??3);
+    });
+    const sevName=['critico','atencao','pendente','info'];
+    const groups=[...byMot.values()].map(g=>({nome:g.nome,ops:g.ops,placas:g.placas,sev:g.sev,dias:[...g.dias.entries()].sort((a,b)=>a[0]<b[0]?1:-1)}));
+    groups.sort((a,b)=> (a.sev-b.sev) || (b.dias.length-a.dias.length) || String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+    $('#divCount').textContent = groups.length.toLocaleString('pt-BR')+' motorista'+(groups.length!==1?'s':'')+' · '+items.length.toLocaleString('pt-BR')+' apontamento'+(items.length!==1?'s':'')+(tipoSel?' · '+tipoDivLabel(tipoSel):'');
+    const CAP=250, shown=groups.slice(0,CAP);
+    $('#divList').innerHTML = shown.map(g=>{
+      const sev=sevName[g.sev]||'atencao';
+      const diasHtml=g.dias.slice(0,40).map(([d,det])=>`<span class="div-dia">${brDate(d).slice(0,5)}${det?' <b>'+det+'</b>':''}</span>`).join('')+(g.dias.length>40?` <span class="div-dia">+${g.dias.length-40}</span>`:'');
+      const info=[...g.ops].join(' / ')||'—', pl=g.placas.size?' · '+[...g.placas].slice(0,3).join(', '):'';
+      return `<div class="card divcard divcard-mot" data-mot="${encodeURIComponent(g.nome)}" title="abrir o resumo do condutor" style="display:flex;gap:14px;align-items:flex-start;padding:13px 16px;cursor:pointer">
+        <span class="status ${sev}" style="flex:none"><span class="d"></span>${g.dias.length} dia${g.dias.length!==1?'s':''}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600">${g.nome} <span style="font-weight:400;color:var(--muted);font-size:12px">· ${info}${pl}</span></div>
+          <div class="div-dias">${diasHtml}</div>
+        </div>
+        <span style="flex:none;color:var(--gold-2);font-size:14px">↗</span>
+      </div>`;
+    }).join('') + (groups.length>CAP?`<div class="empty">Mostrando ${CAP} de ${groups.length.toLocaleString('pt-BR')} motoristas — refine por tipo/operação.</div>`:'');
+    return;
+  }
   if(!items.length){ $('#divList').innerHTML='<div class="empty">Nenhum ponto de atenção'+(tipoSel?' do tipo <b>'+tipoDivLabel(tipoSel)+'</b>':'')+' no filtro atual. ✔️</div>'; return; }
   const CAP=250, shown=items.slice(0,CAP);
   $('#divList').innerHTML = shown.map(({r,f})=>`
@@ -5635,7 +5676,7 @@ function renderAll(){
   const rowViews=new Set(['semana','bonificacao','aderencia','linha','diverg','media','tabela']);
   const rng=activeRange();
   let viewKey;
-  if(rowViews.has(view)) viewKey=DATA_REV+'|M'+MULTAS_REV+'|'+fkey+(view==='semana'?'|R'+SEMANA_RANK_MODE:'')+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:''):'')+(view==='linha'?'|C'+($('#fCondTimeline')?$('#fCondTimeline').value:''):'');
+  if(rowViews.has(view)) viewKey=DATA_REV+'|M'+MULTAS_REV+'|'+fkey+(view==='semana'?'|R'+SEMANA_RANK_MODE:'')+(view==='diverg'?'|'+($('#fTipoDiv')?$('#fTipoDiv').value:'')+'|'+DIV_GROUP:'')+(view==='linha'?'|C'+($('#fCondTimeline')?$('#fCondTimeline').value:''):'');
   else if(view==='motoristas') viewKey=DATA_REV+'|'+($('#fOp').value||'')+'|'+(rng?(rng.de+'|'+rng.ate):'*');
   else if(view==='semid') viewKey=DATA_REV+'|semid|'+fkey+'|'+CFG.sem+'|K'+SAUDE_KPI_FILTER;
   else if(view==='operacao') viewKey=DATA_REV+'|'+view+'|'+fkey;
@@ -8726,7 +8767,8 @@ $('#kpis').addEventListener('click',e=>{ const c=e.target.closest('.kpi[data-tab
 // foca um registro (motorista+dia) na Linha do tempo
 function focusRecord(mot, dia){ setTabFilterState('linha',{fMot:mot||'',fDia:dia||''},true); goTab('linha'); }
 // clicar num apontamento das Divergências → linha do tempo daquele motorista+dia
-$('#divList').addEventListener('click',e=>{ const c=e.target.closest('.divcard'); if(!c)return; focusRecord(decodeURIComponent(c.dataset.mot), c.dataset.dia); });
+$('#divList').addEventListener('click',e=>{ const c=e.target.closest('.divcard'); if(!c)return; if(c.classList.contains('divcard-mot')){ openFicha(decodeURIComponent(c.dataset.mot)); } else { focusRecord(decodeURIComponent(c.dataset.mot), c.dataset.dia); } });
+$('#divGroupToggle')&&$('#divGroupToggle').addEventListener('click',e=>{ const b=e.target.closest('button[data-grp]'); if(!b)return; DIV_GROUP=b.dataset.grp; $('#divGroupToggle').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x.dataset.grp===DIV_GROUP)); try{VIEW_RENDER_KEYS.diverg='';}catch(_){ } renderAll(); });
 $('#fTipoDiv').addEventListener('change',()=>renderDiverg(filtered()));
 $('#fCondTimeline').addEventListener('change',()=>{
   // Filtro exclusivo da Linha do Tempo: não recalcula nem altera o Resumo semanal.
