@@ -1366,7 +1366,7 @@
 
   <!-- ===== DIVERGÊNCIAS ===== -->
   <section class="view" id="view-diverg">
-    <div class="sec-title"><h2>Pontos de atenção</h2><span id="divCount"></span>
+    <div class="sec-title"><h2>Pontos de atenção</h2><span id="divCount"></span><span style="font-size:11px;color:var(--muted);margin-left:8px">· apenas &gt;30 km ou &gt;1h de condução · sem demitidos</span>
       <div id="divGroupToggle" class="div-seg" style="margin-left:auto"><button type="button" data-grp="mot" class="active">Por motorista</button><button type="button" data-grp="dia">Por dia</button></div>
       <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Tipo de divergência
         <select id="fTipoDiv" style="color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:7px 10px;font:inherit;font-size:13px;text-transform:none;letter-spacing:normal;cursor:pointer"><option value="">Todos</option></select>
@@ -1385,7 +1385,7 @@
 
   <!-- ===== CONSOLIDADO ===== -->
   <section class="view" id="view-tabela">
-    <div class="sec-title"><h2>Consolidado</h2><span>clique no cabeçalho para ordenar · exporte em CSV</span>
+    <div class="sec-title"><h2>Consolidado</h2><span>clique no cabeçalho para ordenar · exporte em CSV · apenas &gt;30 km ou &gt;1h de condução · sem demitidos</span>
       <button class="btn" id="expCsv" style="margin-left:auto;color:var(--ink);background:var(--surface);border-color:var(--border)">⬇️ Exportar CSV</button></div>
     <div class="tblwrap"><table id="tbl">
       <thead><tr>
@@ -2587,6 +2587,9 @@ function auditRecordDay(r){
   const tag=String(typeof DATA_REV!=='undefined'?DATA_REV:0)+'|'+String(CFG&&CFG.tol||0)+'|'+String(CFG&&CFG.jornadaMin||440),c=RECORD_DAY_AUDIT_CACHE.get(r);if(c&&c.tag===tag)return c.v;
   const a=auditRecordFull(r),d=(a.byDay&&a.byDay[r.data])||{},segs=(a.segments||[]).filter(s=>s.date===r.data); const v={hCond:d.hCond||0,km:d.km||0,hFora:d.hFora||0,hDedo:d.hDedo||0,hPonto:d.hPonto||0,hExtra:(a.extraByDay&&a.extraByDay[r.data])||0,prim:segs.length?Math.min(...segs.map(s=>s.a)):null,ult:segs.length?Math.max(...segs.map(s=>s.b)):null}; RECORD_DAY_AUDIT_CACHE.set(r,{tag,v});return v;
 }
+// Atividade relevante do dia: >30 km rodados OU >1h (60 min) de condução.
+// Filtra Consolidado e Pontos de atenção — tira motorista-dias de atividade mínima (ruído).
+function temAtividadeRelevante(r){ const v=auditRecordDay(r); return (v.km>30)||(v.hCond>60); }
 function auditWeeksFromDay(audit){
   const out=Object.create(null); for(const d in ((audit&&audit.byDay)||{})){ const wi=weekInfo(d), x=audit.byDay[d]; if(wi&&wi.key) out[wi.key]=(out[wi.key]||0)+((x&&x.hFora)||0); } return out;
 }
@@ -4896,7 +4899,8 @@ function tipoDivKey(f){ return f.k || norm(String(f.t||'').replace(/[:(].*$/,'')
 function tipoDivLabel(k){ return DIV_TIPOS[k] || k; }
 let DIV_GROUP='mot';   // 'mot' = agrupa por motorista (1 card/condutor, com os dias); 'dia' = 1 card por motorista-dia
 function renderDiverg(rows){
-  const div=(rows===RECORDS)?DIVERG_RECORDS:rows.filter(r=>r.sev!=='conforme');
+  ensureDemitidos();
+  const div=((rows===RECORDS)?DIVERG_RECORDS:rows.filter(r=>r.sev!=='conforme')).filter(r=>temAtividadeRelevante(r) && !isDemitidoNN(r._nMot));   // só >30 km ou >1h de condução, e sem demitidos
   let items=[];
   div.forEach(r=> r.flags.forEach(f=> items.push({r,f})) );
   // popular o filtro de TIPO (contagem por tipo) preservando a seleção
@@ -4965,6 +4969,8 @@ function renderDiverg(rows){
    RENDER — CONSOLIDADO
    ============================================================ */
 function renderTable(rows){
+  ensureDemitidos();
+  rows=rows.filter(r=>temAtividadeRelevante(r) && !isDemitidoNN(r._nMot));   // Consolidado: só >30 km ou >1h de condução, e sem demitidos
   const sevRank={critico:0,atencao:1,pendente:2,conforme:3};
   const get=(r,k)=>{
     if(k==='_sev') return sevRank[r.sev];
